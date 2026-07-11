@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability } from '../src/ui-state.js';
-import { CAT_EQUIPMENT } from '../src/pixel-art.js';
-import { COMBAT_TIMING, homingShotKeyframes } from '../src/combat-animation.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone } from '../src/ui-state.js';
+import { CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS } from '../src/pixel-art.js';
+import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
@@ -42,6 +42,16 @@ test('sold shop cats are disabled because they are genuinely unavailable', () =>
   });
 });
 
+test('hp bars read green above half, amber to a quarter, red below', () => {
+  assert.equal(hpTone(6, 6), 'full');
+  assert.equal(hpTone(4, 7), 'full');
+  assert.equal(hpTone(3, 6), 'mid');
+  assert.equal(hpTone(3, 7), 'mid');
+  assert.equal(hpTone(2, 8), 'low');
+  assert.equal(hpTone(0, 6), 'low');
+  assert.equal(hpTone(5, 0), 'low');
+});
+
 test('a successful shop purchase clears selection instead of silently selecting the new cat', () => {
   const priorSelection = { type: 'cat', id: 'cat-on-board' };
 
@@ -62,6 +72,16 @@ test('combat timing leaves enough time to read travel, impact, and HP loss', () 
   assert.ok(COMBAT_TIMING.projectileMs >= 700);
   assert.ok(COMBAT_TIMING.impactMs >= 300);
   assert.ok(COMBAT_TIMING.hpPauseMs >= 250);
+});
+
+test('2x combat speed halves every timing without touching the tuned constants', () => {
+  assert.deepEqual(combatTiming(1), { ...COMBAT_TIMING });
+  const fast = combatTiming(2);
+  assert.equal(fast.projectileMs, Math.round(COMBAT_TIMING.projectileMs / 2));
+  assert.equal(fast.homingMs, Math.round(COMBAT_TIMING.homingMs / 2));
+  assert.equal(fast.impactMs, Math.round(COMBAT_TIMING.impactMs / 2));
+  assert.equal(COMBAT_TIMING.projectileMs, 820, 'source table stays untouched');
+  assert.equal(combatTiming(0).projectileMs, COMBAT_TIMING.projectileMs, 'invalid speed falls back to 1x');
 });
 
 test('Blue Brawler uses a readable alternating-paw scratch flurry', () => {
@@ -163,6 +183,13 @@ test('level two and three cats have progressively stronger visible equipment set
   assert.ok(CAT_EQUIPMENT[3].length > CAT_EQUIPMENT[2].length, 'Level 3 needs more equipment than Level 2');
   assert.ok(CAT_EQUIPMENT[3].includes('power-cannon'));
   assert.ok(CAT_EQUIPMENT[3].includes('energy-wings'));
+});
+
+test('placeholder unlocks have distinct cat accessories and dog tier gear', () => {
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[3], ['calico-patches', 'medic-cross']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[4], ['black-coat', 'bomb-pack']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[5], ['prism-coat', 'crystal-crown']);
+  assert.deepEqual(DOG_TIER_MARKERS[4], ['alpha-armor', 'crown']);
 });
 
 test('homing shot path uses a sine wave while ending on the target', () => {

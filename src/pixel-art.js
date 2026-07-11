@@ -20,12 +20,28 @@ export const CAT_EQUIPMENT = {
   3: ['steel-helmet', 'chest-armor', 'shoulder-pads', 'battle-cape', 'plasma-core', 'power-cannon', 'energy-wings'],
 };
 
+export const CAT_ARCHETYPE_MARKERS = {
+  3: ['calico-patches', 'medic-cross'],
+  4: ['black-coat', 'bomb-pack'],
+  5: ['prism-coat', 'crystal-crown'],
+};
+
+export const DOG_TIER_MARKERS = {
+  1: ['plain-collar'],
+  2: ['steel-helmet'],
+  3: ['bruiser-plates'],
+  4: ['alpha-armor', 'crown'],
+};
+
 export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
   const ctx = prepare(canvas);
   const coats = [
     ['#e9963f', '#ffd18a', '#9c4d2e'],
     ['#71868d', '#cdd9d5', '#3e5159'],
     ['#f0e1bc', '#fff7df', '#9a7759'],
+    ['#f2d7a7', '#fff0ce', '#a84f35'],
+    ['#2f3540', '#697482', '#151923'],
+    ['#9f71d8', '#d9c7ff', '#593c91'],
   ];
   const [fur, light, dark] = coats[coat % coats.length];
   const outline = '#172b36';
@@ -56,8 +72,20 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
   px(ctx, dark, 16, 14, 2, 2); px(ctx, outline, 15, 17, 4, 1);
   // Feet.
   px(ctx, outline, 8, 26, 7, 3); px(ctx, outline, 19, 26, 7, 3); px(ctx, light, 10, 26, 4, 2); px(ctx, light, 20, 26, 4, 2);
+  if (coat === 3) {
+    px(ctx, '#d66d35', 9, 8, 5, 5); px(ctx, '#473b3a', 20, 9, 4, 4); px(ctx, '#d66d35', 10, 18, 5, 5);
+    px(ctx, outline, 22, 18, 8, 8); px(ctx, '#e9f5dd', 23, 19, 6, 6); px(ctx, '#49a865', 25, 19, 2, 6); px(ctx, '#49a865', 23, 21, 6, 2);
+  }
+  if (coat === 4) {
+    px(ctx, outline, 23, 17, 8, 10); px(ctx, '#5d496c', 24, 18, 6, 8); px(ctx, '#a784c1', 25, 19, 4, 2);
+    px(ctx, '#f2c94c', 27, 14, 2, 4); px(ctx, '#ff7048', 28, 13, 2, 2);
+  }
+  if (coat === 5) {
+    px(ctx, outline, 10, 1, 14, 6); px(ctx, '#60e6ed', 11, 2, 3, 4); px(ctx, '#f0a8ff', 15, 0, 4, 6); px(ctx, '#60e6ed', 20, 2, 3, 4);
+    px(ctx, outline, 14, 20, 6, 6); px(ctx, '#79f5ff', 15, 21, 4, 4); px(ctx, '#fff', 16, 21, 2, 2);
+  }
   // Level equipment is deliberately bold enough to read at board scale.
-  if (level === 1) {
+  if (level === 1 && coat <= 2) {
     px(ctx, outline, 14, 1, 6, 8); px(ctx, '#4b8790', 15, 2, 4, 6); px(ctx, '#d9f1d6', 16, 1, 2, 2);
   }
   if (level >= 2) {
@@ -88,9 +116,13 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
 export function drawDog(canvas, tier = 1) {
   const ctx = prepare(canvas);
   const outline = '#172b36';
-  const fur = tier === 1 ? '#9c613b' : '#5f4a46';
-  const light = tier === 1 ? '#dcaa6d' : '#a58879';
-  const dark = tier === 1 ? '#623a2c' : '#382e35';
+  const dogCoats = {
+    1: ['#9c613b', '#dcaa6d', '#623a2c'],
+    2: ['#66727a', '#aeb8b9', '#38444d'],
+    3: ['#75483d', '#c18462', '#422b2b'],
+    4: ['#732f46', '#cf6a6c', '#351e35'],
+  };
+  const [fur, light, dark] = dogCoats[tier] ?? dogCoats[1];
   // Body and tail.
   px(ctx, outline, 7, 14, 19, 13); px(ctx, fur, 8, 15, 17, 11);
   px(ctx, outline, 24, 12, 6, 5); px(ctx, fur, 24, 13, 4, 3);
@@ -105,8 +137,19 @@ export function drawDog(canvas, tier = 1) {
   px(ctx, outline, 14, 19, 8, 2); px(ctx, '#f2eee0', 15, 19, 2, 2); px(ctx, '#f2eee0', 19, 19, 2, 2);
   // Legs.
   px(ctx, outline, 8, 25, 7, 4); px(ctx, outline, 20, 25, 7, 4); px(ctx, dark, 9, 26, 5, 2); px(ctx, dark, 21, 26, 5, 2);
-  if (tier >= 2) { px(ctx, '#d84a45', 8, 20, 17, 3); px(ctx, '#f0c948', 13, 21, 3, 3); }
-  if (tier >= 3) { px(ctx, '#d9d5c6', 5, 3, 4, 4); px(ctx, '#d9d5c6', 25, 3, 4, 4); }
+  if (tier >= 2) {
+    px(ctx, outline, 8, 4, 17, 6); px(ctx, '#758893', 9, 4, 15, 5); px(ctx, '#b8cbd0', 12, 4, 8, 2);
+    px(ctx, '#d84a45', 8, 20, 17, 3); px(ctx, '#f0c948', 15, 20, 3, 4);
+  }
+  if (tier >= 3) {
+    px(ctx, outline, 4, 16, 8, 8); px(ctx, '#8e604f', 5, 17, 7, 6);
+    px(ctx, outline, 22, 16, 8, 8); px(ctx, '#8e604f', 22, 17, 7, 6);
+  }
+  if (tier >= 4) {
+    px(ctx, outline, 8, 14, 18, 13); px(ctx, '#623f78', 9, 15, 16, 11); px(ctx, '#d85c75', 11, 16, 12, 3);
+    px(ctx, '#f2cf4a', 9, 1, 4, 5); px(ctx, '#f2cf4a', 15, 0, 4, 6); px(ctx, '#f2cf4a', 21, 1, 4, 5);
+    px(ctx, '#fff0a1', 16, 1, 2, 2);
+  }
 }
 
 export function drawBackyard(canvas) {

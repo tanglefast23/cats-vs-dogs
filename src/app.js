@@ -3,10 +3,11 @@ import {
   CAT_COAT_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   createGame, buyShopCat, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
+  shopTierForRound,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability } from './ui-state.js';
-import { COMBAT_TIMING, cellCenter, homingShotKeyframes } from './combat-animation.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone } from './ui-state.js';
+import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -19,6 +20,33 @@ let dragState = null;
 let suppressNextPetClick = false;
 let dragHoverElement = null;
 let pendingUpgrade = null;
+
+/** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
+const SPEED_SETTING_KEY = 'cvd-combat-speed';
+const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+let combatSpeed = loadCombatSpeed();
+let timing = combatTiming(combatSpeed);
+
+function loadCombatSpeed() {
+  try {
+    const raw = window.localStorage?.getItem(SPEED_SETTING_KEY);
+    if (raw === '2') return 2;
+    if (raw === '1') return 1;
+  } catch {
+    // Private mode / quota — fall through to the default.
+  }
+  return prefersReducedMotion ? 2 : 1;
+}
+
+function setCombatSpeed(speed) {
+  combatSpeed = speed;
+  timing = combatTiming(speed);
+  try {
+    window.localStorage?.setItem(SPEED_SETTING_KEY, String(speed));
+  } catch {
+    // Keep in-memory only.
+  }
+}
 
 const $ = (selector) => document.querySelector(selector);
 const shopEl = $('#shop');
@@ -38,7 +66,7 @@ if (!tooltipEl) {
   document.body.append(tooltipEl);
 }
 
-const TOOLTIP_HOVER_DELAY_MS = 1000;
+const TOOLTIP_HOVER_DELAY_MS = 450;
 let tooltipTimer = null;
 let tooltipPointer = { x: 0, y: 0 };
 
@@ -153,6 +181,7 @@ function showShopPurchaseDenied(button, reason) {
 
 function renderShop() {
   shopEl.innerHTML = '';
+  shopEl.dataset.count = String(game.shop.length);
   game.shop.forEach((slot, index) => {
     const stats = catStatsFor(slot.level ?? 1, slot.coat);
     const info = CAT_COAT_INFO[normalizeCoat(slot.coat)];
@@ -173,6 +202,7 @@ function renderShop() {
     button.setAttribute('aria-disabled', availability.canBuy ? 'false' : 'true');
     button.append(unitCanvas('cat', slot));
     button.insertAdjacentHTML('beforeend', `
+      <span class="shop-tier">T${info.shopTier}</span>
       <strong>${slot.sold ? 'ADOPTED' : info.name}</strong>
       <small class="ability-blurb">${info.blurb}</small>
       <div class="stats"><span>♥ ${stats.hp}</span><span>↑ ${stats.attack}</span></div>
@@ -218,7 +248,7 @@ function catMarkup(cat) {
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">L${cat.level}</span>
     <span class="copy-pips">${Array.from({ length: copies }, () => '<i></i>').join('')}</span>
-    <span class="hp-wrap"><span class="hp-bar" style="width:${Math.max(0, cat.hp / cat.maxHp * 100)}%"></span></span>`);
+    <span class="hp-wrap"><span class="hp-bar hp-${hpTone(cat.hp, cat.maxHp)}" style="width:${Math.max(0, cat.hp / cat.maxHp * 100)}%"></span></span>`);
   return unit;
 }
 
@@ -229,7 +259,7 @@ function dogMarkup(dog) {
   unit.append(unitCanvas('dog', dog));
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">T${dog.tier}</span>
-    <span class="hp-wrap"><span class="hp-bar" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
+    <span class="hp-wrap"><span class="hp-bar hp-${hpTone(dog.hp, dog.maxHp)}" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
   return unit;
 }
 
@@ -532,6 +562,9 @@ async function finishDrag(event, cancelled = false) {
   await animateGhostTo(destinationRect, valid);
   dragState = null;
   cleanupDragVisual(state);
+  // The drag-ending click usually lands on a shared ancestor, so no cell/bench handler
+  // consumes the suppress flag — clear it once the click phase has passed.
+  window.setTimeout(() => { suppressNextPetClick = false; }, 0);
 
   if (!valid) {
     game.message = 'That is not a valid drop. Cats can only use the lower yard and merge with the same color + level.';
@@ -560,11 +593,17 @@ function renderBoard() {
   for (let row = 0; row < ROWS; row += 1) {
     for (let col = 0; col < COLS; col += 1) {
       const cell = document.createElement('button');
-      cell.className = `cell ${row >= CAT_ZONE_START ? 'cat-zone' : ''} ${row === CAT_ZONE_START - 1 ? 'middle' : ''}`;
+      cell.className = `cell ${row >= CAT_ZONE_START ? 'cat-zone' : ''} ${row === CAT_ZONE_START ? 'middle' : ''}`;
       cell.dataset.row = row;
       cell.dataset.col = col;
       const cat = game.cats.find((unit) => unit.row === row && unit.col === col);
       const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
+      const zone = row >= CAT_ZONE_START ? 'cat territory' : row === CAT_ZONE_START - 1 ? 'sidewalk' : 'dog yard';
+      cell.setAttribute('aria-label', cat
+        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP, row ${row + 1} column ${col + 1}`
+        : dog
+          ? `${dogTooltipInfo(dog).title}, ${dog.hp} of ${dog.maxHp} HP, row ${row + 1} column ${col + 1}`
+          : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
       if (cat) {
         cell.append(catMarkup(cat));
         if (selectedMatches('cat', cat.id)) cell.classList.add('selected');
@@ -584,7 +623,15 @@ function renderBoard() {
         if (game.phase !== 'prep' || playing) return;
         if (cat) {
           if (!tryMerge('cat', cat.id)) selectCat('cat', cat);
-        } else if (row >= CAT_ZONE_START && selected) {
+        } else if (selected && row < CAT_ZONE_START) {
+          // A silent no-op reads as a broken game — shake and say why instead.
+          game.message = 'Cats stay below the sidewalk — tap one of the four glowing rows.';
+          const board = $('#board');
+          board?.classList.remove('board-shake');
+          void board?.offsetWidth;
+          board?.classList.add('board-shake');
+          window.setTimeout(() => board?.classList.remove('board-shake'), 320);
+        } else if (selected) {
           if (selected.type === 'bench') {
             const benchIndex = game.bench.findIndex((unit) => unit.id === selected.id);
             const before = game;
@@ -619,6 +666,9 @@ function renderBench() {
     button.dataset.benchIndex = index;
     button.className = `bench-slot ${cat ? 'filled' : ''} ${cat && selectedMatches('bench', cat.id) ? 'selected' : ''}`;
     button.disabled = !cat || game.phase !== 'prep';
+    button.setAttribute('aria-label', cat
+      ? `Bench: level ${cat.level} ${catLabel(cat)}, ${cat.copies ?? 1} of 3 copies`
+      : `Empty bench slot ${index + 1}`);
     if (cat) {
       button.dataset.unitId = cat.id;
       button.append(unitCanvas('cat', cat));
@@ -644,9 +694,12 @@ function renderHud() {
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
-  [...document.querySelectorAll('#section-dots i')].forEach((dot, index) => {
-    dot.className = index < game.section ? 'done' : index === game.section && game.phase === 'combat' ? 'active' : '';
-  });
+  const speedChip = $('#speed-toggle');
+  if (speedChip) {
+    speedChip.classList.toggle('is-fast', combatSpeed === 2);
+    speedChip.setAttribute('aria-pressed', combatSpeed === 2 ? 'true' : 'false');
+    $('#speed-label').textContent = `${combatSpeed}×`;
+  }
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const returnButton = $('#return-bench');
   returnButton.disabled = game.phase !== 'prep' || selected?.type !== 'cat' || game.bench.length >= BENCH_SIZE;
@@ -676,36 +729,38 @@ function showHit(event, { heavy = false } = {}) {
   playHit({ heavy });
   const target = findUnitElement(event.to);
   const burst = effectAt('impact-burst', event.toRow, event.col);
-  const damage = effectAt('damage-number', event.toRow, event.col, `-${event.damage}`);
+  // 'melee' is a dog biting a cat; everything else is damage the player dealt.
+  const tone = event.type === 'melee' ? '' : ' to-dog';
+  const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
   if (target) {
     target.classList.remove('hurt');
     void target.offsetWidth;
     target.classList.add('hurt');
     const hpBar = target.querySelector('.hp-bar');
-    if (hpBar) hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+    if (hpBar) {
+      hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+      hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+    }
   }
-  window.setTimeout(() => burst.remove(), COMBAT_TIMING.impactMs);
-  window.setTimeout(() => damage.remove(), COMBAT_TIMING.impactMs + COMBAT_TIMING.hpPauseMs);
-  window.setTimeout(() => target?.classList.remove('hurt'), COMBAT_TIMING.impactMs);
+  window.setTimeout(() => burst.remove(), timing.impactMs);
+  window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
+  window.setTimeout(() => target?.classList.remove('hurt'), timing.impactMs);
 }
 
 async function animateShot(event, index) {
   const isBurst = Boolean(event.burst);
-  const isHoming = event.style === 'homing';
+  const isHoming = event.style === 'homing' || event.style === 'medic';
   const stagger = isBurst
-    ? (event.pelletIndex ?? 0) * COMBAT_TIMING.burstStaggerMs + index * 8
-    : index * COMBAT_TIMING.shotStaggerMs;
+    ? (event.pelletIndex ?? 0) * timing.burstStaggerMs + index * 8
+    : index * timing.shotStaggerMs;
   await wait(stagger);
   const fromCol = event.fromCol ?? event.col;
   const toCol = event.col;
   const start = cellCenter(event.fromRow, fromCol);
   const end = cellCenter(event.toRow, toCol);
+  const projectileStyle = event.style ? `${event.style}-projectile` : '';
   const projectile = effectAt(
-    isHoming
-      ? 'projectile-effect homing-projectile'
-      : isBurst
-        ? 'projectile-effect burst-projectile'
-        : 'projectile-effect',
+    `projectile-effect ${isHoming ? 'homing-projectile' : ''} ${isBurst ? 'burst-projectile' : ''} ${projectileStyle}`.trim(),
     event.fromRow,
     fromCol,
   );
@@ -718,10 +773,10 @@ async function animateShot(event, index) {
       ],
     {
       duration: isHoming
-        ? COMBAT_TIMING.homingMs
+        ? timing.homingMs
         : isBurst
-          ? COMBAT_TIMING.burstProjectileMs
-          : COMBAT_TIMING.projectileMs,
+          ? timing.burstProjectileMs
+          : timing.projectileMs,
       // Linear keyframe timing — the path itself eases the seek.
       easing: 'linear',
       fill: 'forwards',
@@ -731,24 +786,24 @@ async function animateShot(event, index) {
   projectile.remove();
   if (event.miss || !event.to) {
     const fizzle = effectAt('impact-burst miss-fizzle', event.toRow, event.col);
-    window.setTimeout(() => fizzle.remove(), COMBAT_TIMING.impactMs);
-    await wait(Math.floor(COMBAT_TIMING.impactMs * 0.55));
+    window.setTimeout(() => fizzle.remove(), timing.impactMs);
+    await wait(Math.floor(timing.impactMs * 0.55));
     return;
   }
   showHit(event);
-  await wait(COMBAT_TIMING.impactMs + COMBAT_TIMING.hpPauseMs);
+  await wait(timing.impactMs + timing.hpPauseMs);
 }
 
 async function animateMelee(event, direction = 'down') {
   const attacker = findUnitElement(event.from);
   const className = direction === 'up' ? 'melee-lunge-up' : 'melee-lunge';
   attacker?.classList.add(className);
-  await wait(Math.floor(COMBAT_TIMING.meleeMs / 2));
+  await wait(Math.floor(timing.meleeMs / 2));
   if (!event.miss && event.to) {
     showHit(event, { heavy: true });
-    await wait(Math.ceil(COMBAT_TIMING.meleeMs / 2) + COMBAT_TIMING.hpPauseMs);
+    await wait(Math.ceil(timing.meleeMs / 2) + timing.hpPauseMs);
   } else {
-    await wait(Math.ceil(COMBAT_TIMING.meleeMs / 2));
+    await wait(Math.ceil(timing.meleeMs / 2));
   }
   attacker?.classList.remove(className);
 }
@@ -771,10 +826,10 @@ async function animateCatScratch(event) {
 
   attacker?.classList.add(BLUE_SCRATCH_FLURRY.attackerClass);
   attacker?.append(flurry);
-  await wait(BLUE_SCRATCH_FLURRY.hitAtMs);
+  await wait(Math.round(BLUE_SCRATCH_FLURRY.hitAtMs / combatSpeed));
   if (!event.miss && event.to) showHit(event, { heavy: true });
-  await wait(BLUE_SCRATCH_FLURRY.durationMs - BLUE_SCRATCH_FLURRY.hitAtMs);
-  if (!event.miss && event.to) await wait(COMBAT_TIMING.hpPauseMs);
+  await wait(Math.round((BLUE_SCRATCH_FLURRY.durationMs - BLUE_SCRATCH_FLURRY.hitAtMs) / combatSpeed));
+  if (!event.miss && event.to) await wait(timing.hpPauseMs);
   flurry.remove();
   attacker?.classList.remove(BLUE_SCRATCH_FLURRY.attackerClass);
 }
@@ -785,8 +840,22 @@ async function animateMove(event) {
   const movement = dog.animate([
     { transform: 'translateY(0)' },
     { transform: 'translateY(100%)' },
-  ], { duration: COMBAT_TIMING.movePauseMs, easing: 'steps(4)', fill: 'forwards' });
+  ], { duration: timing.movePauseMs, easing: 'steps(4)', fill: 'forwards' });
   await movement.finished.catch(() => {});
+}
+
+async function animateHeal(event) {
+  const target = findUnitElement(event.to);
+  const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
+  target?.classList.add('healed');
+  const hpBar = target?.querySelector('.hp-bar');
+  if (hpBar) {
+    hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+    hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+  }
+  await wait(Math.round(680 / combatSpeed));
+  heal.remove();
+  target?.classList.remove('healed');
 }
 
 async function animateSuperCat(event) {
@@ -797,8 +866,21 @@ async function animateSuperCat(event) {
   drawCat(canvas, 3, 0, true);
   runner.append(canvas);
   effectsEl.append(runner);
-  await wait(720);
+  await wait(Math.round(720 / combatSpeed));
   runner.remove();
+}
+
+/** Small pill over the board that names whose half of the exchange is animating. */
+function setTurnTag(side) {
+  const tag = $('#turn-tag');
+  if (!tag) return;
+  if (!side) {
+    tag.hidden = true;
+    return;
+  }
+  tag.textContent = side === 'cats' ? '▸ CATS ACT' : '▸ DOGS ACT';
+  tag.className = `turn-tag ${side}`;
+  tag.hidden = false;
 }
 
 async function animateEvents(events) {
@@ -807,15 +889,20 @@ async function animateEvents(events) {
   const catMelee = events.filter((event) => event.type === 'cat-melee');
   const melee = events.filter((event) => event.type === 'melee');
   const moves = events.filter((event) => event.type === 'move');
+  const heals = events.filter((event) => event.type === 'heal');
   const superCats = events.filter((event) => event.type === 'super-cat');
 
+  if (shots.length || catMelee.length) setTurnTag('cats');
   await Promise.all([
     ...shots.map((event, index) => animateShot(event, index)),
     ...catMelee.map(animateCatScratch),
+    ...heals.map(animateHeal),
   ]);
+  if (melee.length || moves.length) setTurnTag('dogs');
   await Promise.all(melee.map((event) => animateMelee(event, 'down')));
   await Promise.all(moves.map(animateMove));
   await Promise.all(superCats.map(animateSuperCat));
+  setTurnTag(null);
   effectsEl.innerHTML = '';
 }
 
@@ -828,12 +915,52 @@ function showResult() {
   modalEl.hidden = false;
 }
 
+/** Legend row per coat: sprite, name, five-word role, and the unlock round when locked. */
+const COAT_ROLE_WORDS = {
+  0: 'bursts down its own lane',
+  1: 'blocks & bites · extra HP',
+  2: 'homing shot, nearest lane',
+  3: 'homing yarn · heals itself',
+  4: 'bomb + splash beside target',
+  5: 'beam pierces 3 in its lane',
+};
+
+function renderLegend() {
+  const host = $('#coat-legend');
+  if (!host) return;
+  host.innerHTML = '';
+  const unlockedTier = shopTierForRound(game.round);
+  Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
+    const coat = Number(coatKey);
+    const locked = info.shopTier > unlockedTier;
+    const row = document.createElement('div');
+    row.className = `legend-row ${locked ? 'locked' : ''}`;
+    row.title = info.attackDetail;
+    const canvas = document.createElement('canvas');
+    drawCat(canvas, 1, coat);
+    const name = document.createElement('b');
+    name.textContent = info.shortName.toUpperCase();
+    row.append(canvas, name);
+    if (info.shopTier > 1) {
+      const chip = document.createElement('small');
+      chip.className = 'unlock-chip';
+      chip.textContent = `R${info.shopTier * 2 - 1}`;
+      row.append(chip);
+    }
+    const role = document.createElement('span');
+    role.textContent = COAT_ROLE_WORDS[coat] ?? info.blurb;
+    row.append(role);
+    host.append(row);
+  });
+}
+
 function render() {
   hideUnitTooltip();
   renderShop();
   renderBoard();
   renderBench();
   renderHud();
+  renderLegend();
   playPendingUpgrade();
 }
 
@@ -844,7 +971,22 @@ async function runCombatSection() {
   await animateEvents(nextGame.events);
   game = nextGame;
   render();
-  await wait(COMBAT_TIMING.hpPauseMs);
+  await wait(timing.hpPauseMs);
+}
+
+/** Drop-in banner naming the wave and what just walked through the gate. */
+function announceWave() {
+  const banner = $('#wave-banner');
+  if (!banner) return;
+  const fresh = game.dogs.filter((dog) => dog.row === 0);
+  const tough = fresh.filter((dog) => dog.tier >= 2).length;
+  const plain = fresh.length - tough;
+  const parts = [];
+  if (plain) parts.push(`${plain} DOG${plain === 1 ? '' : 'S'}`);
+  if (tough) parts.push(`<b>+ ${tough} TOUGH</b>`);
+  banner.innerHTML = `WAVE ${game.round} · ${parts.join(' ') || 'INCOMING'}`;
+  banner.hidden = false;
+  window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
 }
 
 async function playRound() {
@@ -853,7 +995,8 @@ async function playRound() {
   selected = null;
   game = startRound(game);
   render();
-  await wait(650);
+  announceWave();
+  await wait(Math.round(650 / combatSpeed));
 
   for (let action = 0; action < ACTIONS_PER_ROUND; action += 1) {
     if (game.phase !== 'combat') break;
@@ -924,8 +1067,40 @@ $('#return-bench').addEventListener('click', () => {
   render();
 });
 $('#done').addEventListener('click', playRound);
-$('#restart').addEventListener('click', resetGame);
+
+// Two-tap restart: a single stray click must not wipe a six-round run.
+const restartButton = $('#restart');
+let restartTimer = null;
+function disarmRestart() {
+  if (restartTimer) {
+    window.clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+  restartButton?.classList.remove('confirming');
+  if (restartButton) {
+    restartButton.textContent = '↻';
+    restartButton.setAttribute('aria-label', 'Restart game');
+  }
+}
+restartButton?.addEventListener('click', () => {
+  if (!restartButton.classList.contains('confirming')) {
+    restartButton.classList.add('confirming');
+    restartButton.textContent = '?';
+    restartButton.setAttribute('aria-label', 'Tap again to confirm restart');
+    game.message = 'Restart the run? Tap ↻ again to confirm.';
+    renderHud();
+    restartTimer = window.setTimeout(disarmRestart, 3000);
+    return;
+  }
+  disarmRestart();
+  resetGame();
+});
 $('#play-again').addEventListener('click', resetGame);
+$('#speed-toggle')?.addEventListener('click', () => {
+  setCombatSpeed(combatSpeed === 1 ? 2 : 1);
+  game.message = combatSpeed === 2 ? 'Combat speed 2× — replays fly by.' : 'Combat speed 1×.';
+  renderHud();
+});
 $('#settings')?.addEventListener('click', () => { unlockAudio(); openSettings(); });
 $('#settings-close')?.addEventListener('click', closeSettings);
 settingsModalEl?.addEventListener('click', (event) => {

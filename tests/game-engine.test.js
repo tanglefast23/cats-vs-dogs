@@ -10,8 +10,12 @@ import {
   CAT_ZONE_START,
   MAX_ROUNDS,
   ACTIONS_PER_ROUND,
-  SHOP_SIZE,
+  MAX_SHOP_SIZE,
   createGame,
+  makeShop,
+  availableCatCoatsForRound,
+  shopTierForRound,
+  shopSizeForRound,
   addCatToBench,
   combineCats,
   placeCat,
@@ -19,6 +23,7 @@ import {
   startRound,
   finishRound,
   createDog,
+  generateWave,
   buyShopCat,
   refreshShop,
   toggleSaveShopSlot,
@@ -38,10 +43,10 @@ test('desktop board uses six columns, fourteen rows, four cat rows, and two acti
   assert.equal(MAX_ROUNDS, 7);
 });
 
-test('SAP economy uses five fixed shop choices and exactly ten fresh gold each round', () => {
+test('SAP economy expands from three to four shop choices while resetting to ten gold', () => {
   let game = createGame(() => 0.5);
-  assert.equal(SHOP_SIZE, 5);
-  assert.equal(game.shop.length, 5);
+  assert.equal(MAX_SHOP_SIZE, 5);
+  assert.equal(game.shop.length, 3);
   assert.equal(game.gold, 10);
 
   while (game.round < MAX_ROUNDS) {
@@ -50,19 +55,62 @@ test('SAP economy uses five fixed shop choices and exactly ten fresh gold each r
     game.dogs = [];
     game = finishRound(game);
     assert.equal(game.gold, 10, `round ${game.round} should start with fresh gold`);
-    assert.equal(game.shop.length, 5, `round ${game.round} should keep five shop choices`);
+    const expectedSize = game.round >= 5 ? 4 : 3;
+    assert.equal(game.shop.length, expectedSize, `round ${game.round} should have ${expectedSize} shop choices`);
   }
 });
 
-test('rolling replaces five shop choices while preserving saved slots', () => {
+test('rolling replaces the current shop choices while preserving saved slots', () => {
   let game = createGame(() => 0.2);
-  game = toggleSaveShopSlot(game, 4);
-  const savedId = game.shop[4].id;
+  game = toggleSaveShopSlot(game, 2);
+  const savedId = game.shop[2].id;
   game = refreshShop(game);
 
-  assert.equal(game.shop.length, 5);
-  assert.equal(game.shop[4].id, savedId);
-  assert.equal(game.shop[4].saved, true);
+  assert.equal(game.shop.length, 3);
+  assert.equal(game.shop[2].id, savedId);
+  assert.equal(game.shop[2].saved, true);
+});
+
+test('SAP-style cat tiers unlock on rounds one, three, five, and seven', () => {
+  assert.equal(shopTierForRound(1), 1);
+  assert.equal(shopTierForRound(2), 1);
+  assert.equal(shopTierForRound(3), 2);
+  assert.equal(shopTierForRound(5), 3);
+  assert.equal(shopTierForRound(7), 4);
+  assert.deepEqual(availableCatCoatsForRound(1), [0, 1, 2]);
+  assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, 3]);
+  assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, 3, 4]);
+  assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5]);
+});
+
+test('SAP shop slots grow on rounds five and nine while the pet pool expands separately', () => {
+  const roundThree = makeShop(() => 0.999, null, 3);
+  const roundFive = makeShop(() => 0.999, null, 5);
+  const roundSeven = makeShop(() => 0.999, null, 7);
+  const roundNine = makeShop(() => 0.999, null, 9);
+
+  assert.equal(shopSizeForRound(1), 3);
+  assert.equal(shopSizeForRound(4), 3);
+  assert.equal(shopSizeForRound(5), 4);
+  assert.equal(shopSizeForRound(8), 4);
+  assert.equal(shopSizeForRound(9), 5);
+  assert.equal(roundThree.length, 3);
+  assert.equal(roundFive.length, 4);
+  assert.equal(roundSeven.length, 4);
+  assert.equal(roundNine.length, 5);
+  assert.ok(roundThree.every((slot) => slot.coat === CAT_COAT.CALICO));
+  assert.ok(roundFive.every((slot) => slot.coat === CAT_COAT.BLACK));
+  assert.ok(roundSeven.every((slot) => slot.coat === CAT_COAT.PRISM));
+});
+
+test('the round-five shop adds a fourth slot without dropping saved pets', () => {
+  const early = makeShop(() => 0.2, null, 4);
+  early[2].saved = true;
+  const expanded = makeShop(() => 0.8, early, 5);
+
+  assert.equal(expanded.length, 4);
+  assert.equal(expanded[2].id, early[2].id);
+  assert.equal(expanded[2].saved, true);
 });
 
 test('an unobstructed dog first breaches during round seven pacing', () => {
@@ -253,6 +301,58 @@ test('grey cat still swings when no dog is directly in front', () => {
   assert.equal(swing.miss, true);
   assert.equal(swing.to, null);
   assert.equal(game.events.some((event) => event.type === 'shot'), false);
+});
+
+test('Calico Medic unlock heals itself when its homing yarn hits', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.CALICO });
+  game = placeCat(game, 0, 12, 2);
+  game.cats[0].hp = 4;
+  game.dogs = [createDog(1, 5, 2)];
+
+  game = resolveSection(game);
+
+  assert.equal(game.cats[0].hp, 5);
+  assert.equal(game.events.some((event) => event.type === 'heal' && event.amount === 1), true);
+  assert.equal(game.dogs[0].hp, 5);
+});
+
+test('Black Bombardier shot splashes dogs in adjacent columns', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.BLACK });
+  game = placeCat(game, 0, 12, 2);
+  const left = createDog(1, 7, 1);
+  const center = createDog(1, 7, 2);
+  const right = createDog(1, 7, 3);
+  game.dogs = [left, center, right];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs.find((dog) => dog.id === center.id).hp, 4);
+  assert.equal(game.dogs.find((dog) => dog.id === left.id).hp, 6);
+  assert.equal(game.dogs.find((dog) => dog.id === right.id).hp, 6);
+});
+
+test('Prism Sphinx beam pierces up to three dogs in its column', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.PRISM });
+  game = placeCat(game, 0, 12, 2);
+  game.dogs = [createDog(1, 3, 2), createDog(1, 5, 2), createDog(1, 7, 2), createDog(1, 7, 4)];
+
+  game = resolveSection(game);
+
+  const sameColumn = game.dogs.filter((dog) => dog.col === 2);
+  assert.deepEqual(sameColumn.map((dog) => dog.hp), [4, 4, 4]);
+  assert.equal(game.dogs.find((dog) => dog.col === 4).hp, 7);
+});
+
+test('placeholder dog tiers unlock through the round-seven Alpha Hound', () => {
+  assert.ok(generateWave(3, () => 0.999).some((dog) => dog.tier === 2));
+  assert.ok(generateWave(5, () => 0.999).some((dog) => dog.tier === 3));
+  const finalWave = generateWave(7, () => 0.999);
+  const alpha = finalWave.find((dog) => dog.tier === 4);
+  assert.ok(alpha);
+  assert.match(dogTooltipInfo(alpha).title, /Alpha Hound/);
 });
 
 test('a dog attacks a blocking cat instead of moving through it', () => {

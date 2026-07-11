@@ -15,6 +15,14 @@ export const COMBAT_TIMING = Object.freeze({
   movePauseMs: 260,
 });
 
+/** Scaled copy of COMBAT_TIMING for the speed toggle; the tuned table itself never changes. */
+export function combatTiming(speed = 1) {
+  const factor = speed > 0 ? speed : 1;
+  return Object.fromEntries(
+    Object.entries(COMBAT_TIMING).map(([key, ms]) => [key, Math.round(ms / factor)]),
+  );
+}
+
 export function cellCenter(row, col) {
   return {
     xPercent: ((col + 0.5) / COLS) * 100,
