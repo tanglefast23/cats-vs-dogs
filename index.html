@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#172b36" />
+  <title>Cats vs Dogs: Backyard Battle</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="game-shell">
+    <section class="battle-column" aria-label="Backyard battlefield">
+      <div class="board-frame">
+        <div class="zone-label dog-label">DOG ENTRY</div>
+        <div id="board" class="board">
+          <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
+          <div id="grid" class="grid"></div>
+          <div id="effects" class="effects" aria-hidden="true"></div>
+        </div>
+        <div class="zone-label cat-label">CAT TERRITORY</div>
+      </div>
+    </section>
+
+    <aside class="control-panel">
+      <header class="titlebar">
+        <div>
+          <p class="eyebrow">LEVEL 1 · HOME TURF</p>
+          <h1>CATS <span>VS</span> DOGS</h1>
+        </div>
+        <div class="titlebar-actions">
+          <button id="settings" class="icon-button" aria-label="Open settings" title="Settings">⚙</button>
+          <button id="restart" class="icon-button" aria-label="Restart game" title="Restart">↻</button>
+        </div>
+      </header>
+
+      <section class="hud" aria-label="Game status">
+        <div class="hud-chip"><span class="hud-icon coin">●</span><strong id="gold">10</strong><small>GOLD</small></div>
+        <div class="hud-chip"><span class="hud-icon heart">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
+        <div class="hud-chip"><strong id="round">1/7</strong><small>ROUND</small></div>
+        <div class="hud-chip action-chip"><div id="section-dots" class="section-dots"><i></i><i></i></div><small>ACTIONS</small></div>
+      </section>
+
+      <section id="shop-panel" class="shop-panel">
+        <div class="panel-heading">
+          <div><span class="tiny-label">PICK YOUR DEFENDERS</span><h2>Cat Cart</h2></div>
+          <button id="refresh" class="refresh-button"><span>↻</span> Refresh <b>1</b></button>
+        </div>
+        <div id="shop" class="shop-grid"></div>
+      </section>
+
+      <section id="bench-panel" class="bench-panel">
+        <div class="panel-heading compact">
+          <div><span class="tiny-label">SELECT · PLACE · MATCH TO MERGE</span><h2>Bench <small id="bench-count">0/6</small></h2></div>
+          <button id="return-bench" class="small-button" disabled>To bench</button>
+        </div>
+        <div id="bench" class="bench-grid"></div>
+      </section>
+
+      <section class="round-controls">
+        <p id="message" class="message" role="status">Build your team, then start the round.</p>
+        <button id="done" class="done-button"><span id="done-label">START ROUND 1</span><small>Dogs take 2 actions</small></button>
+      </section>
+
+      <aside class="how-to">
+        <b>HOW TO PLAY</b>
+        <span>Buy cats, select one from the bench, then place it in the lower five rows. Match three of the <b>same color and level</b> to evolve (coats do not mix). Reposition freely before starting each round. Use <b>Save</b> under a shop pet to keep it through Refresh and into the next round.</span>
+        <span><b>Orange Tabby</b> column shot · <b>Snow Ghost</b> weaker homing wave shot · <b>Blue Brawler</b> heavy melee, double HP.</span>
+      </aside>
+
+      <section class="balance-note">
+        <span>COAT ROLES</span>
+        <strong>Tabby shot · Ghost home · Brawler tank</strong>
+        <i>mix the lineup</i>
+        <strong>Dogs march down</strong>
+      </section>
+    </aside>
+  </main>
+
+  <div id="settings-modal" class="settings-modal" hidden>
+    <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-header">
+        <div>
+          <p class="eyebrow">OPTIONS</p>
+          <h2 id="settings-title">Settings</h2>
+        </div>
+        <button id="settings-close" class="icon-button" aria-label="Close settings" title="Close">×</button>
+      </div>
+      <label class="settings-row" for="setting-sound">
+        <span>
+          <strong>Sound effects</strong>
+          <small>Cat drops and combat hits</small>
+        </span>
+        <input id="setting-sound" type="checkbox" checked />
+      </label>
+      <p class="settings-hint">Settings are saved in this browser.</p>
+    </div>
+  </div>
+
+  <div id="result-modal" class="result-modal" hidden>
+    <div class="result-card">
+      <canvas id="result-cat" width="64" height="64"></canvas>
+      <p id="result-kicker">LEVEL COMPLETE</p>
+      <h2 id="result-title">Backyard Defended!</h2>
+      <p id="result-copy">The porch is safe—for now.</p>
+      <button id="play-again" class="done-button">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
