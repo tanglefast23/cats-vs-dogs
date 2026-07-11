@@ -2,9 +2,13 @@ import { COLS, ROWS } from './game-engine.js';
 
 export const COMBAT_TIMING = Object.freeze({
   projectileMs: 820,
-  // White-cat homing shot: longer so the sine-seek reads clearly.
-  homingMs: 1450,
+  // Orange tabby burst pellets now travel at half their prior speed so each pellet reads.
+  burstProjectileMs: 1040,
+  // White-cat homing shot is only modestly slower so its sine-seek stays fluid.
+  homingMs: 1650,
   shotStaggerMs: 130,
+  // Rapid successive pellets within one orange-cat volley.
+  burstStaggerMs: 90,
   impactMs: 340,
   hpPauseMs: 300,
   meleeMs: 430,

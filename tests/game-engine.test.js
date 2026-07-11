@@ -10,6 +10,7 @@ import {
   CAT_ZONE_START,
   MAX_ROUNDS,
   ACTIONS_PER_ROUND,
+  SHOP_SIZE,
   createGame,
   addCatToBench,
   combineCats,
@@ -25,6 +26,7 @@ import {
   catTooltipInfo,
   dogTooltipInfo,
   closestDogByColumnPriority,
+  splitDamage,
 } from '../src/game-engine.js';
 
 test('desktop board uses six columns, fourteen rows, four cat rows, and two actions', () => {
@@ -34,6 +36,33 @@ test('desktop board uses six columns, fourteen rows, four cat rows, and two acti
   assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
   assert.equal(MAX_ROUNDS, 7);
+});
+
+test('SAP economy uses five fixed shop choices and exactly ten fresh gold each round', () => {
+  let game = createGame(() => 0.5);
+  assert.equal(SHOP_SIZE, 5);
+  assert.equal(game.shop.length, 5);
+  assert.equal(game.gold, 10);
+
+  while (game.round < MAX_ROUNDS) {
+    game.gold = 1;
+    game.phase = 'combat';
+    game.dogs = [];
+    game = finishRound(game);
+    assert.equal(game.gold, 10, `round ${game.round} should start with fresh gold`);
+    assert.equal(game.shop.length, 5, `round ${game.round} should keep five shop choices`);
+  }
+});
+
+test('rolling replaces five shop choices while preserving saved slots', () => {
+  let game = createGame(() => 0.2);
+  game = toggleSaveShopSlot(game, 4);
+  const savedId = game.shop[4].id;
+  game = refreshShop(game);
+
+  assert.equal(game.shop.length, 5);
+  assert.equal(game.shop[4].id, savedId);
+  assert.equal(game.shop[4].saved, true);
 });
 
 test('an unobstructed dog first breaches during round seven pacing', () => {
@@ -87,22 +116,30 @@ test('a base cat needs four readable hits to defeat a tier-one dog', () => {
   assert.equal(game.dogs.length, 0);
 });
 
-test('shot events describe travel and exact HP loss for animation', () => {
+test('orange cat splits one attack into rapid burst pellets', () => {
+  assert.deepEqual(splitDamage(2, 3), [1, 1, 0]);
+  assert.deepEqual(splitDamage(3, 3), [1, 1, 1]);
+  assert.deepEqual(splitDamage(5, 3), [2, 2, 1]);
+
   let game = createGame(() => 0.5);
-  game = addCatToBench(game, { level: 1 });
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
   game.dogs = [createDog(1, 0, 2)];
 
   game = resolveSection(game);
-  const shot = game.events.find((event) => event.type === 'shot');
+  const shots = game.events.filter((event) => event.type === 'shot');
 
-  assert.deepEqual(
-    { damage: shot.damage, hpBefore: shot.hpBefore, hpAfter: shot.hpAfter, fromRow: shot.fromRow, toRow: shot.toRow },
-    { damage: 2, hpBefore: 7, hpAfter: 5, fromRow: 12, toRow: 0 },
-  );
+  assert.equal(shots.length, 2);
+  assert.equal(shots.every((shot) => shot.burst), true);
+  assert.equal(shots.reduce((sum, shot) => sum + shot.damage, 0), 2);
+  assert.equal(shots[0].damage, 1);
+  assert.equal(shots[0].hpBefore, 7);
+  assert.equal(shots[0].hpAfter, 6);
+  assert.equal(shots[1].hpAfter, 5);
+  assert.equal(game.dogs[0].hp, 5);
 });
 
-test('a cat shot damages only the nearest dog in its column', () => {
+test('orange cat burst keeps hitting the nearest dog in its column', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
@@ -114,6 +151,19 @@ test('a cat shot damages only the nearest dog in its column', () => {
   const lowerDog = game.dogs.find((dog) => dog.row === 5);
   assert.equal(upperDog.hp, 7);
   assert.equal(lowerDog.hp, 5);
+});
+
+test('level-two orange cat fires three equal burst pellets', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
+  game = placeCat(game, 0, 12, 2);
+  game.dogs = [createDog(1, 0, 2)];
+
+  game = resolveSection(game);
+  const shots = game.events.filter((event) => event.type === 'shot');
+  assert.equal(shots.length, 3);
+  assert.deepEqual(shots.map((shot) => shot.damage), [1, 1, 1]);
+  assert.equal(game.dogs[0].hp, 4);
 });
 
 test('white cat prefers a same-column dog over a nearer dog in another column', () => {
@@ -190,7 +240,7 @@ test('grey cat has double HP and a powerful melee attack on the dog in front', (
   assert.equal(game.events.some((event) => event.type === 'shot'), false);
 });
 
-test('grey cat does not melee when no dog is directly in front', () => {
+test('grey cat still swings when no dog is directly in front', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });
   game = placeCat(game, 0, 12, 2);
@@ -198,8 +248,11 @@ test('grey cat does not melee when no dog is directly in front', () => {
 
   game = resolveSection(game);
 
+  const swing = game.events.find((event) => event.type === 'cat-melee');
   assert.equal(game.dogs[0].hp, 7);
-  assert.equal(game.events.some((event) => event.type === 'cat-melee' || event.type === 'shot'), false);
+  assert.equal(swing.miss, true);
+  assert.equal(swing.to, null);
+  assert.equal(game.events.some((event) => event.type === 'shot'), false);
 });
 
 test('a dog attacks a blocking cat instead of moving through it', () => {
@@ -236,15 +289,58 @@ test('surviving dogs persist and the next wave joins them', () => {
   assert.equal(game.dogs.length, 3);
 });
 
-test('seven completed rounds win Level 1', () => {
+test('clearing every dog after the final wave wins Level 1', () => {
   let game = createGame(() => 0.5);
-  for (let round = 1; round <= MAX_ROUNDS; round += 1) {
+  for (let round = 1; round < MAX_ROUNDS; round += 1) {
     game = startRound(game);
+    game.dogs = [];
     game = finishRound(game);
+    assert.equal(game.phase, 'prep');
   }
+
+  game = startRound(game);
+  assert.equal(game.round, MAX_ROUNDS);
+  assert.ok(game.dogs.length > 0);
+  game.dogs = [];
+  game = finishRound(game);
 
   assert.equal(game.phase, 'victory');
   assert.equal(game.round, MAX_ROUNDS);
+});
+
+test('killing all dogs mid-level does not win before the final wave', () => {
+  let game = createGame(() => 0.5);
+  game = startRound(game);
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.phase, 'prep');
+  assert.equal(game.round, 2);
+});
+
+test('final wave with dogs remaining keeps combat instead of auto-winning', () => {
+  let game = createGame(() => 0.5);
+  game.round = MAX_ROUNDS;
+  game.phase = 'combat';
+  game.dogs = [createDog(1, 3, 1)];
+  game = finishRound(game);
+  assert.equal(game.phase, 'combat');
+  assert.equal(game.dogs.length, 1);
+});
+
+test('resolveSection grants victory when the final wave is fully cleared', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 3, coat: CAT_COAT.ORANGE });
+  game = placeCat(game, 0, 12, 2);
+  game.round = MAX_ROUNDS;
+  game.phase = 'combat';
+  game.dogs = [createDog(1, 11, 2)];
+  // L3 orange attack 5 as burst 2+2+1 kills 7-hp dog over enough sections if needed.
+  // One section of 5 damage leaves dog at 2; second section finishes.
+  game = resolveSection(game);
+  assert.notEqual(game.phase, 'victory');
+  game = resolveSection(game);
+  assert.equal(game.dogs.length, 0);
+  assert.equal(game.phase, 'victory');
 });
 
 test('illegal placement above cat territory leaves the bench unchanged', () => {
@@ -361,7 +457,7 @@ test('cat tooltips describe each coat attack style', () => {
   const brawler = catTooltipInfo({ level: 1, coat: CAT_COAT.GREY, hp: 12, maxHp: 12 });
   const ghost = catTooltipInfo({ level: 1, coat: CAT_COAT.WHITE, hp: 6, maxHp: 6 });
 
-  assert.match(tabby.attack, /column/i);
+  assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
   assert.match(brawler.stats, /12/);
@@ -371,4 +467,26 @@ test('dog tooltips explain march and bite behavior', () => {
   const dog = dogTooltipInfo({ tier: 1, hp: 7, maxHp: 7, attack: 3 });
   assert.match(dog.attack, /porch|ahead|bites|steps/i);
   assert.match(dog.stats, /7/);
+});
+
+test('cats still act with miss events when no dogs are in range', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.WHITE });
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });
+  game = placeCat(game, 0, 12, 0);
+  game = placeCat(game, 0, 12, 1);
+  game = placeCat(game, 0, 12, 2);
+  game.dogs = [];
+
+  game = resolveSection(game);
+
+  const shots = game.events.filter((event) => event.type === 'shot');
+  const melees = game.events.filter((event) => event.type === 'cat-melee');
+  assert.equal(shots.filter((shot) => shot.style === 'column').length, 3);
+  assert.equal(shots.filter((shot) => shot.style === 'homing').length, 1);
+  assert.equal(melees.length, 1);
+  assert.equal(shots.every((shot) => shot.miss), true);
+  assert.equal(melees[0].miss, true);
+  assert.equal(melees[0].to, null);
 });

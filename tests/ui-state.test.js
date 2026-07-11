@@ -1,9 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability } from '../src/ui-state.js';
 import { CAT_EQUIPMENT } from '../src/pixel-art.js';
 import { COMBAT_TIMING, homingShotKeyframes } from '../src/combat-animation.js';
+import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
+import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
+
+test('zero-gold shop cats stay interactive and readable while purchase is rejected', () => {
+  const availability = shopPetAvailability({
+    sold: false,
+    gold: 0,
+    benchLength: 0,
+    benchSize: 6,
+    phase: 'prep',
+    playing: false,
+  });
+
+  assert.deepEqual(availability, {
+    interactive: true,
+    canBuy: false,
+    reason: 'gold',
+  });
+});
+
+test('sold shop cats are disabled because they are genuinely unavailable', () => {
+  const availability = shopPetAvailability({
+    sold: true,
+    gold: 10,
+    benchLength: 0,
+    benchSize: 6,
+    phase: 'prep',
+    playing: false,
+  });
+
+  assert.deepEqual(availability, {
+    interactive: false,
+    canBuy: false,
+    reason: 'sold',
+  });
+});
 
 test('a successful shop purchase clears selection instead of silently selecting the new cat', () => {
   const priorSelection = { type: 'cat', id: 'cat-on-board' };
@@ -25,6 +62,100 @@ test('combat timing leaves enough time to read travel, impact, and HP loss', () 
   assert.ok(COMBAT_TIMING.projectileMs >= 700);
   assert.ok(COMBAT_TIMING.impactMs >= 300);
   assert.ok(COMBAT_TIMING.hpPauseMs >= 250);
+});
+
+test('Blue Brawler uses a readable alternating-paw scratch flurry', () => {
+  assert.equal(BLUE_SCRATCH_FLURRY.swipes, 5);
+  assert.equal(BLUE_SCRATCH_FLURRY.alternatingPaws, true);
+  assert.ok(BLUE_SCRATCH_FLURRY.durationMs >= 700);
+  assert.ok(BLUE_SCRATCH_FLURRY.hitAtMs > BLUE_SCRATCH_FLURRY.durationMs / 2);
+  assert.ok(BLUE_SCRATCH_FLURRY.hitAtMs < BLUE_SCRATCH_FLURRY.durationMs);
+});
+
+test('dragging a bench cat to an empty cat-territory cell produces a place action', () => {
+  const action = getDropAction({
+    source: { type: 'bench', id: 'cat-1', level: 1 },
+    target: { kind: 'cell', row: 10, col: 2, occupied: null },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'place', row: 10, col: 2 });
+});
+
+test('dragging a board cat to another empty cat cell produces a move action', () => {
+  const action = getDropAction({
+    source: { type: 'cat', id: 'cat-1', level: 1 },
+    target: { kind: 'cell', row: 12, col: 5, occupied: null },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'move', row: 12, col: 5 });
+});
+
+test('dropping onto a matching cat produces a merge action', () => {
+  const action = getDropAction({
+    source: { type: 'bench', id: 'cat-1', level: 2 },
+    target: { kind: 'cell', row: 11, col: 3, occupied: { id: 'cat-2', level: 2 } },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'merge', targetType: 'cat', targetId: 'cat-2' });
+});
+
+test('dropping outside cat territory is rejected and uses a visible return animation', () => {
+  const action = getDropAction({
+    source: { type: 'bench', id: 'cat-1', level: 1 },
+    target: { kind: 'cell', row: 4, col: 2, occupied: null },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'invalid' });
+  assert.ok(DRAG_FEEDBACK.returnMs >= 200);
+  assert.ok(DRAG_FEEDBACK.liftScale > 1);
+  assert.ok(DRAG_FEEDBACK.dropMs >= 220);
+});
+
+test('successful placement feedback keeps only forty percent of its former impact', () => {
+  assert.equal(DROP_IMPACT.intensity, 0.4);
+  assert.equal(DROP_IMPACT.boardShakePx, 1.2);
+  assert.equal(DROP_IMPACT.landingLiftPercent, 11.2);
+  assert.equal(DROP_IMPACT.ghostSettleScale, 0.928);
+  assert.equal(DROP_IMPACT.ringEndScale, 1.68);
+});
+
+test('a two-copy merge gets a polished stack reveal without claiming a level-up', () => {
+  const reveal = describeUpgrade(
+    { level: 1, copies: 1 },
+    { level: 1, copies: 2 },
+  );
+
+  assert.deepEqual(reveal, {
+    kind: 'stack',
+    level: 1,
+    label: '2 / 3',
+    intensity: 'standard',
+  });
+});
+
+test('level two and level three promotions receive stronger reveal classifications', () => {
+  assert.deepEqual(
+    describeUpgrade({ level: 1, copies: 2 }, { level: 2, copies: 1 }),
+    { kind: 'level-up', level: 2, label: 'LEVEL 2!', intensity: 'level-up' },
+  );
+  assert.deepEqual(
+    describeUpgrade({ level: 2, copies: 2 }, { level: 3, copies: 1 }),
+    { kind: 'level-up', level: 3, label: 'LEVEL 3!', intensity: 'ultimate' },
+  );
+  assert.ok(UPGRADE_TIMING.smokeMs >= 600);
+  assert.ok(UPGRADE_TIMING.totalMs >= UPGRADE_TIMING.smokeMs);
 });
 
 test('level two and three cats have progressively stronger visible equipment sets', () => {
@@ -61,6 +192,15 @@ test('homing shot path uses a sine wave while ending on the target', () => {
     maxOff = Math.max(maxOff, Math.hypot(x - straightX, y - straightY));
   }
   assert.ok(maxOff > 1.2, `expected a sine offset off the line, maxOff=${maxOff}`);
+});
+
+test('orange burst bullets use exactly double their prior travel time', () => {
+  assert.equal(COMBAT_TIMING.burstProjectileMs, 1040);
+});
+
+test('white homing shots are modestly slower without doubling their travel time', () => {
+  assert.equal(COMBAT_TIMING.homingMs, 1650);
+  assert.ok(COMBAT_TIMING.homingMs < COMBAT_TIMING.burstProjectileMs * 2);
 });
 
 test('homing shots are slower than normal projectiles so the seek reads', () => {

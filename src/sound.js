@@ -1,4 +1,5 @@
 // Tiny synthesized SFX via Web Audio — no external assets required.
+import { DROP_IMPACT } from './drag-drop.js';
 
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
 
@@ -138,12 +139,12 @@ function later(ms, fn) {
 /** Soft “plop” when a cat is placed or moved onto the board. */
 export function playCatDrop() {
   if (!soundEnabled) return;
-  tone({ frequency: 320, slideTo: 180, duration: 0.11, type: 'triangle', volume: 0.07, attack: 0.004, decay: 0.06 });
+  tone({ frequency: 320, slideTo: 180, duration: 0.11, type: 'triangle', volume: 0.07 * DROP_IMPACT.soundGain, attack: 0.004, decay: 0.06 });
   later(25, () => {
     if (!soundEnabled) return;
-    tone({ frequency: 220, slideTo: 140, duration: 0.08, type: 'sine', volume: 0.045 });
+    tone({ frequency: 220, slideTo: 140, duration: 0.08, type: 'sine', volume: 0.045 * DROP_IMPACT.soundGain });
   });
-  noiseBurst({ duration: 0.05, volume: 0.03, filterFreq: 700 });
+  noiseBurst({ duration: 0.05, volume: 0.03 * DROP_IMPACT.soundGain, filterFreq: 700 });
 }
 
 /** Sharp hit when a shot or melee lands. */

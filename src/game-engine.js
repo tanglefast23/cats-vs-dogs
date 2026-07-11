@@ -4,6 +4,7 @@ export const CAT_ZONE_START = 10;
 export const MAX_ROUNDS = 7;
 export const ACTIONS_PER_ROUND = 2;
 export const BENCH_SIZE = 6;
+export const SHOP_SIZE = 5;
 
 /** Coat 0 orange tabby: column shot. Coat 1 grey/blue: melee tank. Coat 2 white: homing shot. */
 export const CAT_COAT = {
@@ -17,8 +18,8 @@ export const CAT_COAT_INFO = {
     name: 'Orange Tabby',
     shortName: 'Tabby',
     ability: 'column-shot',
-    blurb: 'Column shot',
-    attackDetail: 'Each action, fires a straight shot up its own column at the nearest dog ahead.',
+    blurb: '3-shot column burst',
+    attackDetail: 'Each action, fires 3 rapid column shots that split its attack damage. Shots retarget the nearest dog ahead in its column.',
   },
   1: {
     name: 'Blue Brawler',
@@ -173,7 +174,7 @@ export function makeShopSlot(random = Math.random) {
 }
 
 export function makeShop(random = Math.random, previous = null) {
-  return Array.from({ length: 3 }, (_, index) => {
+  return Array.from({ length: SHOP_SIZE }, (_, index) => {
     const prior = previous?.[index];
     // Saved, still-available pets stay put through refresh and into the next round.
     if (prior && prior.saved && !prior.sold) {
@@ -374,9 +375,18 @@ function dogInMeleeFront(cat, dogs) {
   return livingDogs(dogs).find((dog) => dog.col === cat.col && dog.row === cat.row - 1) ?? null;
 }
 
+export function splitDamage(total, parts = 3) {
+  const amount = Math.max(0, Math.floor(Number(total) || 0));
+  const chunks = Array.from({ length: parts }, () => 0);
+  for (let i = 0; i < amount; i += 1) chunks[i % parts] += 1;
+  return chunks;
+}
+
 function pushDamageEvent(events, type, from, to, extra = {}) {
+  const damage = typeof extra.damage === 'number' ? extra.damage : from.attack;
+  if (damage <= 0) return;
   const hpBefore = to.hp;
-  to.hp = Math.max(0, to.hp - from.attack);
+  to.hp = Math.max(0, to.hp - damage);
   events.push({
     type,
     from: from.id,
@@ -385,11 +395,37 @@ function pushDamageEvent(events, type, from, to, extra = {}) {
     col: to.col,
     fromRow: from.row,
     toRow: to.row,
-    damage: from.attack,
+    damage,
     hpBefore,
     hpAfter: to.hp,
     maxHp: to.maxHp,
+    miss: false,
     ...extra,
+    damage,
+    miss: false,
+  });
+}
+
+function pushMissEvent(events, type, from, extra = {}) {
+  const col = extra.col ?? from.col;
+  const toRow = extra.toRow ?? 0;
+  events.push({
+    type,
+    from: from.id,
+    to: null,
+    fromCol: from.col,
+    col,
+    fromRow: from.row,
+    toRow,
+    damage: 0,
+    hpBefore: 0,
+    hpAfter: 0,
+    maxHp: 0,
+    miss: true,
+    ...extra,
+    miss: true,
+    damage: 0,
+    to: null,
   });
 }
 
@@ -398,7 +434,7 @@ export function resolveSection(game) {
   const next = copy(game);
   next.section += 1;
 
-  // Cats act first. Ability depends on coat:
+  // Cats always act. If nothing is in range they still shoot/swing (miss animations).
   // orange = column shot, white = weaker homing shot, grey = strong front melee only.
   for (const cat of next.cats) {
     const ability = cat.ability ?? catStatsFor(cat.level, cat.coat).ability;
@@ -407,6 +443,12 @@ export function resolveSection(game) {
       if (target) {
         pushDamageEvent(next.events, 'cat-melee', cat, target, {
           col: cat.col,
+          style: 'melee',
+        });
+      } else {
+        pushMissEvent(next.events, 'cat-melee', cat, {
+          col: cat.col,
+          toRow: Math.max(0, cat.row - 1),
           style: 'melee',
         });
       }
@@ -421,18 +463,40 @@ export function resolveSection(game) {
           col: target.col,
           style: 'homing',
         });
+      } else {
+        pushMissEvent(next.events, 'shot', cat, {
+          fromCol: cat.col,
+          col: cat.col,
+          toRow: 0,
+          style: 'homing',
+        });
       }
       continue;
     }
 
-    const target = nearestDogInColumn(cat, next.dogs);
-    if (target) {
-      pushDamageEvent(next.events, 'shot', cat, target, {
+    // Orange tabby: 3 rapid pellets that split the cat's attack power.
+    // Always fire the volley — leftover pellets fly off-screen if no dog remains.
+    const pellets = splitDamage(cat.attack, 3).filter((amount) => amount > 0);
+    pellets.forEach((amount, pelletIndex) => {
+      const target = nearestDogInColumn(cat, next.dogs);
+      const shared = {
         fromCol: cat.col,
         col: cat.col,
         style: 'column',
-      });
-    }
+        burst: true,
+        pelletIndex,
+        pelletCount: pellets.length,
+        damage: amount,
+      };
+      if (target) {
+        pushDamageEvent(next.events, 'shot', cat, target, shared);
+      } else {
+        pushMissEvent(next.events, 'shot', cat, {
+          ...shared,
+          toRow: 0,
+        });
+      }
+    });
   }
   next.dogs = next.dogs.filter((dog) => dog.hp > 0);
 
@@ -475,6 +539,11 @@ export function resolveSection(game) {
   if (next.lives <= 0) {
     next.phase = 'gameover';
     next.message = 'The dogs reached the porch. Game over!';
+  } else if (next.dogs.length === 0 && next.round >= MAX_ROUNDS) {
+    // Level 1 keeps the same wave counts, but ends by clearing dogs — not by clock.
+    next.phase = 'victory';
+    next.message = 'All dogs cleared! Level 1 complete.';
+    next.events.push({ type: 'level-clear' });
   }
   return next;
 }
@@ -482,11 +551,19 @@ export function resolveSection(game) {
 export function finishRound(game) {
   if (game.phase !== 'combat') return game;
   const next = copy(game);
+
+  // Final wave already out: only win when every dog is gone.
   if (next.round >= MAX_ROUNDS) {
-    next.phase = 'victory';
-    next.message = 'Backyard defended! Level 1 complete.';
+    if (next.dogs.length === 0) {
+      next.phase = 'victory';
+      next.message = 'All dogs cleared! Level 1 complete.';
+      return next;
+    }
+    next.message = 'Clear every remaining dog to finish the level!';
     return next;
   }
+
+  // Earlier waves: even if the board is empty, the next scheduled wave still comes.
   next.round += 1;
   next.section = 0;
   next.phase = 'prep';
@@ -495,7 +572,9 @@ export function finishRound(game) {
   const kept = next.shop.filter((slot) => slot.saved).length;
   next.message = kept
     ? `Round ${next.round} prep: 10 fresh gold! ${kept} saved pet${kept === 1 ? '' : 's'} held over.`
-    : `Round ${next.round} prep: 10 fresh gold!`;
+    : next.dogs.length === 0
+      ? `Wave cleared! Round ${next.round} prep: 10 fresh gold!`
+      : `Round ${next.round} prep: 10 fresh gold!`;
   // Surviving cats heal between rounds for a forgiving first level.
   next.cats.forEach((cat) => { cat.hp = cat.maxHp; });
   return next;
