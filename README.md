@@ -2,10 +2,18 @@
 
 A personal turn-based backyard defense game.
 
-## Play
+## Play & develop
 
-- Local: `npm start` then open `http://localhost:4173`
+- Browser dev server: `npm run dev` (or `npm start`) → http://127.0.0.1:4173
+- Browser production build: `npm run build` (outputs `dist/`)
+- Preview the production bundle locally: `npm run preview` → http://127.0.0.1:4173
+- Electron (dev, with Vite HMR): `npm run electron:dev`
+- Electron (production renderer, no server needed): `npm run electron`
+- Package the desktop app: `npm run package:electron` (outputs `out/`)
 - Tests: `npm test`
+
+The browser and Electron versions share the exact same renderer — everything
+under `src/` stays browser-pure (no Electron/Node imports).
 
 ## Game notes
 
