@@ -24,12 +24,14 @@ import {
   mergeUnitOnto,
   catTooltipInfo,
   dogTooltipInfo,
+  closestDogByColumnPriority,
 } from '../src/game-engine.js';
 
-test('desktop board uses six columns, fourteen rows, five cat rows, and two actions', () => {
+test('desktop board uses six columns, fourteen rows, four cat rows, and two actions', () => {
   assert.equal(COLS, 6);
   assert.equal(ROWS, 14);
-  assert.equal(CAT_ZONE_START, 9);
+  assert.equal(CAT_ZONE_START, 10);
+  assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
   assert.equal(MAX_ROUNDS, 7);
 });
@@ -114,26 +116,56 @@ test('a cat shot damages only the nearest dog in its column', () => {
   assert.equal(lowerDog.hp, 5);
 });
 
-test('white cat fires a weaker homing shot at the closest dog in any lane', () => {
+test('white cat prefers a same-column dog over a nearer dog in another column', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.WHITE });
   game = placeCat(game, 0, 12, 1);
-  // Far dog in the same column, much closer dog two lanes over.
+  // Far dog in own column, nearer dog two lanes over — own column wins.
   game.dogs = [createDog(1, 0, 1), createDog(1, 10, 3)];
 
   game = resolveSection(game);
 
-  const farDog = game.dogs.find((dog) => dog.col === 1);
-  const closeDog = game.dogs.find((dog) => dog.col === 3);
+  const ownColumnDog = game.dogs.find((dog) => dog.col === 1);
+  const otherDog = game.dogs.find((dog) => dog.col === 3);
   const shot = game.events.find((event) => event.type === 'shot');
 
   assert.equal(catStatsFor(1, CAT_COAT.WHITE).attack, 1);
-  assert.equal(farDog.hp, 7);
-  assert.equal(closeDog.hp, 6);
+  assert.equal(ownColumnDog.hp, 6);
+  assert.equal(otherDog.hp, 7);
   assert.equal(shot.style, 'homing');
   assert.equal(shot.damage, 1);
   assert.equal(shot.fromCol, 1);
-  assert.equal(shot.col, 3);
+  assert.equal(shot.col, 1);
+});
+
+test('white cat uses next-nearest columns, then lowest row, then random on full ties', () => {
+  const cat = { row: 12, col: 2 };
+
+  // No own-column dog: adjacent columns, pick the lower one (higher row).
+  const adjacent = closestDogByColumnPriority(
+    cat,
+    [createDog(1, 4, 1), createDog(1, 8, 3), createDog(1, 2, 5)],
+    () => 0,
+  );
+  assert.equal(adjacent.col, 3);
+  assert.equal(adjacent.row, 8);
+
+  // Equal column distance and equal row → random among ties.
+  const left = createDog(1, 6, 1);
+  const right = createDog(1, 6, 3);
+  const pickLeft = closestDogByColumnPriority(cat, [left, right], () => 0);
+  const pickRight = closestDogByColumnPriority(cat, [left, right], () => 0.99);
+  assert.equal(pickLeft.id, left.id);
+  assert.equal(pickRight.id, right.id);
+
+  // Multiple dogs in own column → lowest (closest) dog wins.
+  const ownColumn = closestDogByColumnPriority(
+    cat,
+    [createDog(1, 1, 2), createDog(1, 9, 2), createDog(1, 10, 4)],
+    () => 0,
+  );
+  assert.equal(ownColumn.col, 2);
+  assert.equal(ownColumn.row, 9);
 });
 
 test('grey cat has double HP and a powerful melee attack on the dog in front', () => {
@@ -331,7 +363,7 @@ test('cat tooltips describe each coat attack style', () => {
 
   assert.match(tabby.attack, /column/i);
   assert.match(brawler.attack, /melee|front/i);
-  assert.match(ghost.attack, /homing|closest dog|sine/i);
+  assert.match(ghost.attack, /homing|column|sine|random/i);
   assert.match(brawler.stats, /12/);
 });
 

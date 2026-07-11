@@ -1,6 +1,6 @@
 export const ROWS = 14;
 export const COLS = 6;
-export const CAT_ZONE_START = 9;
+export const CAT_ZONE_START = 10;
 export const MAX_ROUNDS = 7;
 export const ACTIONS_PER_ROUND = 2;
 export const BENCH_SIZE = 6;
@@ -32,7 +32,7 @@ export const CAT_COAT_INFO = {
     shortName: 'Ghost',
     ability: 'homing',
     blurb: 'Homing wave shot',
-    attackDetail: 'Each action, fires one weaker shot that sine-waves toward the closest dog anywhere on the board.',
+    attackDetail: 'Each action, fires one weaker sine-wave shot that homes by nearest column first (own column, then adjacent, then farther). In a tied column distance, it picks the lowest dog; a full tie is random.',
   },
 };
 
@@ -344,17 +344,30 @@ function nearestDogInColumn(cat, dogs) {
     .sort((a, b) => b.row - a.row)[0] ?? null;
 }
 
-function closestDogAnyLane(cat, dogs) {
+/**
+ * Snow Ghost targeting:
+ * 1) nearest column first (0 = own column, then 1, then 2, ...)
+ * 2) within that column distance, lowest dog on the board (highest row index = closest to cats)
+ * 3) full ties (same col distance + same row) → random among them
+ */
+export function closestDogByColumnPriority(cat, dogs, random = Math.random) {
   const candidates = livingDogs(dogs);
   if (!candidates.length) return null;
-  return [...candidates].sort((a, b) => {
-    const da = Math.hypot(a.row - cat.row, a.col - cat.col);
-    const db = Math.hypot(b.row - cat.row, b.col - cat.col);
-    if (da !== db) return da - db;
-    // Prefer the dog closer to the porch / cat (higher row), then left-most for stability.
-    if (a.row !== b.row) return b.row - a.row;
-    return a.col - b.col;
-  })[0];
+
+  let bestColDist = Infinity;
+  for (const dog of candidates) {
+    bestColDist = Math.min(bestColDist, Math.abs(dog.col - cat.col));
+  }
+
+  const nearestColumns = candidates.filter((dog) => Math.abs(dog.col - cat.col) === bestColDist);
+  let bestRow = -Infinity;
+  for (const dog of nearestColumns) {
+    bestRow = Math.max(bestRow, dog.row);
+  }
+
+  const ties = nearestColumns.filter((dog) => dog.row === bestRow);
+  if (ties.length === 1) return ties[0];
+  return ties[Math.floor(random() * ties.length)];
 }
 
 function dogInMeleeFront(cat, dogs) {
@@ -401,7 +414,7 @@ export function resolveSection(game) {
     }
 
     if (ability === 'homing') {
-      const target = closestDogAnyLane(cat, next.dogs);
+      const target = closestDogByColumnPriority(cat, next.dogs, game.random);
       if (target) {
         pushDamageEvent(next.events, 'shot', cat, target, {
           fromCol: cat.col,
