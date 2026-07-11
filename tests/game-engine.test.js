@@ -83,7 +83,7 @@ test('SAP-style cat tiers unlock on rounds one, three, five, and seven', () => {
   assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5]);
 });
 
-test('SAP shop slots grow on rounds five and nine while the pet pool expands separately', () => {
+test('SAP shop slots grow on rounds five and nine while fighter unlocks remain separate', () => {
   const roundThree = makeShop(() => 0.999, null, 3);
   const roundFive = makeShop(() => 0.999, null, 5);
   const roundSeven = makeShop(() => 0.999, null, 7);
@@ -98,9 +98,9 @@ test('SAP shop slots grow on rounds five and nine while the pet pool expands sep
   assert.equal(roundFive.length, 4);
   assert.equal(roundSeven.length, 4);
   assert.equal(roundNine.length, 5);
-  assert.ok(roundThree.every((slot) => slot.coat === CAT_COAT.CALICO));
-  assert.ok(roundFive.every((slot) => slot.coat === CAT_COAT.BLACK));
-  assert.ok(roundSeven.every((slot) => slot.coat === CAT_COAT.PRISM));
+  assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, CAT_COAT.CALICO]);
+  assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK]);
+  assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK, CAT_COAT.PRISM]);
 });
 
 test('the round-five shop adds a fourth slot without dropping saved pets', () => {
@@ -303,7 +303,7 @@ test('grey cat still swings when no dog is directly in front', () => {
   assert.equal(game.events.some((event) => event.type === 'shot'), false);
 });
 
-test('Calico Medic unlock heals itself when its homing yarn hits', () => {
+test('Calico Tangler marks a dog to skip its next unblocked move without healing', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.CALICO });
   game = placeCat(game, 0, 12, 2);
@@ -312,9 +312,12 @@ test('Calico Medic unlock heals itself when its homing yarn hits', () => {
 
   game = resolveSection(game);
 
-  assert.equal(game.cats[0].hp, 5);
-  assert.equal(game.events.some((event) => event.type === 'heal' && event.amount === 1), true);
+  assert.equal(game.cats[0].hp, 4);
+  assert.equal(game.events.some((event) => event.type === 'heal'), false);
   assert.equal(game.dogs[0].hp, 5);
+  assert.equal(game.dogs[0].row, 5);
+  assert.equal(game.dogs[0].tangled, false);
+  assert.equal(game.events.some((event) => event.type === 'tangle-skip'), true);
 });
 
 test('Black Bombardier shot splashes dogs in adjacent columns', () => {

@@ -21,7 +21,7 @@ export const CAT_EQUIPMENT = {
 };
 
 export const CAT_ARCHETYPE_MARKERS = {
-  3: ['calico-patches', 'medic-cross'],
+  3: ['calico-patches', 'yarn-ball'],
   4: ['black-coat', 'bomb-pack'],
   5: ['prism-coat', 'crystal-crown'],
 };
@@ -31,6 +31,20 @@ export const DOG_TIER_MARKERS = {
   2: ['steel-helmet'],
   3: ['bruiser-plates'],
   4: ['alpha-armor', 'crown'],
+};
+
+export const WORKER_ART_MARKERS = {
+  cook: ['straw-hat', 'apron', 'spoon'],
+  trader: ['waistcoat', 'coin-purse', 'merchant-hat'],
+  weaponsmith: ['leather-apron', 'hammer', 'weapon-rack'],
+  armourer: ['goggles', 'heavy-gloves', 'anvil'],
+};
+
+export const ITEM_ART_MARKERS = {
+  food: ['apple', 'leaf'],
+  coins: ['gold-stack', 'shine'],
+  weapon: ['blade', 'tier-trim'],
+  armour: ['breastplate', 'tier-trim'],
 };
 
 export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
@@ -74,7 +88,8 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
   px(ctx, outline, 8, 26, 7, 3); px(ctx, outline, 19, 26, 7, 3); px(ctx, light, 10, 26, 4, 2); px(ctx, light, 20, 26, 4, 2);
   if (coat === 3) {
     px(ctx, '#d66d35', 9, 8, 5, 5); px(ctx, '#473b3a', 20, 9, 4, 4); px(ctx, '#d66d35', 10, 18, 5, 5);
-    px(ctx, outline, 22, 18, 8, 8); px(ctx, '#e9f5dd', 23, 19, 6, 6); px(ctx, '#49a865', 25, 19, 2, 6); px(ctx, '#49a865', 23, 21, 6, 2);
+    px(ctx, outline, 22, 18, 8, 8); px(ctx, '#df6ba8', 23, 19, 6, 6);
+    px(ctx, '#ffb6dc', 24, 20, 2, 2); px(ctx, '#9a3f77', 27, 21, 2, 3); px(ctx, '#df6ba8', 29, 24, 3, 2);
   }
   if (coat === 4) {
     px(ctx, outline, 23, 17, 8, 10); px(ctx, '#5d496c', 24, 18, 6, 8); px(ctx, '#a784c1', 25, 19, 4, 2);
@@ -110,6 +125,69 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
     px(ctx, '#ffd94f', 9, 3, 3, 3); px(ctx, '#ffd94f', 22, 3, 3, 3); px(ctx, '#fff3a5', 10, 3, 1, 1); px(ctx, '#fff3a5', 23, 3, 1, 1);
     px(ctx, outline, 14, 20, 6, 6); px(ctx, '#55e6ef', 15, 21, 4, 4); px(ctx, '#e2ffff', 16, 21, 2, 2);
     px(ctx, outline, 12, 0, 10, 4); px(ctx, '#493f87', 13, 0, 8, 3); px(ctx, '#55e6ef', 15, 0, 4, 2);
+  }
+}
+
+export function drawWorker(canvas, role = 'cook', level = 1) {
+  const coat = { cook: 3, trader: 4, weaponsmith: 0, armourer: 1 }[role] ?? 3;
+  drawCat(canvas, level, coat);
+  const ctx = canvas.getContext('2d');
+  const outline = '#172b36';
+  if (role === 'cook') {
+    px(ctx, outline, 7, 2, 20, 5); px(ctx, '#e7c35e', 8, 2, 18, 4);
+    px(ctx, outline, 12, 0, 10, 4); px(ctx, '#f2d779', 13, 0, 8, 3);
+    px(ctx, '#fff1ca', 11, 19, 12, 8); px(ctx, '#d84a45', 16, 19, 2, 8);
+  } else if (role === 'trader') {
+    px(ctx, outline, 9, 2, 16, 5); px(ctx, '#6d3f70', 10, 2, 14, 4);
+    px(ctx, '#7e3850', 11, 18, 12, 9); px(ctx, '#f2cf4a', 16, 20, 2, 2);
+    px(ctx, outline, 24, 20, 7, 8); px(ctx, '#b7793f', 25, 21, 5, 6); px(ctx, '#f4ca49', 27, 22, 2, 2);
+  } else if (role === 'weaponsmith') {
+    px(ctx, '#7a472e', 10, 18, 14, 10); px(ctx, '#c68242', 12, 19, 10, 7);
+    px(ctx, outline, 25, 7, 3, 16); px(ctx, '#aeb8b9', 22, 5, 9, 5);
+  } else {
+    px(ctx, outline, 9, 8, 16, 4); px(ctx, '#79d7e5', 10, 9, 6, 2); px(ctx, '#79d7e5', 18, 9, 6, 2);
+    px(ctx, '#66727a', 10, 18, 14, 10); px(ctx, '#b9c4c5', 12, 19, 10, 3);
+  }
+}
+
+export function drawStation(canvas, role = 'cook') {
+  const ctx = prepare(canvas);
+  const outline = '#172b36';
+  px(ctx, '#a87b52', 0, 23, 32, 9); px(ctx, '#714832', 0, 28, 32, 4);
+  if (role === 'cook') {
+    px(ctx, '#d84a45', 10, 20, 4, 7); px(ctx, '#ff9e3d', 14, 17, 5, 10); px(ctx, '#ffe05b', 17, 21, 4, 6);
+    px(ctx, outline, 8, 9, 17, 10); px(ctx, '#4f5860', 9, 10, 15, 8); px(ctx, '#89959a', 11, 10, 11, 3);
+  } else if (role === 'trader') {
+    px(ctx, outline, 4, 8, 24, 17); px(ctx, '#b96f42', 5, 9, 22, 15); px(ctx, '#f3d27b', 7, 11, 18, 5);
+    px(ctx, '#d84a45', 3, 4, 26, 6); px(ctx, '#f2cf4a', 13, 17, 6, 6);
+  } else if (role === 'weaponsmith') {
+    px(ctx, outline, 4, 7, 4, 19); px(ctx, outline, 24, 6, 4, 20);
+    px(ctx, '#cbd2d0', 10, 5, 4, 19); px(ctx, '#d5a544', 17, 8, 3, 16);
+  } else {
+    px(ctx, outline, 7, 17, 19, 8); px(ctx, '#697982', 8, 18, 17, 6);
+    px(ctx, outline, 12, 8, 9, 10); px(ctx, '#8d9ba0', 13, 9, 7, 8); px(ctx, outline, 14, 25, 5, 6);
+  }
+}
+
+export function drawItem(canvas, kind = 'food', tier = 1) {
+  const ctx = prepare(canvas);
+  const outline = '#172b36';
+  if (kind === 'food') {
+    px(ctx, outline, 8, 9, 17, 18); px(ctx, '#dc4f46', 9, 10, 15, 16); px(ctx, '#f27a58', 11, 11, 5, 10);
+    px(ctx, '#5b8f45', 17, 4, 9, 7); px(ctx, '#69452e', 15, 5, 3, 7);
+  } else if (kind === 'coins') {
+    for (let row = 0; row < 3; row += 1) {
+      px(ctx, outline, 7 + row * 2, 18 - row * 5, 19 - row * 4, 6);
+      px(ctx, '#f2c735', 8 + row * 2, 19 - row * 5, 17 - row * 4, 4);
+    }
+  } else if (kind === 'weapon') {
+    const metal = ['#9aa9ad', '#73c6d6', '#c98be3'][Math.max(0, Math.min(2, tier - 1))];
+    px(ctx, outline, 14, 3, 7, 20); px(ctx, metal, 16, 4, 3, 17);
+    px(ctx, outline, 8, 20, 17, 5); px(ctx, '#f2cf4a', 10, 21, 13, 3); px(ctx, outline, 15, 24, 5, 7);
+  } else {
+    const metal = ['#71868d', '#4f91a8', '#8d69c7'][Math.max(0, Math.min(2, tier - 1))];
+    px(ctx, outline, 7, 6, 19, 22); px(ctx, metal, 8, 7, 17, 19); px(ctx, '#c8d7d6', 11, 8, 11, 4);
+    px(ctx, outline, 14, 12, 5, 12); px(ctx, '#f2cf4a', 15, 13, 3, 10);
   }
 }
 

@@ -1,3 +1,10 @@
+import {
+  WORKER_ROLE, WORKER_INFO, workerShopEntries, outputForWorker,
+  sameInventoryItem, WEAPON_INFO, ARMOUR_INFO, FOOD_HEAL,
+} from './production-rules.js';
+
+export { WORKER_ROLE, WORKER_INFO } from './production-rules.js';
+
 export const ROWS = 14;
 export const COLS = 6;
 export const CAT_ZONE_START = 10;
@@ -42,11 +49,11 @@ export const CAT_COAT_INFO = {
     shopTier: 1,
   },
   3: {
-    name: 'Calico Medic',
-    shortName: 'Medic',
-    ability: 'medic-homing',
-    blurb: 'Healing yarn shot',
-    attackDetail: 'Unlocked on round 3. Fires homing yarn at the nearest-column dog and restores 1 of its own HP whenever the yarn hits.',
+    name: 'Calico Tangler',
+    shortName: 'Tangler',
+    ability: 'tangle-homing',
+    blurb: 'Yarn stops next move',
+    attackDetail: 'Unlocked on round 3. Fires homing yarn at the nearest-column dog. A hit tangles that dog so its next unblocked move is skipped.',
     shopTier: 2,
   },
   4: {
@@ -169,9 +176,11 @@ export function createCat(level = 1, coat = 0) {
     level,
     hp: stats.hp,
     maxHp: stats.hp,
+    baseAttack: stats.attack,
     attack: stats.attack,
     coat: safeCoat,
     ability: stats.ability,
+    equipment: { weapon: null, armour: null },
   };
 }
 
@@ -191,6 +200,8 @@ export function createGame(random = Math.random) {
     cats: [],
     dogs: [],
     bench: [],
+    workers: Array(6).fill(null),
+    inventory: Array(9).fill(null),
     shop: makeShop(random),
     events: [],
     random,
@@ -199,11 +210,23 @@ export function createGame(random = Math.random) {
 }
 
 function copy(game) {
+  const cloneCat = (unit) => ({
+    ...unit,
+    equipment: {
+      weapon: unit.equipment?.weapon ? { ...unit.equipment.weapon } : null,
+      armour: unit.equipment?.armour ? { ...unit.equipment.armour } : null,
+    },
+  });
   return {
     ...game,
-    cats: game.cats.map((unit) => ({ ...unit })),
+    cats: game.cats.map(cloneCat),
     dogs: game.dogs.map((unit) => ({ ...unit })),
-    bench: game.bench.map((unit) => ({ ...unit })),
+    bench: game.bench.map(cloneCat),
+    workers: game.workers.map((worker) => worker ? {
+      ...worker,
+      pendingOutput: worker.pendingOutput ? { ...worker.pendingOutput } : null,
+    } : null),
+    inventory: game.inventory.map((stack) => stack ? { ...stack } : null),
     shop: game.shop.map((slot) => ({ ...slot })),
     events: [],
   };
@@ -227,13 +250,38 @@ export function availableCatCoatsForRound(round = 1) {
     .filter((coat) => CAT_COAT_INFO[coat].shopTier <= tier);
 }
 
-export function makeShopSlot(random = Math.random, round = 1) {
-  const availableCoats = availableCatCoatsForRound(round);
-  const coat = availableCoats[Math.min(availableCoats.length - 1, Math.floor(random() * availableCoats.length))];
+export function availableShopEntriesForRound(round = 1) {
+  const fighters = availableCatCoatsForRound(round)
+    .map((coat) => ({ category: 'fighter', coat }));
+  return [...fighters, ...workerShopEntries()];
+}
+
+export function makeShopSlot(random = Math.random, round = 1, forcedCategory = null) {
+  const fighterEntries = availableCatCoatsForRound(round)
+    .map((coat) => ({ category: 'fighter', coat }));
+  const workerEntries = workerShopEntries();
+  const category = forcedCategory ?? (random() < 0.65 ? 'fighter' : 'worker');
+  const entries = category === 'fighter' ? fighterEntries : workerEntries;
+  const entry = entries[Math.min(entries.length - 1, Math.floor(random() * entries.length))];
+  if (entry.category === 'worker') {
+    const info = WORKER_INFO[entry.role];
+    return {
+      id: id('shop'),
+      kind: 'production-cat',
+      category: 'worker',
+      role: entry.role,
+      level: 1,
+      ability: `produce-${info.output[1].kind}`,
+      sold: false,
+      saved: false,
+    };
+  }
+  const coat = entry.coat;
   const stats = catStatsFor(1, coat);
   return {
     id: id('shop'),
     kind: 'alley-cat',
+    category: 'fighter',
     level: 1,
     coat,
     shopTier: CAT_COAT_INFO[coat].shopTier,
@@ -250,8 +298,257 @@ export function makeShop(random = Math.random, previous = null, round = 1) {
     if (prior && prior.saved && !prior.sold) {
       return { ...prior, saved: true, sold: false };
     }
-    return makeShopSlot(random, round);
+    const openingGuarantee = round === 1 && !previous && index < 2 ? 'fighter' : null;
+    return makeShopSlot(random, round, openingGuarantee);
   });
+}
+
+export function createWorker(role = WORKER_ROLE.COOK, level = 1) {
+  const safeRole = WORKER_INFO[role] ? role : WORKER_ROLE.COOK;
+  const safeLevel = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
+  return {
+    id: id('worker'), kind: 'production-cat', role: safeRole,
+    level: safeLevel, copies: 1, pendingOutput: null,
+  };
+}
+
+function combinePendingOutput(target, source) {
+  if (!source?.pendingOutput) return;
+  if (!target.pendingOutput) target.pendingOutput = { ...source.pendingOutput };
+  else if (sameInventoryItem(target.pendingOutput, source.pendingOutput)) {
+    target.pendingOutput.quantity += source.pendingOutput.quantity;
+  }
+}
+
+function stackWorkerInto(target, source) {
+  if (!target || !source || target.role !== source.role || target.level !== source.level || target.level >= 3) return false;
+  combinePendingOutput(target, source);
+  target.copies = (target.copies ?? 1) + (source.copies ?? 1);
+  if (target.copies >= 3) {
+    target.level += 1;
+    target.copies = 1;
+  }
+  return true;
+}
+
+function purchasableFighterSlot(game, shopIndex) {
+  const slot = game.shop[shopIndex];
+  return game.phase === 'prep' && game.gold >= 3 && slot && !slot.sold && slot.category === 'fighter'
+    ? slot
+    : null;
+}
+
+function finishShopPurchase(next, shopIndex) {
+  next.gold -= 3;
+  next.shop[shopIndex].sold = true;
+  next.shop[shopIndex].saved = false;
+}
+
+export function purchaseShopFighterToBench(game, shopIndex, targetIndex) {
+  const slot = purchasableFighterSlot(game, shopIndex);
+  if (!slot || targetIndex < 0 || targetIndex >= BENCH_SIZE || game.bench.length >= BENCH_SIZE || game.bench[targetIndex]) return game;
+  const next = copy(game);
+  next.bench.push(createCat(slot.level ?? 1, slot.coat));
+  finishShopPurchase(next, shopIndex);
+  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} adopted to the bench.`;
+  return next;
+}
+
+export function purchaseShopFighterToBoard(game, shopIndex, row, col) {
+  const slot = purchasableFighterSlot(game, shopIndex);
+  if (
+    !slot || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS
+    || game.cats.some((cat) => cat.row === row && cat.col === col)
+  ) return game;
+  const next = copy(game);
+  next.cats.push({ ...createCat(slot.level ?? 1, slot.coat), row, col });
+  finishShopPurchase(next, shopIndex);
+  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} deployed!`;
+  return next;
+}
+
+export function purchaseShopFighterOnto(game, shopIndex, targetType, targetId) {
+  const slot = purchasableFighterSlot(game, shopIndex);
+  const listName = targetType === 'bench' ? 'bench' : targetType === 'cat' ? 'cats' : null;
+  const target = listName ? game[listName].find((cat) => cat.id === targetId) : null;
+  if (
+    !slot || !target || target.level !== (slot.level ?? 1)
+    || normalizeCoat(target.coat) !== normalizeCoat(slot.coat) || target.level >= 3
+  ) return game;
+  const next = copy(game);
+  const nextTarget = next[listName].find((cat) => cat.id === targetId);
+  nextTarget.copies = (nextTarget.copies ?? 1) + 1;
+  if (nextTarget.copies >= 3) {
+    nextTarget.level += 1;
+    nextTarget.copies = 1;
+    applyLevelStats(nextTarget);
+    next.events.push({ type: 'combine', level: nextTarget.level, id: nextTarget.id });
+  }
+  finishShopPurchase(next, shopIndex);
+  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} stacked onto the target cat.`;
+  return next;
+}
+
+export function purchaseShopWorker(game, shopIndex, targetIndex) {
+  const slot = game.shop[shopIndex];
+  if (
+    game.phase !== 'prep' || game.gold < 3 || !slot || slot.sold
+    || slot.category !== 'worker' || targetIndex < 0 || targetIndex >= game.workers.length
+  ) return game;
+  const next = copy(game);
+  const worker = createWorker(slot.role, slot.level ?? 1);
+  const target = next.workers[targetIndex];
+  if (target) {
+    if (!stackWorkerInto(target, worker)) return game;
+  } else next.workers[targetIndex] = worker;
+  next.gold -= 3;
+  next.shop[shopIndex].sold = true;
+  next.shop[shopIndex].saved = false;
+  next.message = `${WORKER_INFO[worker.role].name} joined the Production Yard.`;
+  return next;
+}
+
+export function moveWorker(game, sourceIndex, targetIndex) {
+  if (
+    game.phase !== 'prep' || sourceIndex < 0 || sourceIndex >= game.workers.length
+    || targetIndex < 0 || targetIndex >= game.workers.length
+    || !game.workers[sourceIndex] || game.workers[targetIndex]
+  ) return game;
+  const next = copy(game);
+  next.workers[targetIndex] = next.workers[sourceIndex];
+  next.workers[sourceIndex] = null;
+  return next;
+}
+
+export function mergeWorkerOnto(game, sourceIndex, targetIndex) {
+  if (
+    game.phase !== 'prep' || sourceIndex === targetIndex
+    || sourceIndex < 0 || sourceIndex >= game.workers.length
+    || targetIndex < 0 || targetIndex >= game.workers.length
+  ) return game;
+  const next = copy(game);
+  const source = next.workers[sourceIndex];
+  const target = next.workers[targetIndex];
+  if (!stackWorkerInto(target, source)) return game;
+  next.workers[sourceIndex] = null;
+  next.events.push({ type: 'worker-combine', id: target.id, level: target.level, copies: target.copies });
+  return next;
+}
+
+function addInventoryStackTo(next, item) {
+  const quantity = Math.max(1, Math.floor(Number(item?.quantity) || 1));
+  const matchingIndex = next.inventory.findIndex((stack) => sameInventoryItem(stack, item));
+  if (matchingIndex >= 0) {
+    next.inventory[matchingIndex].quantity += quantity;
+    return matchingIndex;
+  }
+  const emptyIndex = next.inventory.findIndex((stack) => !stack);
+  if (emptyIndex < 0) return -1;
+  next.inventory[emptyIndex] = {
+    id: id('item'), kind: item.kind,
+    ...(item.tier ? { tier: item.tier } : {}), quantity,
+  };
+  return emptyIndex;
+}
+
+export function addInventoryStack(game, item) {
+  if (!item?.kind || item.kind === 'coins') return game;
+  const next = copy(game);
+  return addInventoryStackTo(next, item) >= 0 ? next : game;
+}
+
+export function mergeInventoryItems(game, inventoryIndex) {
+  const stack = game.inventory[inventoryIndex];
+  if (
+    game.phase !== 'prep' || !stack || (stack.kind !== 'weapon' && stack.kind !== 'armour')
+    || stack.tier >= 3 || stack.quantity < 3
+  ) return game;
+  const next = copy(game);
+  next.inventory[inventoryIndex].quantity -= 3;
+  if (next.inventory[inventoryIndex].quantity <= 0) next.inventory[inventoryIndex] = null;
+  if (addInventoryStackTo(next, { kind: stack.kind, tier: stack.tier + 1, quantity: 1 }) < 0) return game;
+  next.events.push({ type: 'item-merge', kind: stack.kind, tier: stack.tier + 1 });
+  return next;
+}
+
+export function sellWorker(game, workerIndex) {
+  if (game.phase !== 'prep' || !game.workers[workerIndex]) return game;
+  const next = copy(game);
+  const worker = next.workers[workerIndex];
+  next.workers[workerIndex] = null;
+  next.gold += 1;
+  next.events.push({ type: 'sell-worker', workerId: worker.id, gold: 1 });
+  next.message = `${WORKER_INFO[worker.role].name} sold for 1 gold.`;
+  return next;
+}
+
+export function collectWorkerOutput(game, workerIndex) {
+  if (game.phase !== 'prep') return game;
+  const worker = game.workers[workerIndex];
+  const output = worker?.pendingOutput;
+  if (!output) return game;
+  const next = copy(game);
+  if (output.kind === 'coins') next.gold += output.quantity;
+  else if (addInventoryStackTo(next, output) < 0) return game;
+  next.workers[workerIndex].pendingOutput = null;
+  next.events.push({ type: 'collect-output', workerId: worker.id, output: { ...output } });
+  return next;
+}
+
+function consumeInventoryOne(next, inventoryIndex) {
+  const stack = next.inventory[inventoryIndex];
+  if (!stack) return;
+  stack.quantity -= 1;
+  if (stack.quantity <= 0) next.inventory[inventoryIndex] = null;
+}
+
+function recomputeCatAttack(cat) {
+  const stats = catStatsFor(cat.level, cat.coat);
+  cat.baseAttack = stats.attack;
+  cat.attack = stats.attack + (cat.equipment?.weapon?.attack ?? 0);
+  cat.ability = stats.ability;
+}
+
+export function equipInventoryItem(game, inventoryIndex, targetType, targetId, paused = false) {
+  const allowedPhase = game.phase === 'prep' || (game.phase === 'combat' && paused);
+  const stack = game.inventory[inventoryIndex];
+  if (!allowedPhase || !stack || (stack.kind !== 'weapon' && stack.kind !== 'armour')) return game;
+  const listName = targetType === 'bench' ? 'bench' : targetType === 'cat' ? 'cats' : null;
+  const target = listName ? game[listName].find((cat) => cat.id === targetId) : null;
+  if (!target) return game;
+  const next = copy(game);
+  const nextTarget = next[listName].find((cat) => cat.id === targetId);
+  if (stack.kind === 'weapon') {
+    const info = WEAPON_INFO[stack.tier];
+    if (!info) return game;
+    nextTarget.equipment.weapon = { tier: stack.tier, attack: info.attack };
+    recomputeCatAttack(nextTarget);
+  } else {
+    const info = ARMOUR_INFO[stack.tier];
+    if (!info) return game;
+    nextTarget.equipment.armour = {
+      tier: stack.tier, block: info.block, uses: info.uses, maxUses: info.uses,
+    };
+  }
+  consumeInventoryOne(next, inventoryIndex);
+  next.events.push({ type: 'equip', to: targetId, kind: stack.kind, tier: stack.tier });
+  return next;
+}
+
+export function useFood(game, inventoryIndex, catId) {
+  const stack = game.inventory[inventoryIndex];
+  const target = game.cats.find((cat) => cat.id === catId);
+  if (game.phase !== 'combat' || stack?.kind !== 'food' || !target || target.hp <= 0 || target.hp >= target.maxHp) return game;
+  const next = copy(game);
+  const nextTarget = next.cats.find((cat) => cat.id === catId);
+  const hpBefore = nextTarget.hp;
+  nextTarget.hp = Math.min(nextTarget.maxHp, nextTarget.hp + FOOD_HEAL);
+  consumeInventoryOne(next, inventoryIndex);
+  next.events.push({
+    type: 'item-heal', to: catId, row: nextTarget.row, col: nextTarget.col,
+    amount: nextTarget.hp - hpBefore, hpBefore, hpAfter: nextTarget.hp, maxHp: nextTarget.maxHp,
+  });
+  return next;
 }
 
 export function addCatToBench(game, cat = { level: 1 }, charge = false) {
@@ -318,8 +615,7 @@ function applyLevelStats(cat) {
   const stats = catStatsFor(cat.level, cat.coat);
   cat.maxHp = stats.hp;
   cat.hp = stats.hp;
-  cat.attack = stats.attack;
-  cat.ability = stats.ability;
+  recomputeCatAttack(cat);
 }
 
 export function mergeUnitOnto(game, sourceType, sourceId, targetType, targetId) {
@@ -528,22 +824,17 @@ export function resolveSection(game) {
       continue;
     }
 
-    if (ability === 'medic-homing') {
+    if (ability === 'tangle-homing') {
       const target = closestDogByColumnPriority(cat, next.dogs, game.random);
       if (target) {
         pushDamageEvent(next.events, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
-          style: 'medic',
+          style: 'tangle',
         });
-        const hpBefore = cat.hp;
-        cat.hp = Math.min(cat.maxHp, cat.hp + 1);
-        if (cat.hp > hpBefore) next.events.push({
-          type: 'heal', to: cat.id, row: cat.row, col: cat.col,
-          amount: cat.hp - hpBefore, hpAfter: cat.hp, maxHp: cat.maxHp,
-        });
+        if (target.hp > 0) target.tangled = true;
       } else {
-        pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'medic' });
+        pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'tangle' });
       }
       continue;
     }
@@ -639,7 +930,20 @@ export function resolveSection(game) {
     const blockingCat = next.cats.find((cat) => cat.col === dog.col && cat.row === dog.row + 1 && cat.hp > 0);
     if (blockingCat) {
       const hpBefore = blockingCat.hp;
-      blockingCat.hp = Math.max(0, blockingCat.hp - dog.attack);
+      const armour = blockingCat.equipment?.armour;
+      const blocked = armour ? Math.min(armour.block, Math.max(0, dog.attack - 1)) : 0;
+      const damage = Math.max(1, dog.attack - blocked);
+      let armourBroken = false;
+      let armourUsesAfter = null;
+      if (armour) {
+        armour.uses -= 1;
+        armourUsesAfter = Math.max(0, armour.uses);
+        if (armour.uses <= 0) {
+          blockingCat.equipment.armour = null;
+          armourBroken = true;
+        }
+      }
+      blockingCat.hp = Math.max(0, blockingCat.hp - damage);
       next.events.push({
         type: 'melee',
         from: dog.id,
@@ -647,14 +951,20 @@ export function resolveSection(game) {
         col: dog.col,
         fromRow: dog.row,
         toRow: blockingCat.row,
-        damage: dog.attack,
+        damage,
+        blocked,
+        armourUsesAfter,
+        armourBroken,
         hpBefore,
         hpAfter: blockingCat.hp,
         maxHp: blockingCat.maxHp,
       });
     } else {
       const dogAhead = next.dogs.some((other) => other.id !== dog.id && other.col === dog.col && other.row === dog.row + 1);
-      if (!dogAhead) {
+      if (!dogAhead && dog.tangled) {
+        dog.tangled = false;
+        next.events.push({ type: 'tangle-skip', id: dog.id, row: dog.row, col: dog.col });
+      } else if (!dogAhead) {
         const fromRow = dog.row;
         dog.row += 1;
         next.events.push({ type: 'move', id: dog.id, fromRow, toRow: dog.row, row: dog.row, col: dog.col });
@@ -710,5 +1020,13 @@ export function finishRound(game) {
       : `Round ${next.round} prep: 10 fresh gold!`;
   // Surviving cats heal between rounds for a forgiving first level.
   next.cats.forEach((cat) => { cat.hp = cat.maxHp; });
+  next.workers.forEach((worker) => {
+    if (!worker) return;
+    worker.pendingOutput = outputForWorker(worker.role, worker.level);
+    next.events.push({
+      type: 'production-ready', workerId: worker.id,
+      output: worker.pendingOutput ? { ...worker.pendingOutput } : null,
+    });
+  });
   return next;
 }

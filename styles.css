@@ -34,16 +34,51 @@ button { font: inherit; color: inherit; }
 button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
 
 .game-shell {
-  width: min(1120px, calc(100% - 40px));
+  width: min(1240px, calc(100% - 40px));
   min-height: 100vh;
   margin: 0 auto;
   padding: 20px 0 30px;
   display: grid;
-  grid-template-columns: minmax(430px, 560px) 430px;
+  grid-template-columns: 270px minmax(330px, 450px) 430px;
   gap: 22px;
   align-items: start;
   justify-content: center;
 }
+
+.production-panel {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 4px solid var(--ink);
+  background: linear-gradient(#f0d6a2, #d6ab70 60%, #b97d4e);
+  box-shadow: 7px 8px 0 #08171e;
+}
+.production-heading { margin-bottom: 9px; }
+.production-heading h2 { margin: 4px 0 0; font-family: var(--px); font-size: 12px; line-height: 1.45; }
+.production-heading h2 small { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: #6f523d; }
+.production-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 66px); gap: 5px; }
+.production-cell { position: relative; min-width: 0; border: 3px solid var(--ink); background: #e8d7ad; box-shadow: 2px 2px 0 #765238; overflow: hidden; }
+.worker-slot { padding: 0; cursor: pointer; background: #c9dfaa; }
+.worker-slot.empty { border-style: dashed; background: rgba(255,248,220,.55); }
+.worker-slot canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+.worker-slot .worker-badge { position: absolute; left: 2px; top: 2px; padding: 1px 3px; border: 1px solid var(--ink); background: #ffe56e; font-size: 8px; font-weight: 900; }
+.worker-slot .copy-pips { z-index: 2; }
+.station-cell { display: grid; place-items: center; background: #8b6647; }
+.station-cell canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+.station-cell.empty { opacity: .42; filter: grayscale(.8); }
+.station-output { position: absolute; inset: 4px; display: grid; place-items: center; padding: 0; border: 3px solid #fff4bd; background: rgba(24,39,42,.72); color: white; cursor: pointer; animation: output-ready .9s steps(2) infinite; }
+.station-output canvas { width: 46px; height: 46px; }
+.station-output b { position: absolute; right: 2px; bottom: 2px; min-width: 20px; padding: 2px; border: 2px solid var(--ink); background: #ffe56e; color: var(--ink); font-size: 11px; }
+@keyframes output-ready { 50% { box-shadow: 0 0 0 3px #ffe56e, 0 0 14px #fff3a0; } }
+.inventory-panel { margin-top: 12px; padding: 8px; border: 3px solid var(--ink); background: rgba(255,248,220,.92); box-shadow: 3px 3px 0 #765238; }
+.inventory-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.inventory-slot { position: relative; aspect-ratio: 1; padding: 0; border: 2px dashed #8b7756; background: #d8cba6; }
+.inventory-slot.filled { border-style: solid; border-color: var(--ink); background: #fff1c4; cursor: grab; }
+.inventory-slot canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+.inventory-slot b { position: absolute; right: 1px; bottom: 1px; min-width: 19px; border: 1px solid var(--ink); background: #ffe56e; font-size: 10px; }
+.production-help { margin: 9px 2px 0; font-size: 10px; line-height: 1.4; color: #3e3028; }
 
 .battle-column { display: flex; justify-content: flex-end; min-width: 0; }
 /* Height-capped so the porch and all four cat rows stay on screen — no scrolling mid-round. */
@@ -109,7 +144,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 .icon-button { width: 40px; height: 40px; border: 3px solid var(--ink); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); font-size: 24px; cursor: pointer; }
 .icon-button:hover { background: #fff3b8; }
 
-.hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
+.hud { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; }
 .hud-chip { min-height: 50px; padding: 5px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; align-items: center; border: 3px solid var(--ink); background: var(--paper); box-shadow: 2px 2px 0 var(--ink); }
 .hud-chip strong { font-size: 17px; text-align: center; }
 .hud-chip small { grid-column: 1 / -1; font-size: 8px; font-weight: 900; letter-spacing: 1px; text-align: center; color: #557078; }
@@ -120,6 +155,9 @@ h1 span { color: var(--orange); font-size: .75em; }
 .speed-chip:hover { background: #fff3b8; }
 .speed-chip strong { font-family: var(--px); font-size: 12px; }
 .speed-chip.is-fast { background: #ffe9a8; box-shadow: 2px 2px 0 var(--ink), inset 0 0 0 2px var(--amber); }
+.pause-chip { grid-template-columns: 1fr; cursor: pointer; }
+.pause-chip strong { font-family: var(--px); font-size: 12px; }
+.pause-chip.is-paused { background: #ffd96a; box-shadow: 2px 2px 0 var(--ink), inset 0 0 0 2px var(--orange-dark); }
 
 .shop-panel, .bench-panel { border: 3px solid var(--ink); background: rgba(255,248,220,.96); box-shadow: 3px 3px 0 var(--ink); padding: 9px; margin-bottom: 10px; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
@@ -768,11 +806,17 @@ h1 span { color: var(--orange); font-size: .75em; }
 @keyframes board-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
 /* Phones and narrow windows: board first, panel below, everything reachable. */
+@media (max-width: 1180px) and (min-width: 881px) {
+  .game-shell { grid-template-columns: 270px minmax(330px, 450px); width: calc(100% - 24px); }
+  .control-panel { grid-column: 1 / -1; position: static; max-height: none; width: min(100%, 700px); justify-self: center; }
+}
+
 @media (max-width: 880px) {
   .game-shell { grid-template-columns: minmax(0, 1fr); width: calc(100% - 16px); padding: 12px 0 24px; gap: 16px; justify-items: center; }
+  .production-panel { position: static; max-height: none; width: min(100%, 470px); order: 2; }
   .battle-column { justify-content: center; width: 100%; }
   .board-frame { width: min(100%, 450px, calc((100vh - 200px) * 6 / 14)); }
-  .control-panel { position: static; max-height: none; width: min(100%, 470px); }
+  .control-panel { position: static; max-height: none; width: min(100%, 470px); order: 3; }
 }
 
 @media (prefers-reduced-motion: reduce) {

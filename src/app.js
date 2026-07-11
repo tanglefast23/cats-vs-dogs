@@ -1,11 +1,13 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
-  createGame, buyShopCat, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
+  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
-  shopTierForRound,
+  shopTierForRound, purchaseShopFighterToBench, purchaseShopFighterToBoard,
+  purchaseShopFighterOnto, purchaseShopWorker, moveWorker, mergeWorkerOnto,
+  collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
 } from './game-engine.js';
-import { drawBackyard, drawCat, drawDog } from './pixel-art.js';
+import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
 import { selectionAfterPurchase, shopPetAvailability, hpTone } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
@@ -51,6 +53,8 @@ function setCombatSpeed(speed) {
 const $ = (selector) => document.querySelector(selector);
 const shopEl = $('#shop');
 const benchEl = $('#bench');
+const productionEl = $('#production-grid');
+const inventoryEl = $('#inventory');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
@@ -148,7 +152,10 @@ function unitCanvas(type, unit) {
   canvas.width = 32;
   canvas.height = 32;
   if (type === 'cat') drawCat(canvas, unit.level, unit.coat);
-  else drawDog(canvas, unit.tier);
+  else if (type === 'dog') drawDog(canvas, unit.tier);
+  else if (type === 'worker') drawWorker(canvas, unit.role, unit.level);
+  else if (type === 'station') drawStation(canvas, unit.role);
+  else if (type === 'item') drawItem(canvas, unit.kind, unit.tier ?? 1);
   return canvas;
 }
 
@@ -183,41 +190,47 @@ function renderShop() {
   shopEl.innerHTML = '';
   shopEl.dataset.count = String(game.shop.length);
   game.shop.forEach((slot, index) => {
-    const stats = catStatsFor(slot.level ?? 1, slot.coat);
-    const info = CAT_COAT_INFO[normalizeCoat(slot.coat)];
-    const availability = shopPetAvailability({
-      sold: slot.sold,
-      gold: game.gold,
-      benchLength: game.bench.length,
-      benchSize: BENCH_SIZE,
-      phase: game.phase,
-      playing,
-    });
+    const isWorker = slot.category === 'worker';
+    const stats = isWorker ? null : catStatsFor(slot.level ?? 1, slot.coat);
+    const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
+    const interactive = !slot.sold && game.phase === 'prep' && !playing;
+    const canBuy = interactive && game.gold >= 3;
+    const reason = slot.sold ? 'sold' : game.gold < 3 ? 'gold' : 'ready';
     const wrap = document.createElement('div');
-    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${availability.reason === 'gold' ? 'unaffordable' : ''} ${availability.reason === 'bench' ? 'bench-blocked' : ''}`;
+    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
 
     const button = document.createElement('button');
     button.className = 'shop-card';
-    button.disabled = !availability.interactive;
-    button.setAttribute('aria-disabled', availability.canBuy ? 'false' : 'true');
-    button.append(unitCanvas('cat', slot));
+    button.disabled = !interactive;
+    button.setAttribute('aria-disabled', canBuy ? 'false' : 'true');
+    button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
+    const detail = isWorker
+      ? `<div class="stats"><span>${info.output[1].quantity} ${info.output[1].kind}</span></div>`
+      : `<div class="stats"><span>♥ ${stats.hp}</span><span>↑ ${stats.attack}</span></div>`;
     button.insertAdjacentHTML('beforeend', `
-      <span class="shop-tier">T${info.shopTier}</span>
+      <span class="shop-tier">${isWorker ? 'WORK' : `T${info.shopTier}`}</span>
       <strong>${slot.sold ? 'ADOPTED' : info.name}</strong>
       <small class="ability-blurb">${info.blurb}</small>
-      <div class="stats"><span>♥ ${stats.hp}</span><span>↑ ${stats.attack}</span></div>
+      ${detail}
       <span class="price">● 3</span>`);
     button.addEventListener('click', () => {
-      if (!availability.canBuy) {
-        showShopPurchaseDenied(button, availability.reason);
+      if (!canBuy) {
+        showShopPurchaseDenied(button, reason);
         return;
       }
-      const before = game;
-      game = buyShopCat(game, index);
-      selected = selectionAfterPurchase(selected, game !== before);
-      render();
+      game.message = isWorker
+        ? `Drag ${info.name} into the Production Yard.`
+        : `Drag ${info.name} onto the battlefield, bench, or a matching fighter.`;
+      $('#message').textContent = game.message;
     });
-    bindTooltip(button, () => catTooltipInfo(slot));
+    bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
+    bindTooltip(button, () => isWorker ? {
+      kind: 'cat',
+      title: `Worker · ${info.name}`,
+      stats: `L1 · ${info.output[1].quantity} ${info.output[1].kind} after battle`,
+      attack: 'Drag into the Production Yard. Match three of the same role and level to evolve.',
+      note: info.blurb,
+    } : catTooltipInfo(slot));
 
     const save = document.createElement('button');
     save.type = 'button';
@@ -353,15 +366,34 @@ function selectCat(type, cat) {
 }
 
 function dragSource(type, cat) {
+  if (type === 'shop-worker') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, role: cat.role };
+  if (type === 'shop-fighter') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, coat: normalizeCoat(cat.coat) };
+  if (type === 'worker') return { type, id: cat.id, workerIndex: cat.workerIndex, level: cat.level, role: cat.role };
+  if (type === 'item') return { type, inventoryIndex: cat.inventoryIndex, itemKind: cat.kind, tier: cat.tier ?? 1 };
   return { type, id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) };
 }
 
 function targetFromElement(element) {
+  const workerSlot = element?.closest?.('.worker-slot');
+  if (workerSlot) {
+    const index = Number(workerSlot.dataset.workerIndex);
+    const occupied = game.workers[index];
+    return {
+      element: workerSlot,
+      descriptor: {
+        kind: 'worker-slot', index,
+        occupied: occupied ? { id: occupied.id, level: occupied.level, role: occupied.role } : null,
+      },
+    };
+  }
   const cell = element?.closest?.('.cell');
   if (cell) {
     const row = Number(cell.dataset.row);
     const col = Number(cell.dataset.col);
     const occupied = game.cats.find((cat) => cat.row === row && cat.col === col);
+    if (dragState?.source.type === 'item' && occupied) {
+      return { element: cell, descriptor: { kind: 'fighter', id: occupied.id, hp: occupied.hp, maxHp: occupied.maxHp } };
+    }
     return {
       element: cell,
       descriptor: {
@@ -392,6 +424,8 @@ function dropAction(source, descriptor) {
     catZoneStart: CAT_ZONE_START,
     rows: ROWS,
     cols: COLS,
+    phase: game.phase,
+    paused: false,
   });
 }
 
@@ -401,13 +435,19 @@ function clearDragHighlights() {
   dragHoverElement = null;
 }
 
-function makeDragGhost(cat, sourceRect) {
+function makeDragGhost(cat, sourceRect, source) {
   const ghost = document.createElement('div');
   ghost.className = 'drag-ghost';
   ghost.style.width = `${Math.max(64, sourceRect.width)}px`;
   ghost.style.height = `${Math.max(64, sourceRect.height)}px`;
-  ghost.append(unitCanvas('cat', cat));
-  ghost.insertAdjacentHTML('beforeend', `<b>L${cat.level}</b><small>${catLabel(cat)}</small>`);
+  const visualType = source.type === 'worker' || source.type === 'shop-worker'
+    ? 'worker'
+    : source.type === 'item' ? 'item' : 'cat';
+  ghost.append(unitCanvas(visualType, cat));
+  const label = visualType === 'worker'
+    ? WORKER_INFO[cat.role].shortName
+    : visualType === 'item' ? cat.kind.toUpperCase() : catLabel(cat);
+  ghost.insertAdjacentHTML('beforeend', `<b>${visualType === 'item' ? `T${cat.tier ?? 1}` : `L${cat.level}`}</b><small>${label}</small>`);
   document.body.append(ghost);
 
   const shadow = document.createElement('div');
@@ -425,7 +465,7 @@ function positionDragVisual(x, y) {
 }
 
 function showValidDropTargets(source) {
-  document.querySelectorAll('.cell, .bench-slot').forEach((element) => {
+  document.querySelectorAll('.cell, .bench-slot, .worker-slot').forEach((element) => {
     const { descriptor } = targetFromElement(element);
     if (dropAction(source, descriptor).type !== 'invalid') element.classList.add('drag-valid');
   });
@@ -437,7 +477,7 @@ function startDragVisual(event) {
   suppressNextPetClick = true;
   hideUnitTooltip();
   dragState.sourceElement.classList.add('drag-origin');
-  const visuals = makeDragGhost(dragState.cat, dragState.sourceRect);
+  const visuals = makeDragGhost(dragState.cat, dragState.sourceRect, dragState.source);
   dragState.ghost = visuals.ghost;
   dragState.shadow = visuals.shadow;
   document.body.classList.add('pet-dragging');
@@ -505,7 +545,24 @@ async function animateGhostTo(rect, valid) {
 
 function applyDropAction(action, source) {
   const before = game;
-  if (action.type === 'place') {
+  if (action.type === 'purchase-place') {
+    game = purchaseShopFighterToBoard(game, source.shopIndex, action.row, action.col);
+  } else if (action.type === 'purchase-bench') {
+    game = purchaseShopFighterToBench(game, source.shopIndex, action.index);
+  } else if (action.type === 'purchase-merge') {
+    game = purchaseShopFighterOnto(game, source.shopIndex, action.targetType, action.targetId);
+    if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
+  } else if (action.type === 'purchase-worker') {
+    game = purchaseShopWorker(game, source.shopIndex, action.index);
+  } else if (action.type === 'move-worker') {
+    game = moveWorker(game, source.workerIndex, action.index);
+  } else if (action.type === 'merge-worker') {
+    game = mergeWorkerOnto(game, source.workerIndex, action.index);
+  } else if (action.type === 'use-food') {
+    game = useFood(game, source.inventoryIndex, action.targetId);
+  } else if (action.type === 'equip') {
+    game = equipInventoryItem(game, source.inventoryIndex, action.targetId, false);
+  } else if (action.type === 'place') {
     const benchIndex = game.bench.findIndex((cat) => cat.id === source.id);
     game = placeCat(game, benchIndex, action.row, action.col);
   } else if (action.type === 'move') {
@@ -586,6 +643,101 @@ async function finishDrag(event, cancelled = false) {
   }
   render();
   if (changed && action.type !== 'merge') showDropWeight(action, target.descriptor);
+}
+
+function productionStation(worker, index) {
+  const station = document.createElement('button');
+  station.type = 'button';
+  station.className = `production-cell station-cell ${worker ? 'active' : 'empty'}`;
+  station.dataset.stationIndex = String(index);
+  if (!worker) {
+    station.innerHTML = '<span class="empty-plus">·</span><small>STATION</small>';
+    station.disabled = true;
+    return station;
+  }
+  const info = WORKER_INFO[worker.role];
+  station.append(unitCanvas('station', worker));
+  station.insertAdjacentHTML('beforeend', `<small>${info.station.toUpperCase()}</small>`);
+  if (worker.pendingOutput) {
+    station.classList.add('has-output');
+    station.append(unitCanvas('item', worker.pendingOutput));
+    const output = document.createElement('b');
+    output.className = 'output-count';
+    output.textContent = `×${worker.pendingOutput.quantity}`;
+    station.append(output);
+    station.title = `Collect ${worker.pendingOutput.quantity} ${worker.pendingOutput.kind}`;
+    station.disabled = game.phase !== 'prep' || playing;
+    station.addEventListener('click', () => {
+      const before = game;
+      game = collectWorkerOutput(game, index);
+      if (game === before) game.message = 'Inventory is full — use or merge an item first.';
+      render();
+    });
+  } else {
+    station.disabled = true;
+    station.title = `${info.name} produces after the next battle`;
+  }
+  return station;
+}
+
+function productionWorkerSlot(index) {
+  const worker = game.workers[index];
+  const slot = document.createElement('button');
+  slot.type = 'button';
+  slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'}`;
+  slot.dataset.workerIndex = String(index);
+  if (!worker) {
+    slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
+    return slot;
+  }
+  const info = WORKER_INFO[worker.role];
+  slot.append(unitCanvas('worker', worker));
+  slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
+  bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
+  bindTooltip(slot, () => ({
+    kind: 'cat', title: `Worker · ${info.name}`,
+    stats: `Level ${worker.level} · ${info.output[worker.level].quantity} ${info.output[worker.level].kind}`,
+    attack: 'Produces after each completed battle. Three matching workers evolve.',
+    note: worker.pendingOutput ? 'Collect this station before the next production cycle replaces it.' : info.blurb,
+  }));
+  return slot;
+}
+
+function renderProduction() {
+  if (!productionEl || !inventoryEl) return;
+  productionEl.innerHTML = '';
+  [0, 1, 2].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
+  [0, 1, 2].forEach((index) => productionEl.append(productionWorkerSlot(index)));
+  [3, 4, 5].forEach((index) => productionEl.append(productionWorkerSlot(index)));
+  [3, 4, 5].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
+
+  inventoryEl.innerHTML = '';
+  game.inventory.forEach((item, index) => {
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = `inventory-slot ${item ? 'filled' : 'empty'}`;
+    slot.dataset.inventoryIndex = String(index);
+    if (!item) {
+      slot.innerHTML = '<span class="empty-plus">·</span>';
+      slot.disabled = true;
+    } else {
+      slot.append(unitCanvas('item', item));
+      slot.insertAdjacentHTML('beforeend', `<b>×${item.quantity}</b><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small>`);
+      bindPetDrag(slot, 'item', { ...item, inventoryIndex: index });
+      if ((item.kind === 'weapon' || item.kind === 'armour') && item.tier < 3 && item.quantity >= 3) {
+        slot.classList.add('can-merge');
+        slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
+        slot.addEventListener('click', () => {
+          if (suppressNextPetClick) return;
+          game = mergeInventoryItems(game, index);
+          render();
+        });
+      } else {
+        slot.title = item.kind === 'food' ? 'Drag onto a damaged battlefield cat' : 'Drag onto a battlefield cat to equip';
+      }
+    }
+    inventoryEl.append(slot);
+  });
 }
 
 function renderBoard() {
@@ -692,6 +844,8 @@ function renderHud() {
   $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
+  $('#worker-count').textContent = `${game.workers.filter(Boolean).length}/6`;
+  $('#inventory-count').textContent = `${game.inventory.filter(Boolean).length}/9`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
   const speedChip = $('#speed-toggle');
@@ -957,6 +1111,7 @@ function renderLegend() {
 function render() {
   hideUnitTooltip();
   renderShop();
+  renderProduction();
   renderBoard();
   renderBench();
   renderHud();

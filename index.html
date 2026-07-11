@@ -10,6 +10,22 @@
 </head>
 <body>
   <main class="game-shell">
+    <aside class="production-panel" aria-label="Production Yard">
+      <div class="production-heading">
+        <span class="tiny-label">WORKERS · MATCH 3 TO EVOLVE</span>
+        <h2>Production Yard <small id="worker-count">0/6</small></h2>
+      </div>
+      <div id="production-grid" class="production-grid" aria-label="Production workers and stations"></div>
+
+      <section class="inventory-panel" aria-label="Item inventory">
+        <div class="panel-heading compact">
+          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/9</small></h2></div>
+        </div>
+        <div id="inventory" class="inventory-grid"></div>
+      </section>
+      <p class="production-help">Drag workers here. Collect each station before its next production cycle replaces it.</p>
+    </aside>
+
     <section class="battle-column" aria-label="Backyard battlefield">
       <div class="board-frame">
         <div class="zone-label dog-label">DOG ENTRY</div>
@@ -41,6 +57,7 @@
         <div class="hud-chip"><span class="hud-icon heart">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
         <div class="hud-chip"><strong id="round">1/7</strong><small>ROUND</small></div>
         <button id="speed-toggle" class="hud-chip speed-chip" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
+        <button id="pause-toggle" class="hud-chip pause-chip" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
       </section>
 
       <section id="shop-panel" class="shop-panel">
