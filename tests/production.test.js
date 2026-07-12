@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   WORKER_ROLE,
   WORKER_INFO,
+  REALTIME,
   availableShopEntriesForRound,
   createGame,
   makeShop,
@@ -11,7 +12,7 @@ import {
   moveWorker,
   mergeWorkerOnto,
   createWorker,
-  finishRound,
+  advance,
   collectWorkerOutput,
   addInventoryStack,
   equipInventoryItem,
@@ -19,7 +20,6 @@ import {
   addCatToBench,
   placeCat,
   createDog,
-  resolveSection,
   CAT_COAT,
   purchaseShopFighterToBench,
   purchaseShopFighterToBoard,
@@ -27,6 +27,8 @@ import {
   mergeInventoryItems,
   purchaseShopFighterOnto,
 } from '../src/game-engine.js';
+
+import { runExchange } from './helpers.js';
 
 test('all four production worker roles are available immediately', () => {
   assert.deepEqual(Object.keys(WORKER_INFO).sort(), [
@@ -44,7 +46,7 @@ test('all four production worker roles are available immediately', () => {
   assert.deepEqual(workers, Object.values(WORKER_ROLE).sort());
 });
 
-test('round-one shared shop pool contains unlocked fighters and every worker definition', () => {
+test('wave-one shared shop pool contains unlocked fighters and every worker definition', () => {
   const entries = availableShopEntriesForRound(1);
   assert.equal(entries.length, 7);
   assert.equal(entries.filter((entry) => entry.category === 'fighter').length, 3);
@@ -74,6 +76,7 @@ test('fighter purchase charges only after a valid bench or battlefield drop', ()
   assert.equal(game.gold, 7);
   assert.equal(game.cats.length, 1);
   assert.equal(game.cats[0].row, 12);
+  assert.equal(game.cats[0].nextAttackAt, REALTIME.catAttackMs);
   assert.equal(game.shop[0].sold, true);
 
   game = createGame(() => 0);
@@ -114,9 +117,10 @@ test('worker purchase charges only after a valid production-slot drop', () => {
   assert.equal(game.shop[0].sold, true);
   assert.equal(game.workers[4].role, WORKER_ROLE.COOK);
   assert.equal(game.workers[4].level, 1);
+  assert.equal(game.workers[4].outputReadyAt, REALTIME.workerProduceMs);
 });
 
-test('workers move only during prep and merge three matching copies into the target', () => {
+test('workers move between slots and merge three matching copies into the target', () => {
   let game = createGame(() => 0.5);
   game.workers[0] = createWorker(WORKER_ROLE.COOK);
   game.workers[1] = createWorker(WORKER_ROLE.COOK);
@@ -136,16 +140,14 @@ test('workers move only during prep and merge three matching copies into the tar
   assert.equal(game.workers[5].level, 2);
 });
 
-test('completed battles replace pending output using each worker level', () => {
+test('production timers deliver level-scaled outputs when they finish', () => {
   let game = createGame(() => 0.5);
-  game.workers[0] = createWorker(WORKER_ROLE.COOK, 1);
-  game.workers[1] = createWorker(WORKER_ROLE.TRADER, 2);
-  game.workers[2] = createWorker(WORKER_ROLE.WEAPONSMITH, 3);
-  game.workers[0].pendingOutput = { kind: 'food', quantity: 99 };
-  game.phase = 'combat';
-  game.dogs = [];
+  game.waveDueAt = 1e9;
+  game.workers[0] = { ...createWorker(WORKER_ROLE.COOK, 1), outputReadyAt: 100 };
+  game.workers[1] = { ...createWorker(WORKER_ROLE.TRADER, 2), outputReadyAt: 100 };
+  game.workers[2] = { ...createWorker(WORKER_ROLE.WEAPONSMITH, 3), outputReadyAt: 100 };
 
-  game = finishRound(game);
+  game = advance(game, 100);
 
   assert.deepEqual(game.workers[0].pendingOutput, { kind: 'food', quantity: 1 });
   assert.deepEqual(game.workers[1].pendingOutput, { kind: 'coins', quantity: 3 });
@@ -200,21 +202,22 @@ test('weapons replace permanently', () => {
 
 test('armour blocks damage for finite hits, always allows one damage, then breaks', () => {
   let game = createGame(() => 0.5);
+  game.waveDueAt = 1e9;
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 10, 2);
   game = addInventoryStack(game, { kind: 'armour', tier: 1, quantity: 1 });
   game = equipInventoryItem(game, 0, 'cat', game.cats[0].id);
   game.dogs = [createDog(1, 9, 2)];
 
-  game = resolveSection(game);
+  game = runExchange(game);
   assert.equal(game.cats[0].hp, 5);
   assert.equal(game.cats[0].equipment.armour.uses, 2);
 
-  game = resolveSection(game);
+  game = runExchange(game);
   assert.equal(game.cats[0].hp, 4);
   assert.equal(game.cats[0].equipment.armour.uses, 1);
 
-  game = resolveSection(game);
+  game = runExchange(game);
   assert.equal(game.cats[0].hp, 3);
   assert.equal(game.cats[0].equipment.armour, null);
 });
@@ -235,7 +238,7 @@ test('three same-tier equipment items merge upward and tier three is capped', ()
   assert.equal(mergeInventoryItems(game, armourIndex), game);
 });
 
-test('workers sell for one gold during prep and destroy pending output', () => {
+test('workers sell for one gold and destroy pending output', () => {
   let game = createGame(() => 0.5);
   game.workers[2] = createWorker(WORKER_ROLE.COOK);
   game.workers[2].pendingOutput = { kind: 'food', quantity: 4 };
@@ -244,12 +247,11 @@ test('workers sell for one gold during prep and destroy pending output', () => {
   assert.equal(game.workers[2], null);
 });
 
-test('food heals two in a tactics window and is not consumed on full health', () => {
+test('food heals two mid-battle and is not consumed on full health', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
   game = addInventoryStack(game, { kind: 'food', quantity: 2 });
-  game.phase = 'tactics';
 
   const full = useFood(game, 0, game.cats[0].id);
   assert.equal(full, game);

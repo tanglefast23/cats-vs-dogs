@@ -8,7 +8,7 @@ import {
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
-import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
@@ -44,7 +44,7 @@ test('worker cats expose production hover details', () => {
   assert.deepEqual(workerTooltipInfo({ level: 1, role: 'armourer' }, WORKER_INFO.armourer), {
     kind: 'cat',
     title: 'L1 Pawladin',
-    stats: 'Produces 1 T1 armour after each battle',
+    stats: 'Produces 1 T1 armour every 20s',
     detailLabel: 'Production',
     attack: 'Place in the Production House. Three matching workers evolve to the next level.',
     note: 'Builds blocking armour',
@@ -52,14 +52,7 @@ test('worker cats expose production hover details', () => {
 });
 
 test('zero-gold shop cats stay interactive and readable while purchase is rejected', () => {
-  const availability = shopPetAvailability({
-    sold: false,
-    gold: 0,
-    benchLength: 0,
-    benchSize: 6,
-    phase: 'prep',
-    playing: false,
-  });
+  const availability = shopPetAvailability({ sold: false, gold: 0 });
 
   assert.deepEqual(availability, {
     interactive: true,
@@ -69,19 +62,22 @@ test('zero-gold shop cats stay interactive and readable while purchase is reject
 });
 
 test('sold shop cats are disabled because they are genuinely unavailable', () => {
-  const availability = shopPetAvailability({
-    sold: true,
-    gold: 10,
-    benchLength: 0,
-    benchSize: 6,
-    phase: 'prep',
-    playing: false,
-  });
+  const availability = shopPetAvailability({ sold: true, gold: 10 });
 
   assert.deepEqual(availability, {
     interactive: false,
     canBuy: false,
     reason: 'sold',
+  });
+});
+
+test('pausing the game closes the shop until play resumes', () => {
+  const availability = shopPetAvailability({ sold: false, gold: 10, paused: true });
+
+  assert.deepEqual(availability, {
+    interactive: false,
+    canBuy: false,
+    reason: 'paused',
   });
 });
 
@@ -147,7 +143,19 @@ test('dragging a bench cat to an empty cat-territory cell produces a place actio
   assert.deepEqual(action, { type: 'place', row: 10, col: 2 });
 });
 
-test('dragging a board cat to another empty cat cell produces a move action', () => {
+test('cells flagged blocked (decoy or dog) reject every fighter drop', () => {
+  const action = getDropAction({
+    source: { type: 'shop-fighter', shopIndex: 0, id: 'shop-1', level: 1, coat: 0 },
+    target: { kind: 'cell', row: 12, col: 2, occupied: null, blocked: true },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'invalid' });
+});
+
+test('board cats can never be repositioned by dragging to an empty cell', () => {
   const action = getDropAction({
     source: { type: 'cat', id: 'cat-1', level: 1 },
     target: { kind: 'cell', row: 12, col: 5, occupied: null },
@@ -156,30 +164,31 @@ test('dragging a board cat to another empty cat cell produces a move action', ()
     cols: 6,
   });
 
-  assert.deepEqual(action, { type: 'move', row: 12, col: 5 });
+  assert.deepEqual(action, { type: 'invalid', reason: 'placement-permanent' });
 });
 
-test('drag highlights give every cat the same one-square between-round limit', () => {
-  assert.equal(CAT_MOVE_LIMIT_MESSAGE, 'During prep, each cat can move only one adjacent square.');
-  const target = { kind: 'cell', row: 10, col: 3, occupied: false };
-  const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
-  assert.equal(getDropAction({
-    ...common,
-    source: { type: 'cat', id: 1, ability: 'melee', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }).type, 'invalid');
-  assert.deepEqual(getDropAction({
-    ...common,
-    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }), { type: 'invalid', reason: 'move-distance' });
-  assert.equal(getDropAction({
-    ...common,
-    target: { kind: 'cell', row: 10, col: 2, occupied: false },
-    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }).type, 'move');
-  assert.equal(getDropAction({
-    ...common,
-    source: { type: 'cat', id: 3, ability: 'homing', prepOrigin: { row: 10, col: 2 }, prepMoved: true },
-  }).type, 'invalid');
+test('board cats still merge onto a matching board cat', () => {
+  const action = getDropAction({
+    source: { type: 'cat', id: 'cat-1', level: 1, coat: 0 },
+    target: { kind: 'cell', row: 12, col: 5, occupied: { id: 'cat-2', level: 1, coat: 0 } },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'merge', targetType: 'cat', targetId: 'cat-2' });
+});
+
+test('board cats cannot retreat to an empty bench slot', () => {
+  const action = getDropAction({
+    source: { type: 'cat', id: 'cat-1', level: 1 },
+    target: { kind: 'bench', index: 2, occupied: null },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'invalid' });
 });
 
 test('dropping onto a matching cat produces a merge action', () => {
@@ -268,29 +277,30 @@ test('shop workers and owned workers route only to production slots', () => {
   }), { type: 'invalid' });
 });
 
-test('food and equipment target cats only during a tactics window', () => {
-  const target = { kind: 'fighter', id: 'cat-1', hp: 3, maxHp: 6 };
+test('food targets damaged cats and equipment equips at any moment', () => {
+  const hurt = { kind: 'fighter', id: 'cat-1', hp: 3, maxHp: 6 };
+  const full = { kind: 'fighter', id: 'cat-2', hp: 6, maxHp: 6 };
   assert.deepEqual(getDropAction({
     source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
-    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'combat', paused: false,
-  }), { type: 'invalid' });
-  assert.deepEqual(getDropAction({
-    source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
-    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'tactics', paused: false,
+    target: hurt, catZoneStart: 10, rows: 14, cols: 6,
   }), { type: 'use-food', targetId: 'cat-1' });
   assert.deepEqual(getDropAction({
-    source: { type: 'item', inventoryIndex: 1, itemKind: 'weapon' },
-    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'combat', paused: false,
+    source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
+    target: full, catZoneStart: 10, rows: 14, cols: 6,
   }), { type: 'invalid' });
   assert.deepEqual(getDropAction({
     source: { type: 'item', inventoryIndex: 1, itemKind: 'weapon' },
-    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'tactics', paused: false,
+    target: hurt, catZoneStart: 10, rows: 14, cols: 6,
   }), { type: 'equip', targetId: 'cat-1' });
+  assert.deepEqual(getDropAction({
+    source: { type: 'item', inventoryIndex: 1, itemKind: 'armour' },
+    target: full, catZoneStart: 10, rows: 14, cols: 6,
+  }), { type: 'equip', targetId: 'cat-2' });
 });
 
-test('only sellable owned cats route into the adoption box during prep', () => {
+test('only sellable owned cats route into the adoption box', () => {
   const target = { kind: 'sell' };
-  const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
+  const common = { target, catZoneStart: 10, rows: 14, cols: 6 };
   assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'cat', id: 'cat-1', level: 2, sellable: true, sellValue: 2 },
@@ -306,11 +316,6 @@ test('only sellable owned cats route into the adoption box during prep', () => {
   assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'cat', id: 'cat-3', level: 1, sellable: false, sellValue: 1 },
-  }), { type: 'invalid' });
-  assert.deepEqual(getDropAction({
-    ...common,
-    phase: 'combat',
-    source: { type: 'cat', id: 'cat-4', level: 1, sellable: true, sellValue: 1 },
   }), { type: 'invalid' });
 });
 

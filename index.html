@@ -16,7 +16,7 @@
         <aside class="dog-preview-wing" aria-label="Next dog wave preview">
           <div class="preview-sign">
             <span class="tiny-label">SCOUT REPORT</span>
-            <strong>NEXT WAVE <small id="preview-round">ROUND 1</small></strong>
+            <strong>NEXT WAVE <small id="preview-round">WAVE 1</small></strong>
           </div>
           <div id="dog-preview-grid" class="dog-preview-grid"></div>
         </aside>
@@ -27,10 +27,11 @@
           <div id="board" class="board">
             <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
             <div id="grid" class="grid"></div>
+            <div id="units" class="units"></div>
             <div id="effects" class="effects" aria-hidden="true"></div>
           </div>
           <div id="wave-banner" class="wave-banner" role="status" hidden></div>
-          <div id="turn-tag" class="turn-tag" aria-hidden="true" hidden></div>
+          <div id="wave-countdown" class="wave-countdown" role="status" hidden></div>
         </div>
       </div>
     </section>
@@ -51,7 +52,7 @@
       <section class="hud" aria-label="Game status">
         <div class="hud-chip"><span class="hud-icon coin">●</span><strong id="gold">10</strong><small>GOLD</small></div>
         <div class="hud-chip"><span class="hud-icon heart">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
-        <div class="hud-chip"><strong id="round">1/7</strong><small>ROUND</small></div>
+        <div class="hud-chip"><strong id="wave">1/7</strong><small>WAVE</small></div>
         <button id="speed-toggle" class="hud-chip speed-chip" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
         <button id="pause-toggle" class="hud-chip pause-chip" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
       </section>
@@ -72,7 +73,7 @@
           <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/6</small></h2></div>
         </div>
         <div id="inventory" class="inventory-grid"></div>
-        <p class="production-help">Collect output from the House before its next production cycle replaces it.</p>
+        <p class="production-help">Drag food or gear onto your cats any time — the world slows while you carry.</p>
       </section>
 
       <section id="adoption-box" class="adoption-box" aria-label="Adoption Box sell target">
@@ -85,18 +86,8 @@
         <b id="adoption-box-value">+1</b>
       </section>
 
-      <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
-        <div class="tactics-heading">
-          <span class="tiny-label">BETWEEN COMBAT EXCHANGES</span>
-          <h2>Tactics Window</h2>
-        </div>
-        <p id="tactics-help">Feed damaged cats or cast one available ability.</p>
-        <div id="active-abilities" class="active-abilities"></div>
-      </section>
-
       <section class="round-controls">
-        <p id="message" class="message" role="status">Build your team, then start the round.</p>
-        <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
+        <p id="message" class="message" role="status">Wave 1 is coming — drag cats from the Cat Cart into the yard!</p>
       </section>
       </section>
 
