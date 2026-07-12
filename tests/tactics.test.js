@@ -74,7 +74,7 @@ test('food is consumed only during a tactics window', () => {
   assert.equal(game.inventory[0], null);
 });
 
-test('between-round movement is one square for melee and two for other cats, once per prep', () => {
+test('every cat can move one square between rounds, once per prep', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.GREY, 12, 1);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
@@ -88,8 +88,9 @@ test('between-round movement is one square for melee and two for other cats, onc
   assert.equal(game.cats.find((cat) => cat.id === meleeId).row, 11);
   assert.equal(moveCat(game, meleeId, 11, 2), game, 'a cat only relocates once per prep');
 
-  game = moveCat(game, rangedId, 10, 4);
-  assert.equal(game.cats.find((cat) => cat.id === rangedId).row, 10);
+  assert.equal(moveCat(game, rangedId, 10, 4), game, 'ranged cats cannot move two squares');
+  game = moveCat(game, rangedId, 11, 4);
+  assert.equal(game.cats.find((cat) => cat.id === rangedId).row, 11);
 });
 
 test('drag validation reads prepOrigin from real engine cats, so highlights match engine limits', () => {
@@ -115,7 +116,8 @@ test('drag validation reads prepOrigin from real engine cats, so highlights matc
   assert.equal(drop(melee, 10, 1).type, 'invalid', 'melee highlight must not promise a two-square move');
   assert.equal(drop(melee, 11, 1).type, 'move');
   assert.equal(drop(ranged, 10, 2).type, 'invalid', 'ranged highlight must not promise a four-square move');
-  assert.equal(drop(ranged, 10, 4).type, 'move');
+  assert.equal(drop(ranged, 10, 4).type, 'invalid', 'ranged cats also stop at one square');
+  assert.equal(drop(ranged, 11, 4).type, 'move');
   assert.equal(moveCat(game, melee.id, 10, 1), game, 'engine rejects the same drop the highlight rejects');
 });
 

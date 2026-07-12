@@ -59,6 +59,15 @@ export function productionCollectionDestination(inventory = [], output = null) {
   return emptyIndex >= 0 ? { type: 'storage', index: emptyIndex } : null;
 }
 
+/** Minimal Cat Cart copy; detailed abilities remain in the glossary. */
+export function shopCardSummary(slot, info) {
+  return {
+    badge: slot.category === 'worker' ? 'WORK' : `T${info.shopTier}`,
+    name: slot.sold ? 'ADOPTED' : info.name,
+    cost: 3,
+  };
+}
+
 export function shopPetAvailability({ sold, gold, benchLength, benchSize, phase, playing }) {
   if (sold) return { interactive: false, canBuy: false, reason: 'sold' };
   if (phase !== 'prep' || playing) return { interactive: false, canBuy: false, reason: 'phase' };

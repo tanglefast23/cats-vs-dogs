@@ -653,7 +653,8 @@ h1 span { color: var(--orange); font-size: .75em; }
 
 
 .cell.has-unit { cursor: help; }
-.shop-card { cursor: help; }
+.shop-card { cursor: pointer; }
+.fighter-offer .shop-card { cursor: help; }
 
 .unit-tooltip {
   position: fixed;
@@ -701,6 +702,28 @@ h1 span { color: var(--orange); font-size: .75em; }
   font-size: 10px;
   font-weight: 800;
   color: #4d6a52;
+}
+
+.move-limit-tooltip {
+  position: fixed;
+  z-index: 60;
+  width: min(250px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 3px solid var(--ink);
+  background: #ffe56e;
+  box-shadow: 4px 4px 0 #08151a;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.45;
+  pointer-events: none;
+}
+.move-limit-tooltip[hidden] { display: none !important; }
+.move-limit-tooltip.is-visible { animation: move-limit-pop .28s steps(4); }
+@keyframes move-limit-pop {
+  0% { opacity: 0; transform: translateY(7px) scale(.92); }
+  65% { opacity: 1; transform: translateY(-2px) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 

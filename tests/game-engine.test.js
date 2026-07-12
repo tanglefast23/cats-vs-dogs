@@ -646,11 +646,13 @@ test('cat tooltips describe each coat attack style', () => {
   const tabby = catTooltipInfo({ level: 1, coat: CAT_COAT.ORANGE, hp: 6, maxHp: 6 });
   const brawler = catTooltipInfo({ level: 1, coat: CAT_COAT.GREY, hp: 12, maxHp: 12 });
   const ghost = catTooltipInfo({ level: 1, coat: CAT_COAT.WHITE, hp: 6, maxHp: 6 });
+  const armedBrawler = catTooltipInfo({ level: 1, coat: CAT_COAT.GREY, hp: 9, maxHp: 12, attack: 7 });
 
   assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
-  assert.match(brawler.stats, /12/);
+  assert.equal(brawler.stats, 'Health 12/12 · 10 damage/round if attacks hit');
+  assert.equal(armedBrawler.stats, 'Health 9/12 · 14 damage/round if attacks hit');
 });
 
 test('dog tooltips explain march and bite behavior', () => {

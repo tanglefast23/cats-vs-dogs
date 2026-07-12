@@ -203,10 +203,11 @@ export function catTooltipInfo(cat) {
   const stats = catStatsFor(level, coat);
   const hp = cat.hp ?? stats.hp;
   const maxHp = cat.maxHp ?? stats.hp;
+  const attack = cat.attack ?? stats.attack;
   return {
     kind: 'cat',
     title: `L${level} ${info.name}`,
-    stats: `♥ ${hp}/${maxHp} · ↑ ${stats.attack}`,
+    stats: `Health ${hp}/${maxHp} · ${attack * ACTIONS_PER_ROUND} damage/round if attacks hit`,
     attack: info.attackDetail,
     note: info.blurb,
   };
@@ -854,9 +855,8 @@ export function placeCat(game, benchIndex, row, col) {
   const source = game.bench[benchIndex];
   if (!source) return game;
   if (source.prepOrigin) {
-    const allowance = source.ability === 'melee' ? 1 : 2;
     const distance = Math.abs(row - source.prepOrigin.row) + Math.abs(col - source.prepOrigin.col);
-    if (source.prepMoved || distance > allowance) return game;
+    if (source.prepMoved || distance > 1) return game;
   }
   const next = copy(game);
   const [cat] = next.bench.splice(benchIndex, 1);
@@ -872,9 +872,8 @@ export function moveCat(game, catId, row, col) {
   const cat = next.cats.find((unit) => unit.id === catId);
   if (!cat) return game;
   if (cat.prepOrigin) {
-    const allowance = cat.ability === 'melee' ? 1 : 2;
     const distance = Math.abs(row - cat.prepOrigin.row) + Math.abs(col - cat.prepOrigin.col);
-    if (cat.prepMoved || distance > allowance) return game;
+    if (cat.prepMoved || distance > 1) return game;
     cat.prepMoved = true;
   }
   cat.row = row;
