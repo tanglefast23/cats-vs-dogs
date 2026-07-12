@@ -5,6 +5,9 @@ import {
   ACTIONS_PER_ROUND,
   CAT_COAT,
   CAT_COAT_INFO,
+  CAT_ZONE_START,
+  COLS,
+  ROWS,
   addCatToBench,
   addInventoryStack,
   availableCatCoatsForRound,
@@ -21,6 +24,7 @@ import {
   useActiveAbility,
   useFood,
 } from '../src/game-engine.js';
+import { getDropAction } from '../src/drag-drop.js';
 
 function placeCoat(game, coat, row, col) {
   game = addCatToBench(game, { level: 1, coat });
@@ -86,6 +90,33 @@ test('between-round movement is one square for melee and two for other cats, onc
 
   game = moveCat(game, rangedId, 10, 4);
   assert.equal(game.cats.find((cat) => cat.id === rangedId).row, 10);
+});
+
+test('drag validation reads prepOrigin from real engine cats, so highlights match engine limits', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.GREY, 12, 1);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
+  game.phase = 'combat';
+  game = finishRound(game);
+  const melee = game.cats.find((cat) => cat.coat === CAT_COAT.GREY);
+  const ranged = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE);
+  assert.deepEqual(melee.prepOrigin, { row: 12, col: 1 }, 'engine stores prepOrigin as an object');
+
+  // Sources spread the engine cat exactly as app.js builds drag and click-select sources.
+  const drop = (cat, row, col) => getDropAction({
+    source: { ...cat, type: 'cat' },
+    target: { kind: 'cell', row, col, occupied: null },
+    catZoneStart: CAT_ZONE_START,
+    rows: ROWS,
+    cols: COLS,
+    phase: game.phase,
+  });
+
+  assert.equal(drop(melee, 10, 1).type, 'invalid', 'melee highlight must not promise a two-square move');
+  assert.equal(drop(melee, 11, 1).type, 'move');
+  assert.equal(drop(ranged, 10, 2).type, 'invalid', 'ranged highlight must not promise a four-square move');
+  assert.equal(drop(ranged, 10, 4).type, 'move');
+  assert.equal(moveCat(game, melee.id, 10, 1), game, 'engine rejects the same drop the highlight rejects');
 });
 
 test('Frostpoint Witch freezes one dog for its next full action', () => {

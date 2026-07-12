@@ -385,8 +385,7 @@ function dragSource(type, cat) {
     level: cat.level,
     coat: normalizeCoat(cat.coat),
     ability: cat.ability,
-    prepOriginRow: cat.prepOriginRow,
-    prepOriginCol: cat.prepOriginCol,
+    prepOrigin: cat.prepOrigin,
     prepMoved: cat.prepMoved,
   };
 }
