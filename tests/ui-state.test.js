@@ -143,6 +143,18 @@ test('dragging a bench cat to an empty cat-territory cell produces a place actio
   assert.deepEqual(action, { type: 'place', row: 10, col: 2 });
 });
 
+test('cells flagged blocked (decoy or dog) reject every fighter drop', () => {
+  const action = getDropAction({
+    source: { type: 'shop-fighter', shopIndex: 0, id: 'shop-1', level: 1, coat: 0 },
+    target: { kind: 'cell', row: 12, col: 2, occupied: null, blocked: true },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  });
+
+  assert.deepEqual(action, { type: 'invalid' });
+});
+
 test('board cats can never be repositioned by dragging to an empty cell', () => {
   const action = getDropAction({
     source: { type: 'cat', id: 'cat-1', level: 1 },

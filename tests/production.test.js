@@ -28,12 +28,7 @@ import {
   purchaseShopFighterOnto,
 } from '../src/game-engine.js';
 
-/** Fire every placed unit once at the same instant, like the old lockstep exchange. */
-function runExchange(game) {
-  game.cats.forEach((cat) => { cat.nextAttackAt = game.clockMs + 1; });
-  game.dogs.forEach((dog) => { dog.nextActAt = game.clockMs + 1; });
-  return advance(game, 1);
-}
+import { runExchange } from './helpers.js';
 
 test('all four production worker roles are available immediately', () => {
   assert.deepEqual(Object.keys(WORKER_INFO).sort(), [

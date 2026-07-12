@@ -15,10 +15,7 @@ import {
   useActiveAbility,
 } from '../src/game-engine.js';
 
-function placeCoat(game, coat, row, col) {
-  game = addCatToBench(game, { level: 1, coat });
-  return placeCat(game, game.bench.length - 1, row, col);
-}
+import { placeCoat } from './helpers.js';
 
 /** Casting tests care about the effect, not the warm-up, so make the caster ready now. */
 function readyCaster(game, index = 0) {

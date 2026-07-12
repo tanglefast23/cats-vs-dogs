@@ -36,15 +36,7 @@ import {
   sellCat,
 } from '../src/game-engine.js';
 
-/**
- * Fire every placed unit once at the same instant — cats first, then dogs —
- * matching the old lockstep exchange, so ported rule tests read the same.
- */
-function runExchange(game) {
-  game.cats.forEach((cat) => { cat.nextAttackAt = game.clockMs + 1; });
-  game.dogs.forEach((dog) => { dog.nextActAt = game.clockMs + 1; });
-  return advance(game, 1);
-}
+import { runExchange } from './helpers.js';
 
 test('desktop board uses six columns, fourteen rows, four cat rows, seven waves', () => {
   assert.equal(COLS, 6);

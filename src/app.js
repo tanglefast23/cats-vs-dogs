@@ -1,5 +1,5 @@
 import {
-  ROWS, COLS, CAT_ZONE_START, MAX_WAVES, REALTIME,
+  ROWS, COLS, CAT_ZONE_START, MAX_WAVES, REALTIME, cellBlocked,
   CAT_COAT_INFO, DOG_STATS, DOG_ROLE_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   WORKER_INFO, createGame, advance, refreshShop, toggleSaveShopSlot,
   mergeUnitOnto, useActiveAbility,
@@ -25,14 +25,17 @@ let activeTargeting = null;
 let glossaryTab = 'battle';
 let manualPaused = false;
 let glossaryPaused = false;
-let blurPaused = document.hidden;
+// Real-time battles must not run in a window nobody is watching.
+let blurPaused = document.hidden || !document.hasFocus();
 let pausedAnimations = [];
+let pauseStartedAt = null;
+const pausedAnimSteps = [];
 let resultShown = false;
 const collectingStations = new Set();
 
-/** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
+/** Combat speed: 1× or 2×, persisted. Speed now changes real difficulty, so
+ * everyone starts at 1× — reduced-motion no longer implies a faster clock. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
-const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 let combatSpeed = loadCombatSpeed();
 let timing = combatTiming(combatSpeed);
 
@@ -44,7 +47,7 @@ function loadCombatSpeed() {
   } catch {
     // Private mode / quota — fall through to the default.
   }
-  return prefersReducedMotion ? 2 : 1;
+  return 1;
 }
 
 function setCombatSpeed(speed) {
@@ -194,22 +197,26 @@ function frame(ts) {
   const dt = lastFrameTs == null ? 0 : Math.min(200, ts - lastFrameTs);
   lastFrameTs = ts;
 
-  if (dt > 0 && !uiPaused() && game.phase === 'battle') {
+  const running = dt > 0 && !uiPaused() && game.phase === 'battle';
+  if (running) {
     const advanced = advance(game, dt * clockRate());
     if (advanced !== game) {
       game = advanced;
       if (game.events.length) handleEvents(game.events);
     }
+
+    // Aiming with a dead caster would soft-lock slow-mo — release it.
+    if (activeTargeting && !game.cats.some((cat) => cat.id === activeTargeting.casterId)) {
+      activeTargeting = null;
+      syncSlowMo();
+    }
   }
 
-  // Aiming with a dead caster would soft-lock slow-mo — release it.
-  if (activeTargeting && !game.cats.some((cat) => cat.id === activeTargeting.casterId)) {
-    activeTargeting = null;
-    syncSlowMo();
+  // A paused or finished board is static — skip the per-frame DOM work.
+  if (running) {
+    syncUnits();
+    updateClockUi();
   }
-
-  syncUnits();
-  updateClockUi();
   maybeShowResult();
   requestAnimationFrame(frame);
 }
@@ -223,6 +230,7 @@ function maybeShowResult() {
   resultShown = true;
   activeTargeting = null;
   syncSlowMo();
+  syncUnits();
   renderSidePanels();
   window.setTimeout(showResult, 700);
 }
@@ -232,9 +240,16 @@ function maybeShowResult() {
 // ---------------------------------------------------------------------------
 
 const unitEls = new Map();
-const dyingIds = new Set();
 /** unit id → {count, expiresAt}: while held, syncUnits leaves hp/removal to the hit animation. */
 const animLocks = new Map();
+
+/** A timeout whose callback waits out a pause instead of firing into a frozen board. */
+function scheduleAnimStep(ms, fn) {
+  window.setTimeout(() => {
+    if (uiPaused()) pausedAnimSteps.push(fn);
+    else fn();
+  }, ms);
+}
 
 function lockUnit(id, forMs) {
   const entry = animLocks.get(id) ?? { count: 0, expiresAt: 0 };
@@ -341,9 +356,16 @@ function buildUnitElement(entity, type) {
   return el;
 }
 
+/** Countdown sweep from the game clock, so pause/slow-mo/2× all stay in sync. */
+function setRingProgress(ring, readyAt, durationMs) {
+  const progress = 1 - Math.min(1, Math.max(0, (readyAt - game.clockMs) / durationMs));
+  ring.style.setProperty('--p', progress.toFixed(3));
+}
+
 function updateUnitElement(el, entity, type) {
   const refs = el.refs ?? {};
-  if (!unitLocked(entity.id) && refs.hpBar) {
+  if (!unitLocked(entity.id) && refs.hpBar && el.lastHp !== entity.hp) {
+    el.lastHp = entity.hp;
     refs.hpBar.style.width = `${Math.max(0, (entity.hp / entity.maxHp) * 100)}%`;
     refs.hpBar.className = `hp-bar hp-${hpTone(entity.hp, entity.maxHp)}`;
   }
@@ -360,18 +382,12 @@ function updateUnitElement(el, entity, type) {
       el.dataset.copies = String(copies);
       refs.pips.innerHTML = Array.from({ length: copies }, () => '<i></i>').join('');
     }
-    if (refs.ring) {
-      const progress = 1 - Math.min(1, Math.max(0, (entity.nextAttackAt - game.clockMs) / REALTIME.catAttackMs));
-      refs.ring.style.setProperty('--p', progress.toFixed(3));
-    }
+    if (refs.ring) setRingProgress(refs.ring, entity.nextAttackAt, REALTIME.catAttackMs);
     if (refs.abilityBadge) {
       const ready = game.clockMs >= (entity.abilityReadyAt ?? 0);
       refs.abilityBadge.classList.toggle('is-ready', ready);
       if ((refs.abilityBadge.textContent === '✦') !== ready) refs.abilityBadge.textContent = ready ? '✦' : '';
-      if (!ready) {
-        const progress = 1 - Math.min(1, Math.max(0, (entity.abilityReadyAt - game.clockMs) / REALTIME.abilityCooldownMs));
-        refs.abilityBadge.style.setProperty('--p', progress.toFixed(3));
-      }
+      if (!ready) setRingProgress(refs.abilityBadge, entity.abilityReadyAt, REALTIME.abilityCooldownMs);
       el.classList.toggle('has-ready-ability', ready);
     }
     el.classList.toggle('is-caster', activeTargeting?.casterId === entity.id);
@@ -396,35 +412,37 @@ function isAbilityTargetCat(cat) {
 
 function removeUnitElement(id, el) {
   unitEls.delete(id);
-  dyingIds.add(id);
   el.classList.add('rt-dying');
-  window.setTimeout(() => {
-    el.remove();
-    dyingIds.delete(id);
-  }, 360);
+  // 360ms outlives the .34s rt-unit-pop animation in styles.css — keep in step.
+  scheduleAnimStep(360, () => el.remove());
+}
+
+function placeUnit(entity, type) {
+  let el = unitEls.get(entity.id);
+  if (!el) {
+    el = buildUnitElement(entity, type);
+    unitEls.set(entity.id, el);
+    unitsEl.append(el);
+  }
+  const cellKey = entity.row * COLS + entity.col;
+  if (el.lastCellKey !== cellKey) {
+    el.lastCellKey = cellKey;
+    const position = cellCenter(entity.row, entity.col);
+    el.style.left = `${position.xPercent}%`;
+    el.style.top = `${position.yPercent}%`;
+  }
+  updateUnitElement(el, entity, type);
+  return entity.id;
 }
 
 function syncUnits() {
   const seen = new Set();
-  const place = (entity, type) => {
-    seen.add(entity.id);
-    let el = unitEls.get(entity.id);
-    if (!el) {
-      el = buildUnitElement(entity, type);
-      unitEls.set(entity.id, el);
-      unitsEl.append(el);
-    }
-    const position = cellCenter(entity.row, entity.col);
-    el.style.left = `${position.xPercent}%`;
-    el.style.top = `${position.yPercent}%`;
-    updateUnitElement(el, entity, type);
-  };
+  game.cats.forEach((cat) => seen.add(placeUnit(cat, 'cat')));
+  game.dogs.forEach((dog) => seen.add(placeUnit(dog, 'dog')));
+  (game.decoys ?? []).forEach((decoy) => seen.add(placeUnit(decoy, 'decoy')));
 
-  game.cats.forEach((cat) => place(cat, 'cat'));
-  game.dogs.forEach((dog) => place(dog, 'dog'));
-  (game.decoys ?? []).forEach((decoy) => place(decoy, 'decoy'));
-
-  for (const [id, el] of [...unitEls]) {
+  // Deleting entries mid-iteration is safe for Map, so no snapshot copy.
+  for (const [id, el] of unitEls) {
     if (!seen.has(id) && !unitLocked(id)) removeUnitElement(id, el);
   }
 }
@@ -432,7 +450,6 @@ function syncUnits() {
 function clearUnits() {
   unitEls.forEach((el) => el.remove());
   unitEls.clear();
-  dyingIds.clear();
   animLocks.clear();
   effectsEl.innerHTML = '';
 }
@@ -441,39 +458,55 @@ function clearUnits() {
 // Per-frame HUD: gold counter, wave countdown, pause chip.
 // ---------------------------------------------------------------------------
 
+const waveCountdownEl = $('#wave-countdown');
+const goldEl = $('#gold');
+const refreshEl = $('#refresh');
 let workerRingSlots = [];
 let lastGoldShown = null;
 let lastWaveText = null;
+let lastWaveSoon = null;
+let lastAffordable = null;
 
 function updateClockUi() {
   const gold = Math.floor(game.gold);
   if (gold !== lastGoldShown) {
     lastGoldShown = gold;
-    $('#gold').textContent = gold;
+    goldEl.textContent = gold;
+    // Passive income can cross price thresholds between renders — refresh the
+    // shop's affordability the moment it flips instead of waiting for an event.
+    const affordable = `${gold >= 3}|${gold >= 1}`;
+    if (affordable !== lastAffordable) {
+      lastAffordable = affordable;
+      renderShop();
+      refreshEl.disabled = uiPaused() || gold < 1 || game.phase !== 'battle';
+    }
   }
 
-  const countdown = $('#wave-countdown');
-  if (countdown) {
+  if (waveCountdownEl) {
     if (game.phase === 'battle' && game.waveDueAt != null) {
       const remaining = Math.max(0, game.waveDueAt - game.clockMs);
       const text = `WAVE ${Math.min(MAX_WAVES, game.waveNumber + 1)} IN ${Math.ceil(remaining / 1000)}s`;
       if (text !== lastWaveText) {
         lastWaveText = text;
-        countdown.textContent = text;
+        waveCountdownEl.textContent = text;
+        waveCountdownEl.hidden = false;
       }
-      countdown.hidden = false;
-      countdown.classList.toggle('is-soon', remaining < 5000);
-    } else {
-      countdown.hidden = true;
+      const soon = remaining < 5000;
+      if (soon !== lastWaveSoon) {
+        lastWaveSoon = soon;
+        waveCountdownEl.classList.toggle('is-soon', soon);
+      }
+    } else if (!waveCountdownEl.hidden) {
+      waveCountdownEl.hidden = true;
       lastWaveText = null;
+      lastWaveSoon = null;
     }
   }
 
   workerRingSlots.forEach(({ ring, index }) => {
     const worker = game.workers[index];
     if (!worker || worker.pendingOutput || worker.outputReadyAt == null) return;
-    const progress = 1 - Math.min(1, Math.max(0, (worker.outputReadyAt - game.clockMs) / REALTIME.workerProduceMs));
-    ring.style.setProperty('--p', progress.toFixed(3));
+    setRingProgress(ring, worker.outputReadyAt, REALTIME.workerProduceMs);
   });
 }
 
@@ -538,7 +571,7 @@ function scheduleShot(event, index = 0) {
 
   if (!event.miss && event.to) lockUnit(event.to, stagger + flightMs);
 
-  window.setTimeout(() => {
+  scheduleAnimStep(stagger, () => {
     const fromCol = event.fromCol ?? event.col;
     const start = cellCenter(event.fromRow, fromCol);
     const end = cellCenter(event.toRow, event.col);
@@ -566,7 +599,7 @@ function scheduleShot(event, index = 0) {
       }
       resolveHit(event);
     });
-  }, stagger);
+  });
 }
 
 function scheduleMelee(event, direction = 'down') {
@@ -574,10 +607,10 @@ function scheduleMelee(event, direction = 'down') {
   const className = direction === 'up' ? 'melee-lunge-up' : 'melee-lunge';
   attacker?.classList.add(className);
   if (!event.miss && event.to) lockUnit(event.to, timing.meleeMs);
-  window.setTimeout(() => {
+  scheduleAnimStep(Math.floor(timing.meleeMs / 2), () => {
     if (!event.miss && event.to) resolveHit(event, { heavy: true });
-  }, Math.floor(timing.meleeMs / 2));
-  window.setTimeout(() => attacker?.classList.remove(className), timing.meleeMs);
+  });
+  scheduleAnimStep(timing.meleeMs, () => attacker?.classList.remove(className));
 }
 
 function scheduleCatScratch(event) {
@@ -600,13 +633,13 @@ function scheduleCatScratch(event) {
   const hitAt = Math.round(BLUE_SCRATCH_FLURRY.hitAtMs / combatSpeed);
   const total = Math.round(BLUE_SCRATCH_FLURRY.durationMs / combatSpeed);
   if (!event.miss && event.to) lockUnit(event.to, hitAt);
-  window.setTimeout(() => {
+  scheduleAnimStep(hitAt, () => {
     if (!event.miss && event.to) resolveHit(event, { heavy: true });
-  }, hitAt);
-  window.setTimeout(() => {
+  });
+  scheduleAnimStep(total, () => {
     flurry.remove();
     attacker?.classList.remove(BLUE_SCRATCH_FLURRY.attackerClass);
-  }, total);
+  });
 }
 
 function scheduleDogJump(event) {
@@ -662,95 +695,69 @@ function scheduleFloatingCue(event, text, className = 'heal-number') {
   window.setTimeout(() => cue.remove(), Math.round(650 / combatSpeed));
 }
 
-/** Drop-in banner naming the wave that just walked through the gate. */
-function announceWave(waveNumber) {
+/** Drop-in banner naming exactly the dogs this wave spawned (from the event). */
+function announceWave(event) {
   const banner = $('#wave-banner');
   if (!banner) return;
-  const fresh = game.dogs.filter((dog) => dog.row === 0);
-  const roleCounts = fresh.reduce((counts, dog) => {
-    counts[dog.role] = (counts[dog.role] ?? 0) + 1;
+  const roleCounts = (event.roles ?? []).reduce((counts, role) => {
+    counts[role] = (counts[role] ?? 0) + 1;
     return counts;
   }, {});
   const parts = Object.entries(roleCounts).map(([role, count]) => {
     const name = DOG_ROLE_INFO[role]?.name ?? 'Dog';
     return `${count > 1 ? `${count}× ` : ''}${name.toUpperCase()}`;
   });
-  banner.innerHTML = `WAVE ${waveNumber} · ${parts.join(' + ') || 'INCOMING'}`;
+  banner.innerHTML = `WAVE ${event.wave} · ${parts.join(' + ') || 'INCOMING'}`;
   banner.hidden = false;
   window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
+}
+
+/** Events that change what the side panels (shop, production, HUD) display. */
+const PANEL_EVENTS = new Set([
+  'item-heal', 'wave', 'worker-output-ready', 'collect-output', 'sell-cat',
+  'sell-worker', 'combine', 'worker-combine', 'equip', 'item-merge', 'encore',
+  'level-clear',
+]);
+
+/** Kick off the animation for one engine event; returns the next shot stagger index. */
+function scheduleEventAnimation(event, shotIndex) {
+  switch (event.type) {
+    case 'shot':
+      scheduleShot(event, shotIndex);
+      return shotIndex + (event.burst ? 0 : 1);
+    case 'dog-shot':
+      scheduleShot(event, shotIndex);
+      return shotIndex + 1;
+    case 'spell':
+      resolveHit(event);
+      scheduleFloatingCue({ row: event.toRow, col: event.col }, '⚡', 'damage-number to-dog');
+      break;
+    case 'cat-melee': scheduleCatScratch(event); break;
+    case 'melee': scheduleMelee(event, 'down'); break;
+    case 'dog-jump': scheduleDogJump(event); break;
+    case 'howl': scheduleHowl(event); break;
+    case 'freeze-cast': scheduleFloatingCue({ row: event.row, col: event.col }, '❄'); break;
+    case 'freeze-skip': scheduleFloatingCue(event, '❄ FROZEN'); break;
+    case 'tangle-skip': scheduleFloatingCue(event, '✱ TANGLED'); break;
+    case 'teleport':
+      scheduleFloatingCue({ row: event.fromRow, col: event.fromCol }, '✧');
+      scheduleFloatingCue({ row: event.row, col: event.col }, '✧');
+      break;
+    case 'decoy-cast': scheduleFloatingCue(event, '✦'); break;
+    case 'item-heal': scheduleHeal(event); break;
+    case 'super-cat': scheduleSuperCat(event); break;
+    case 'wave': announceWave(event); break;
+    default: break;
+  }
+  return shotIndex;
 }
 
 function handleEvents(events) {
   let panelsDirty = false;
   let shotIndex = 0;
   for (const event of events) {
-    switch (event.type) {
-      case 'shot':
-        scheduleShot(event, shotIndex);
-        shotIndex += event.burst ? 0 : 1;
-        break;
-      case 'spell':
-        resolveHit(event);
-        scheduleFloatingCue(event, '⚡', 'damage-number to-dog');
-        break;
-      case 'cat-melee':
-        scheduleCatScratch(event);
-        break;
-      case 'melee':
-        scheduleMelee(event, 'down');
-        break;
-      case 'dog-shot':
-        scheduleShot(event, shotIndex);
-        shotIndex += 1;
-        break;
-      case 'dog-jump':
-        scheduleDogJump(event);
-        break;
-      case 'howl':
-        scheduleHowl(event);
-        break;
-      case 'freeze-cast':
-        scheduleFloatingCue({ row: event.row, col: event.col }, '❄');
-        break;
-      case 'freeze-skip':
-        scheduleFloatingCue(event, '❄ FROZEN');
-        break;
-      case 'tangle-skip':
-        scheduleFloatingCue(event, '✱ TANGLED');
-        break;
-      case 'teleport':
-        scheduleFloatingCue({ row: event.fromRow, col: event.fromCol }, '✧');
-        scheduleFloatingCue({ row: event.row, col: event.col }, '✧');
-        break;
-      case 'decoy-cast':
-        scheduleFloatingCue(event, '✦');
-        break;
-      case 'item-heal':
-        scheduleHeal(event);
-        panelsDirty = true;
-        break;
-      case 'super-cat':
-        scheduleSuperCat(event);
-        break;
-      case 'wave':
-        announceWave(event.wave);
-        panelsDirty = true;
-        break;
-      case 'worker-output-ready':
-      case 'collect-output':
-      case 'sell-cat':
-      case 'sell-worker':
-      case 'combine':
-      case 'worker-combine':
-      case 'equip':
-      case 'item-merge':
-      case 'encore':
-      case 'level-clear':
-        panelsDirty = true;
-        break;
-      default:
-        break;
-    }
+    shotIndex = scheduleEventAnimation(event, shotIndex);
+    if (PANEL_EVENTS.has(event.type)) panelsDirty = true;
   }
   if (panelsDirty) renderSidePanels();
 }
@@ -785,6 +792,8 @@ function cellDescriptorAt(row, col) {
   return {
     kind: 'cell', row, col,
     occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
+    // Decoys and dogs also claim their square — highlights must match the engine.
+    blocked: !occupied && cellBlocked(game, row, col),
   };
 }
 
@@ -1021,6 +1030,15 @@ function playPendingUpgrade() {
 
 function applyDropAction(action, source) {
   const before = game;
+  // Waves reroll the shop mid-battle; a drag that started before the reroll
+  // must not buy whatever pet now happens to sit at the same slot index.
+  if (action.type.startsWith('purchase')) {
+    const slot = game.shop[source.shopIndex];
+    if (!slot || slot.id !== source.id || slot.sold) {
+      game.message = 'The Cat Cart rerolled mid-drag — that pet has moved on.';
+      return false;
+    }
+  }
   if (action.type === 'purchase-place') {
     game = purchaseShopFighterToBoard(game, source.shopIndex, action.row, action.col);
   } else if (action.type === 'purchase-merge') {
@@ -1236,11 +1254,10 @@ function onCellClick(row, col) {
     return;
   }
   if (uiPaused() || !activeTargeting || game.phase !== 'battle') return;
-  const occupied = game.cats.some((cat) => cat.row === row && cat.col === col)
-    || (game.decoys ?? []).some((decoy) => decoy.row === row && decoy.col === col);
-  if (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !occupied) {
+  const blocked = cellBlocked(game, row, col);
+  if (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !blocked) {
     castAbility({ row, col });
-  } else if (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !occupied) {
+  } else if (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !blocked) {
     castAbility({ targetCatId: activeTargeting.targetCatId, row, col });
   }
 }
@@ -1272,9 +1289,10 @@ function updateCellTargetHighlights() {
   gridEl.querySelectorAll('.cell').forEach((cell) => {
     const row = Number(cell.dataset.row);
     const col = Number(cell.dataset.col);
-    const occupied = game.cats.some((cat) => cat.row === row && cat.col === col)
-      || (game.decoys ?? []).some((decoy) => decoy.row === row && decoy.col === col);
-    cell.classList.toggle('ability-target', Boolean(active) && row >= CAT_ZONE_START && !occupied);
+    cell.classList.toggle(
+      'ability-target',
+      Boolean(active) && row >= CAT_ZONE_START && !cellBlocked(game, row, col),
+    );
   });
 }
 
@@ -1513,7 +1531,7 @@ function renderProduction() {
         slot.classList.add('can-merge');
         slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
         slot.addEventListener('click', () => {
-          if (suppressNextPetClick) return;
+          if (suppressNextPetClick || uiPaused()) return;
           game = mergeInventoryItems(game, index);
           renderSidePanels();
         });
@@ -1661,11 +1679,20 @@ function syncPauseState() {
   pauseButton?.setAttribute('aria-pressed', String(paused));
   if ($('#pause-label')) $('#pause-label').textContent = paused ? '▶' : 'Ⅱ';
   if (paused && pausedAnimations.length === 0) {
+    pauseStartedAt = performance.now();
     pausedAnimations = document.getAnimations().filter((animation) => animation.playState === 'running');
     pausedAnimations.forEach((animation) => animation.pause());
   } else if (!paused) {
     pausedAnimations.forEach((animation) => animation.play());
     pausedAnimations = [];
+    if (pauseStartedAt != null) {
+      // Animation locks are wall-clock failsafes — a pause shouldn't expire them.
+      const pausedFor = performance.now() - pauseStartedAt;
+      animLocks.forEach((entry) => { entry.expiresAt += pausedFor; });
+      pauseStartedAt = null;
+    }
+    // Impact steps that came due mid-pause fire now, in order.
+    pausedAnimSteps.splice(0).forEach((step) => step());
   }
   renderSidePanels();
 }
@@ -1899,32 +1926,34 @@ document.addEventListener('visibilitychange', () => {
   syncPauseState();
 });
 
-// QA hook: drives the clock where requestAnimationFrame is unavailable
-// (hidden automation panes). Not part of gameplay.
-window.__cvd = {
-  get state() { return game; },
-  tick(ms) {
-    const advanced = advance(game, ms);
-    if (advanced !== game) {
-      game = advanced;
-      if (game.events.length) handleEvents(game.events);
-    }
-    syncUnits();
-    updateClockUi();
-    renderSidePanels();
-    maybeShowResult();
-  },
-  apply(mutate) {
-    const next = mutate(game);
-    if (next) game = next;
-    syncUnits();
-    renderSidePanels();
-  },
-  wake() {
-    blurPaused = false;
-    syncPauseState();
-  },
-};
+// Dev-only QA hook: drives the clock where requestAnimationFrame is
+// unavailable (hidden automation panes). Stripped from production builds.
+if (import.meta.env.DEV) {
+  window.__cvd = {
+    get state() { return game; },
+    tick(ms) {
+      const advanced = advance(game, ms);
+      if (advanced !== game) {
+        game = advanced;
+        if (game.events.length) handleEvents(game.events);
+      }
+      syncUnits();
+      updateClockUi();
+      renderSidePanels();
+      maybeShowResult();
+    },
+    apply(mutate) {
+      const next = mutate(game);
+      if (next) game = next;
+      syncUnits();
+      renderSidePanels();
+    },
+    wake() {
+      blurPaused = false;
+      syncPauseState();
+    },
+  };
+}
 
 loadSoundEnabled();
 syncSettingsUi();

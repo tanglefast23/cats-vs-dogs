@@ -77,6 +77,8 @@ export function getDropAction({ source, target, catZoneStart, rows, cols }) {
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
+    // A square held by a decoy or a dog is not free, even with no cat on it.
+    if (target.blocked) return invalid();
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
       return source.type === 'shop-fighter'

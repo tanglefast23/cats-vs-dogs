@@ -3,18 +3,15 @@ import assert from 'node:assert/strict';
 
 import {
   REALTIME, MAX_WAVES, CAT_COAT, CAT_ZONE_START, ROWS,
-  createGame, createDog, createWorker, addCatToBench, placeCat, advance,
+  createGame, createDog, createWorker, advance,
   useActiveAbility, useFood, equipInventoryItem, addInventoryStack,
   purchaseShopWorker, collectWorkerOutput,
 } from '../src/game-engine.js';
 
+import { placeCoat } from './helpers.js';
+
 /** random() of 0.5 makes spawn jitter exactly zero, keeping timings exact. */
 const noJitter = () => 0.5;
-
-function placeCoat(game, coat, row, col) {
-  game = addCatToBench(game, { level: 1, coat });
-  return placeCat(game, game.bench.length - 1, row, col);
-}
 
 /** Park the next wave far in the future for tests that isolate one mechanic. */
 function withoutWaves(game) {
@@ -123,6 +120,41 @@ test('waves spawn on schedule and reroll the shop', () => {
   assert.equal(game.nextWave.length, 2);
   assert.equal(game.shop[0].id, savedId);
   assert.ok(game.events.some((event) => event.type === 'wave' && event.wave === 1));
+});
+
+test('a square held by a dog blocks new cat placement', () => {
+  let game = withoutWaves(createGame(noJitter));
+  game.dogs = [{ ...createDog(1, 11, 2), nextActAt: 1e9 }];
+  const blocked = placeCoat(game, CAT_COAT.ORANGE, 11, 2);
+  assert.equal(blocked.cats.length, 0);
+  assert.equal(blocked.bench.length, 1);
+});
+
+test('a jammed gate delays wave dogs instead of deleting them', () => {
+  let game = createGame(noJitter);
+  game.waveNumber = MAX_WAVES - 1;
+  game.waveDueAt = 1000;
+  game.nextWave = [createDog(1, 0, 3)];
+  game.dogs = Array.from({ length: 6 }, (_, col) => ({ ...createDog(1, 0, col), nextActAt: 1e9 }));
+
+  game = advance(game, 1000);
+  assert.equal(game.dogs.length, 6, 'no room at the gate yet');
+  assert.equal(game.nextWave.length, 1, 'the dog waits instead of vanishing');
+  assert.notEqual(game.waveDueAt, null, 'a retry spawn is scheduled');
+  assert.equal(game.phase, 'battle');
+
+  game.dogs = [];
+  game = advance(game, REALTIME.dogActMs);
+  assert.equal(game.dogs.length, 1, 'the delayed dog finally arrives');
+  assert.equal(game.waveDueAt, null);
+  assert.equal(game.phase, 'battle', 'victory still requires clearing it');
+});
+
+test('wave events carry the spawned roles for the banner', () => {
+  let game = createGame(noJitter);
+  game = advance(game, REALTIME.waveFirstMs);
+  const waveEvent = game.events.find((event) => event.type === 'wave');
+  assert.deepEqual(waveEvent.roles, game.dogs.map((dog) => dog.role));
 });
 
 test('a wave spawn never stacks two dogs on one square', () => {

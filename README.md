@@ -38,7 +38,7 @@ under `src/` stays browser-pure (no Electron/Node imports).
 - Dog tiers scale from **Yard Punk** through **Ironhide** and **Bonecrusher** to wave-seven **Top Dog**
 - Cats only stack/merge with the **same color and level**
 - Shop pets can be **Saved** through refresh and wave rerolls
-- HUD **SPEED** chip toggles 1×/2× (persisted; reduced-motion users default to 2×); the game auto-pauses when the window loses focus
+- HUD **SPEED** chip toggles 1×/2× (persisted); the game auto-pauses when the window loses focus
 - Settings includes sound on/off
 - Layout stacks below ~880px, so narrow windows and phones stay playable
 
