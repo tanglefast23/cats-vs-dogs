@@ -11,6 +11,7 @@ export const CAT_ZONE_START = 10;
 export const MAX_WAVES = 7;
 export const BENCH_SIZE = 6;
 export const MAX_SHOP_SIZE = 5;
+const GOLD_ROUNDING_EPSILON = 1e-9;
 
 /** All real-time pacing in one table. Values are game-clock milliseconds at 1× speed. */
 export const REALTIME = Object.freeze({
@@ -19,7 +20,7 @@ export const REALTIME = Object.freeze({
   catAttackMs: 2000,
   abilityCooldownMs: 20000,
   workerProduceMs: 20000,
-  goldPerSecond: 1.25,
+  goldPerWave: 10,
   waveFirstMs: 15000,
   waveIntervalMs: 24000,
   slowMoFactor: 0.25,
@@ -1272,6 +1273,10 @@ function jitterMs(random) {
   return Math.round((random() * 2 - 1) * REALTIME.dogJitterMs);
 }
 
+function passiveGoldFor(elapsedMs) {
+  return (elapsedMs / REALTIME.waveIntervalMs) * REALTIME.goldPerWave;
+}
+
 function spawnWave(next) {
   const spawnAt = next.waveDueAt;
   next.waveNumber += 1;
@@ -1332,16 +1337,17 @@ function checkVictory(next) {
   }
 }
 
-/** Move the clock and drip passive gold for the time that passed. */
+/** Move the clock and drip passive gold once the first wave has arrived. */
 function moveClock(next, toMs) {
   const dt = toMs - next.clockMs;
   if (dt <= 0) return;
   next.clockMs = toMs;
-  next.goldFraction += (dt / 1000) * REALTIME.goldPerSecond;
-  const whole = Math.floor(next.goldFraction);
+  if (next.waveNumber === 0) return;
+  next.goldFraction += passiveGoldFor(dt);
+  const whole = Math.floor(next.goldFraction + GOLD_ROUNDING_EPSILON);
   if (whole > 0) {
     next.gold += whole;
-    next.goldFraction -= whole;
+    next.goldFraction = Math.max(0, next.goldFraction - whole);
   }
 }
 
@@ -1366,12 +1372,13 @@ function fireDue(next) {
   const dueCats = next.cats
     .filter((cat) => cat.nextAttackAt != null && cat.nextAttackAt <= now)
     .sort((a, b) => a.row - b.row || a.col - b.col);
+  const dogsVisible = livingDogs(next.dogs).length > 0;
   for (const cat of dueCats) {
     if (cat.hp <= 0) continue;
     cat.nextAttackAt += REALTIME.catAttackMs;
-    fireCatAttack(next, cat);
+    if (dogsVisible) fireCatAttack(next, cat);
   }
-  if (dueCats.length) {
+  if (dogsVisible && dueCats.length) {
     next.dogs = next.dogs.filter((dog) => dog.hp > 0);
     checkVictory(next);
     if (next.phase !== 'battle') return;
@@ -1412,12 +1419,13 @@ export function advance(game, elapsedMs) {
   if (firstDue == null || firstDue > idleTarget) {
     // Nothing fires this slice (the common per-frame case): bump the clock and
     // gold without deep-cloning every unit, shop slot, and inventory stack.
-    const goldFraction = game.goldFraction + (elapsedMs / 1000) * REALTIME.goldPerSecond;
-    const whole = Math.floor(goldFraction);
+    const goldFraction = game.goldFraction
+      + (game.waveNumber > 0 ? passiveGoldFor(elapsedMs) : 0);
+    const whole = Math.floor(goldFraction + GOLD_ROUNDING_EPSILON);
     return {
       ...game,
       clockMs: idleTarget,
-      goldFraction: goldFraction - whole,
+      goldFraction: Math.max(0, goldFraction - whole),
       gold: game.gold + whole,
       events: [],
     };

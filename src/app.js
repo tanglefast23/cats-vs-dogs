@@ -9,8 +9,8 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
-import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
+import { shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo, itemTooltipInfo } from './ui-state.js';
+import { combatTiming, cellCenter, homingShotKeyframes, rectCenterPercent } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -96,7 +96,7 @@ function clearTooltipTimer() {
 function hideUnitTooltip() {
   clearTooltipTimer();
   tooltipEl.hidden = true;
-  tooltipEl.classList.remove('is-visible', 'kind-cat', 'kind-dog');
+  tooltipEl.classList.remove('is-visible', 'kind-cat', 'kind-dog', 'kind-item');
 }
 
 function showUnitTooltip(anchor, info, clientX, clientY) {
@@ -518,8 +518,7 @@ function findUnitInner(id) {
   return unitEls.get(id)?.querySelector('.unit') ?? null;
 }
 
-function effectAt(className, row, col, text = '') {
-  const position = cellCenter(row, col);
+function effectAtPosition(className, position, text = '') {
   const effect = document.createElement('i');
   effect.className = className;
   effect.style.left = `${position.xPercent}%`;
@@ -529,12 +528,32 @@ function effectAt(className, row, col, text = '') {
   return effect;
 }
 
+function effectAt(className, row, col, text = '') {
+  return effectAtPosition(className, cellCenter(row, col), text);
+}
+
+function unitHitboxCenter(id, fallback) {
+  const unit = unitEls.get(id);
+  if (!unit) return fallback;
+  return rectCenterPercent(unit.getBoundingClientRect(), effectsEl.getBoundingClientRect(), fallback);
+}
+
+function unitDestination(id, fallback) {
+  const unit = unitEls.get(id);
+  const xPercent = Number.parseFloat(unit?.style.left);
+  const yPercent = Number.parseFloat(unit?.style.top);
+  return Number.isFinite(xPercent) && Number.isFinite(yPercent)
+    ? { xPercent, yPercent }
+    : fallback;
+}
+
 function applyHitVisual(event, { heavy = false } = {}) {
   if (event.miss || !event.to) return;
   playHit({ heavy });
-  const burst = effectAt('impact-burst', event.toRow, event.col);
+  const impact = unitHitboxCenter(event.to, cellCenter(event.toRow, event.col));
+  const burst = effectAtPosition('impact-burst', impact);
   const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
-  const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
+  const damage = effectAtPosition(`damage-number${tone}`, impact, `-${event.damage}`);
   const inner = findUnitInner(event.to);
   if (inner) {
     inner.classList.remove('hurt');
@@ -574,7 +593,8 @@ function scheduleShot(event, index = 0) {
   scheduleAnimStep(stagger, () => {
     const fromCol = event.fromCol ?? event.col;
     const start = cellCenter(event.fromRow, fromCol);
-    const end = cellCenter(event.toRow, event.col);
+    const fallbackEnd = cellCenter(event.toRow, event.col);
+    const end = isHoming && event.to ? unitDestination(event.to, fallbackEnd) : fallbackEnd;
     const projectileStyle = event.style ? `${event.style}-projectile` : '';
     const projectile = effectAt(
       `projectile-effect ${isHoming ? 'homing-projectile' : ''} ${isBurst ? 'burst-projectile' : ''} ${projectileStyle}`.trim(),
@@ -1526,6 +1546,9 @@ function renderProduction() {
     } else {
       slot.append(unitCanvas('item', item));
       slot.insertAdjacentHTML('beforeend', `<b>×${item.quantity}</b><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small>`);
+      const tooltipInfo = itemTooltipInfo(item);
+      slot.setAttribute('aria-label', tooltipInfo?.title ?? item.kind);
+      bindTooltip(slot, () => itemTooltipInfo(game.inventory[index]));
       bindPetDrag(slot, 'item', { ...item, inventoryIndex: index });
       if ((item.kind === 'weapon' || item.kind === 'armour') && item.tier < 3 && item.quantity >= 3) {
         slot.classList.add('can-merge');

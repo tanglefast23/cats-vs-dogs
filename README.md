@@ -19,7 +19,8 @@ under `src/` stays browser-pure (no Electron/Node imports).
 
 - **Fully real-time**: one continuous level. Waves 1–7 arrive on a visible countdown,
   cats auto-attack on countdown rings (one attack per dog step), and gold drips in
-  continuously (10 per four dog-steps of time). No prep phase, no turn button.
+  continuously (10 per wave interval, starting when wave 1 arrives). No prep phase,
+  no turn button.
 - **Placement is permanent** — placed cats never reposition. Sell them to the
   Adoption Box, or let Purrtal teleport them.
 - **Active abilities recharge on a 20s cooldown**: tap a READY cat, then tap the

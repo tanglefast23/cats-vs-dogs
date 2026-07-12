@@ -44,11 +44,37 @@ test('ability cats start with their ability on cooldown', () => {
   assert.equal(game.cats[0].abilityReadyAt, REALTIME.abilityCooldownMs);
 });
 
-test('gold drips at ten per four dog steps of time', () => {
+test('gold waits for the first dog, then drips ten over each wave interval', () => {
   let game = createGame(noJitter);
-  game = advance(game, REALTIME.dogActMs * 4);
+
+  game = advance(game, REALTIME.waveFirstMs - 1);
+  assert.equal(game.gold, 10);
+  assert.equal(game.goldFraction, 0);
+  assert.equal(game.dogs.length, 0);
+
+  game = advance(game, 1);
+  assert.equal(game.gold, 10);
+  assert.equal(game.goldFraction, 0);
+  assert.equal(game.dogs.length, 1);
+
+  game = advance(game, REALTIME.waveIntervalMs);
   assert.equal(game.gold, 20);
-  assert.equal(game.clockMs, REALTIME.dogActMs * 4);
+  assert.equal(game.clockMs, REALTIME.waveFirstMs + REALTIME.waveIntervalMs);
+  assert.equal(game.waveNumber, 2);
+});
+
+test('gold reaches the same round total across browser-sized clock slices', () => {
+  const started = advance(createGame(noJitter), REALTIME.waveFirstMs);
+  let sliced = started;
+  for (let elapsed = 0; elapsed < REALTIME.waveIntervalMs; elapsed += 250) {
+    sliced = advance(sliced, 250);
+  }
+  const single = advance(started, REALTIME.waveIntervalMs);
+
+  assert.equal(sliced.gold, 20);
+  assert.equal(sliced.goldFraction, 0);
+  assert.equal(single.gold, sliced.gold);
+  assert.equal(single.goldFraction, sliced.goldFraction);
 });
 
 test('a dog steps once per act interval and bites when blocked', () => {

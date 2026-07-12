@@ -757,6 +757,7 @@ body.slow-mo .board-frame::before {
 .unit-tooltip[hidden] { display: none !important; }
 .unit-tooltip.kind-cat { background: linear-gradient(#fff8dc, #e7f3c8); }
 .unit-tooltip.kind-dog { background: linear-gradient(#fff1e4, #f0d2b4); }
+.unit-tooltip.kind-item { background: linear-gradient(#fff9d8, #dceff0); }
 .unit-tooltip strong {
   display: block;
   font-size: 13px;

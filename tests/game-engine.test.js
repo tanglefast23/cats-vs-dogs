@@ -598,7 +598,7 @@ test('dog tooltips explain march and bite behavior', () => {
   assert.match(dog.stats, /7/);
 });
 
-test('cats still act with miss events when no dogs are in range', () => {
+test('cats stay idle on an empty screen and resume attacks when a dog appears', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.WHITE });
@@ -610,12 +610,17 @@ test('cats still act with miss events when no dogs are in range', () => {
 
   game = runExchange(game);
 
+  assert.equal(game.events.some((event) => event.type === 'shot' || event.type === 'cat-melee'), false);
+
+  game.dogs = [{ ...createDog(1, 5, 1), nextActAt: 1e9 }];
+  game = runExchange(game);
+
   const shots = game.events.filter((event) => event.type === 'shot');
   const melees = game.events.filter((event) => event.type === 'cat-melee');
   assert.equal(shots.filter((shot) => shot.style === 'column').length, 3);
   assert.equal(shots.filter((shot) => shot.style === 'homing').length, 1);
   assert.equal(melees.length, 1);
-  assert.equal(shots.every((shot) => shot.miss), true);
+  assert.equal(shots.some((shot) => !shot.miss), true);
   assert.equal(melees[0].miss, true);
   assert.equal(melees[0].to, null);
 });

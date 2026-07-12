@@ -30,6 +30,16 @@ export function cellCenter(row, col) {
   };
 }
 
+/** Convert a live unit hitbox into board-relative coordinates for impact effects. */
+export function rectCenterPercent(rect, containerRect, fallback) {
+  if (!(containerRect?.width > 0) || !(containerRect?.height > 0)
+    || !(rect?.width > 0) || !(rect?.height > 0)) return fallback;
+  return {
+    xPercent: ((rect.left + rect.width / 2 - containerRect.left) / containerRect.width) * 100,
+    yPercent: ((rect.top + rect.height / 2 - containerRect.top) / containerRect.height) * 100,
+  };
+}
+
 /**
  * Mild sine-wave path that still homes toward the target.
  * Progress eases in (slow seek early), lateral wave damps near impact.

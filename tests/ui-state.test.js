@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo, itemTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
+import { COMBAT_TIMING, combatTiming, homingShotKeyframes, rectCenterPercent } from '../src/combat-animation.js';
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
@@ -49,6 +49,23 @@ test('worker cats expose production hover details', () => {
     attack: 'Place in the Production House. Three matching workers evolve to the next level.',
     note: 'Builds blocking armour',
   });
+});
+
+test('storage items expose names, effects, and use instructions on hover', () => {
+  assert.deepEqual(itemTooltipInfo({ kind: 'food', quantity: 2 }), {
+    kind: 'item',
+    title: 'Healing Food',
+    stats: 'Stored ×2 · restores 2 health',
+    detailLabel: 'Use',
+    attack: 'Drag onto a damaged battlefield cat.',
+    note: 'Consumed when used. Healing cannot exceed the cat\'s maximum health.',
+  });
+
+  assert.match(itemTooltipInfo({ kind: 'weapon', tier: 2, quantity: 3 }).stats, /\+2 attack/);
+  assert.match(itemTooltipInfo({ kind: 'weapon', tier: 2, quantity: 3 }).note, /merge into the next tier/);
+  assert.match(itemTooltipInfo({ kind: 'armour', tier: 3, quantity: 1 }).stats, /blocks 4 damage for 3 hits/);
+  assert.match(itemTooltipInfo({ kind: 'armour', tier: 3, quantity: 1 }).note, /Maximum tier/);
+  assert.equal(itemTooltipInfo({ kind: 'mystery' }), null);
 });
 
 test('zero-gold shop cats stay interactive and readable while purchase is rejected', () => {
@@ -445,6 +462,20 @@ test('homing shot path uses a sine wave while ending on the target', () => {
     maxOff = Math.max(maxOff, Math.hypot(x - straightX, y - straightY));
   }
   assert.ok(maxOff > 1.2, `expected a sine offset off the line, maxOff=${maxOff}`);
+});
+
+test('impact effects use the live unit hitbox center instead of its old grid cell', () => {
+  const board = { left: 100, top: 50, width: 600, height: 700 };
+  const dogHitbox = { left: 325, top: 225, width: 50, height: 70 };
+
+  assert.deepEqual(rectCenterPercent(dogHitbox, board, null), {
+    xPercent: 41.66666666666667,
+    yPercent: 30,
+  });
+  assert.deepEqual(rectCenterPercent(dogHitbox, { ...board, width: 0 }, { xPercent: 25, yPercent: 25 }), {
+    xPercent: 25,
+    yPercent: 25,
+  });
 });
 
 test('orange burst bullets use exactly double their prior travel time', () => {

@@ -1,4 +1,5 @@
 import { REALTIME } from './game-engine.js';
+import { FOOD_HEAL, WEAPON_INFO, ARMOUR_INFO } from './production-rules.js';
 
 export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
@@ -84,6 +85,51 @@ export function workerTooltipInfo(worker, info) {
       ? 'Napping — collect the finished item to start the next batch.'
       : info.blurb,
   };
+}
+
+export function itemTooltipInfo(item) {
+  const quantity = item?.quantity ?? 1;
+  if (item?.kind === 'food') {
+    return {
+      kind: 'item',
+      title: 'Healing Food',
+      stats: `Stored ×${quantity} · restores ${FOOD_HEAL} health`,
+      detailLabel: 'Use',
+      attack: 'Drag onto a damaged battlefield cat.',
+      note: 'Consumed when used. Healing cannot exceed the cat\'s maximum health.',
+    };
+  }
+
+  const tier = item?.tier ?? 1;
+  if (item?.kind === 'weapon') {
+    const attack = WEAPON_INFO[tier]?.attack ?? WEAPON_INFO[1].attack;
+    return {
+      kind: 'item',
+      title: `Tier ${tier} Weapon`,
+      stats: `Stored ×${quantity} · +${attack} attack`,
+      detailLabel: 'Equip',
+      attack: 'Drag onto a battlefield cat to increase its damage.',
+      note: tier < 3
+        ? 'Three matching weapons can merge into the next tier. Equipping replaces the current weapon.'
+        : 'Maximum tier. Equipping replaces the cat\'s current weapon.',
+    };
+  }
+
+  if (item?.kind === 'armour') {
+    const armour = ARMOUR_INFO[tier] ?? ARMOUR_INFO[1];
+    return {
+      kind: 'item',
+      title: `Tier ${tier} Armour`,
+      stats: `Stored ×${quantity} · blocks ${armour.block} damage for ${armour.uses} hits`,
+      detailLabel: 'Equip',
+      attack: 'Drag onto a battlefield cat to reduce incoming bite damage.',
+      note: tier < 3
+        ? 'Three matching armour pieces can merge into the next tier. Equipping replaces current armour.'
+        : 'Maximum tier. Equipping replaces the cat\'s current armour.',
+    };
+  }
+
+  return null;
 }
 
 /** The shop is always open in real time; only pause and price gate a purchase. */
