@@ -10,10 +10,10 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
-import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 
@@ -83,6 +83,31 @@ if (!tooltipEl) {
 const TOOLTIP_HOVER_DELAY_MS = 450;
 let tooltipTimer = null;
 let tooltipPointer = { x: 0, y: 0 };
+let moveLimitTooltipTimer = null;
+
+function showMoveLimitTooltip(clientX, clientY) {
+  let tip = document.querySelector('.move-limit-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'move-limit-tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.append(tip);
+  }
+  window.clearTimeout(moveLimitTooltipTimer);
+  tip.textContent = CAT_MOVE_LIMIT_MESSAGE;
+  tip.hidden = false;
+  tip.classList.remove('is-visible');
+  void tip.offsetWidth;
+  tip.classList.add('is-visible');
+  const rect = tip.getBoundingClientRect();
+  const pad = 12;
+  tip.style.left = `${Math.max(pad, Math.min(clientX + 14, window.innerWidth - rect.width - pad))}px`;
+  tip.style.top = `${Math.max(pad, Math.min(clientY + 16, window.innerHeight - rect.height - pad))}px`;
+  moveLimitTooltipTimer = window.setTimeout(() => {
+    tip.hidden = true;
+    tip.classList.remove('is-visible');
+  }, 2800);
+}
 
 function clearTooltipTimer() {
   if (tooltipTimer != null) {
@@ -206,8 +231,8 @@ function renderShop() {
   shopEl.dataset.count = String(game.shop.length);
   game.shop.forEach((slot, index) => {
     const isWorker = slot.category === 'worker';
-    const stats = isWorker ? null : catStatsFor(slot.level ?? 1, slot.coat);
     const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
+    const summary = shopCardSummary(slot, info);
     const interactive = !slot.sold && game.phase === 'prep' && !playing;
     const canBuy = interactive && game.gold >= 3;
     const reason = slot.sold ? 'sold' : game.gold < 3 ? 'gold' : 'ready';
@@ -219,15 +244,10 @@ function renderShop() {
     button.disabled = !interactive;
     button.setAttribute('aria-disabled', canBuy ? 'false' : 'true');
     button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
-    const detail = isWorker
-      ? `<div class="stats"><span>${info.output[1].quantity} ${info.output[1].kind}</span></div>`
-      : `<div class="stats"><span>♥ ${stats.hp}</span><span>↑ ${stats.attack}</span></div>`;
     button.insertAdjacentHTML('beforeend', `
-      <span class="shop-tier">${isWorker ? 'WORK' : `T${info.shopTier}`}</span>
-      <strong>${slot.sold ? 'ADOPTED' : info.name}</strong>
-      <small class="ability-blurb">${info.blurb}</small>
-      ${detail}
-      <span class="price">● 3</span>`);
+      <span class="shop-tier">${summary.badge}</span>
+      <strong>${summary.name}</strong>
+      <span class="price">● ${summary.cost}</span>`);
     button.addEventListener('click', () => {
       if (!canBuy) {
         showShopPurchaseDenied(button, reason);
@@ -239,13 +259,7 @@ function renderShop() {
       $('#message').textContent = game.message;
     });
     bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
-    bindTooltip(button, () => isWorker ? {
-      kind: 'cat',
-      title: `Worker · ${info.name}`,
-      stats: `L1 · ${info.output[1].quantity} ${info.output[1].kind} after battle`,
-      attack: 'Drag into the Production Yard. Match three of the same role and level to evolve.',
-      note: info.blurb,
-    } : catTooltipInfo(slot));
+    if (!isWorker) bindTooltip(button, () => catTooltipInfo(slot));
 
     const save = document.createElement('button');
     save.type = 'button';
@@ -687,10 +701,14 @@ async function finishDrag(event, cancelled = false) {
   window.setTimeout(() => { suppressNextPetClick = false; }, 0);
 
   if (!valid) {
-    game.message = target.descriptor?.kind === 'sell' && state.source.sellReason
+    const moveDistanceExceeded = action.reason === 'move-distance';
+    game.message = moveDistanceExceeded
+      ? CAT_MOVE_LIMIT_MESSAGE
+      : target.descriptor?.kind === 'sell' && state.source.sellReason
       ? state.source.sellReason
       : 'That is not a valid drop. Cats can only use the lower yard and merge with the same color + level.';
     render();
+    if (moveDistanceExceeded) showMoveLimitTooltip(event.clientX, event.clientY);
     return;
   }
 
@@ -981,7 +999,7 @@ function renderBoard() {
       const cat = game.cats.find((unit) => unit.row === row && unit.col === col);
       const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
       const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
-      const zone = row >= CAT_ZONE_START ? 'cat territory' : row === CAT_ZONE_START - 1 ? 'sidewalk' : 'dog yard';
+      const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
       cell.setAttribute('aria-label', cat
         ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP, row ${row + 1} column ${col + 1}`
         : dog
@@ -1027,7 +1045,7 @@ function renderBoard() {
           }
         }
       }
-      cell.addEventListener('click', () => {
+      cell.addEventListener('click', (event) => {
         if (suppressNextPetClick) {
           suppressNextPetClick = false;
           return;
@@ -1038,7 +1056,7 @@ function renderBoard() {
           if (!tryMerge('cat', cat.id)) selectCat('cat', cat);
         } else if (selected && row < CAT_ZONE_START) {
           // A silent no-op reads as a broken game — shake and say why instead.
-          game.message = 'Cats stay below the sidewalk — tap one of the four glowing rows.';
+          game.message = 'Cats stay in the four glowing rows at the bottom of the yard.';
           const board = $('#board');
           board?.classList.remove('board-shake');
           void board?.offsetWidth;
@@ -1054,6 +1072,11 @@ function renderBoard() {
               playCatDrop();
             }
           } else if (selected.type === 'cat') {
+            const movingCat = game.cats.find((unit) => unit.id === selected.id);
+            const attemptedAction = dropAction(
+              movingCat ? { ...movingCat, type: 'cat' } : null,
+              { kind: 'cell', row, col, occupied: null },
+            );
             const before = game;
             game = moveCat(game, selected.id, row, col);
             if (game !== before) {
@@ -1061,6 +1084,10 @@ function renderBoard() {
               playCatDrop();
             } else {
               selected = null;
+            }
+            if (attemptedAction.reason === 'move-distance') {
+              game.message = CAT_MOVE_LIMIT_MESSAGE;
+              window.setTimeout(() => showMoveLimitTooltip(event.clientX, event.clientY), 0);
             }
           }
         }

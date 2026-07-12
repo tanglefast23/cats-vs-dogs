@@ -7,6 +7,8 @@ export const DRAG_FEEDBACK = Object.freeze({
   returnMs: 260,
 });
 
+export const CAT_MOVE_LIMIT_MESSAGE = 'During prep, each cat can move only one adjacent square.';
+
 // Placement feedback retains 40% of the original landing force (a 60% cut).
 export const DROP_IMPACT = Object.freeze({
   intensity: 0.4,
@@ -17,7 +19,7 @@ export const DROP_IMPACT = Object.freeze({
   soundGain: 0.4,
 });
 
-const invalid = () => ({ type: 'invalid' });
+const invalid = (reason = null) => ({ type: 'invalid', ...(reason ? { reason } : {}) });
 
 function sameCatKind(source, occupied) {
   if (!occupied || source.id === occupied.id) return false;
@@ -83,9 +85,8 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
     if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();
     if ((source.type === 'cat' || source.type === 'bench') && source.prepOrigin) {
-      const maxDistance = source.ability === 'melee' ? 1 : 2;
       const distance = Math.abs(target.row - source.prepOrigin.row) + Math.abs(target.col - source.prepOrigin.col);
-      if (distance > maxDistance) return invalid();
+      if (distance > 1) return invalid('move-distance');
     }
     return source.type === 'bench'
       ? { type: 'place', row: target.row, col: target.col }

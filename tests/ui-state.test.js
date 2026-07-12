@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
-  WORKER_ART_MARKERS, ITEM_ART_MARKERS,
+  WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
-import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
@@ -29,6 +29,15 @@ test('production collection feedback targets matching storage, empty storage, or
   assert.deepEqual(productionCollectionDestination(inventory, { kind: 'armour', tier: 1, quantity: 1 }), { type: 'storage', index: 1 });
   assert.deepEqual(productionCollectionDestination(inventory, { kind: 'coins', quantity: 2 }), { type: 'gold', index: null });
   assert.equal(productionCollectionDestination(inventory.map(() => ({ kind: 'blocked' })), { kind: 'food' }), null);
+});
+
+test('Cat Cart summaries contain only badge, name, and cost', () => {
+  assert.deepEqual(shopCardSummary({ category: 'fighter', sold: false }, { shopTier: 3, name: 'Laserpaw' }), {
+    badge: 'T3', name: 'Laserpaw', cost: 3,
+  });
+  assert.deepEqual(shopCardSummary({ category: 'worker', sold: false }, { name: 'Cashmere Cat' }), {
+    badge: 'WORK', name: 'Cashmere Cat', cost: 3,
+  });
 });
 
 test('zero-gold shop cats stay interactive and readable while purchase is rejected', () => {
@@ -139,15 +148,21 @@ test('dragging a board cat to another empty cat cell produces a move action', ()
   assert.deepEqual(action, { type: 'move', row: 12, col: 5 });
 });
 
-test('drag highlights respect between-round melee and ranged movement limits', () => {
+test('drag highlights give every cat the same one-square between-round limit', () => {
+  assert.equal(CAT_MOVE_LIMIT_MESSAGE, 'During prep, each cat can move only one adjacent square.');
   const target = { kind: 'cell', row: 10, col: 3, occupied: false };
   const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
   assert.equal(getDropAction({
     ...common,
     source: { type: 'cat', id: 1, ability: 'melee', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }).type, 'invalid');
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+  }), { type: 'invalid', reason: 'move-distance' });
   assert.equal(getDropAction({
     ...common,
+    target: { kind: 'cell', row: 10, col: 2, occupied: false },
     source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }).type, 'move');
   assert.equal(getDropAction({
@@ -369,6 +384,22 @@ test('unlockable fighters have distinct accessories and dog tier gear', () => {
   assert.deepEqual(DOG_ROLE_MARKERS.tennis, ['visor', 'tennis-ball']);
   assert.deepEqual(DOG_ROLE_MARKERS.howler, ['sound-cone', 'purple-bandana']);
   assert.deepEqual(DOG_ROLE_MARKERS.jumper, ['spring-boots', 'red-cape']);
+});
+
+test('every fighter has a unique body build matched to its combat role', () => {
+  const catBuilds = Object.values(CAT_BODY_BUILDS);
+  assert.equal(catBuilds.length, 11, 'all 11 battle coats need a body build');
+  assert.equal(new Set(catBuilds).size, catBuilds.length, 'cat builds must all differ');
+  assert.equal(CAT_BODY_BUILDS[1], 'bruiser', 'the melee cat reads big and tough');
+  assert.equal(CAT_BODY_BUILDS[3], 'kitten');
+  assert.equal(CAT_BODY_BUILDS[6], 'robed-mystic', 'casters read frail');
+  assert.equal(CAT_BODY_BUILDS[7], 'hooded-phantom');
+
+  const dogBuilds = Object.values(DOG_BODY_BUILDS);
+  assert.equal(dogBuilds.length, 4, 'all 4 dog roles need a body build');
+  assert.equal(new Set(dogBuilds).size, dogBuilds.length, 'dog builds must all differ');
+  assert.equal(DOG_BODY_BUILDS.howler, 'crooner', 'the howler poses mid-howl');
+  assert.equal(DOG_BODY_BUILDS.jumper, 'springer', 'the jumper reads coiled to leap');
 });
 
 test('homing shot path uses a sine wave while ending on the target', () => {
