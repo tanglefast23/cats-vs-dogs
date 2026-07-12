@@ -82,9 +82,9 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
     }
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
     if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();
-    if ((source.type === 'cat' || source.type === 'bench') && source.prepOriginRow != null && source.prepOriginCol != null) {
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepOrigin) {
       const maxDistance = source.ability === 'melee' ? 1 : 2;
-      const distance = Math.abs(target.row - source.prepOriginRow) + Math.abs(target.col - source.prepOriginCol);
+      const distance = Math.abs(target.row - source.prepOrigin.row) + Math.abs(target.col - source.prepOrigin.col);
       if (distance > maxDistance) return invalid();
     }
     return source.type === 'bench'

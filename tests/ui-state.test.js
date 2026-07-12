@@ -144,15 +144,15 @@ test('drag highlights respect between-round melee and ranged movement limits', (
   const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
   assert.equal(getDropAction({
     ...common,
-    source: { type: 'cat', id: 1, ability: 'melee', prepOriginRow: 10, prepOriginCol: 1, prepMoved: false },
+    source: { type: 'cat', id: 1, ability: 'melee', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }).type, 'invalid');
   assert.equal(getDropAction({
     ...common,
-    source: { type: 'cat', id: 2, ability: 'homing', prepOriginRow: 10, prepOriginCol: 1, prepMoved: false },
+    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }).type, 'move');
   assert.equal(getDropAction({
     ...common,
-    source: { type: 'cat', id: 3, ability: 'homing', prepOriginRow: 10, prepOriginCol: 2, prepMoved: true },
+    source: { type: 'cat', id: 3, ability: 'homing', prepOrigin: { row: 10, col: 2 }, prepMoved: true },
   }).type, 'invalid');
 });
 
