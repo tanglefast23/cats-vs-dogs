@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -37,6 +37,17 @@ test('Cat Cart summaries contain only badge, name, and cost', () => {
   });
   assert.deepEqual(shopCardSummary({ category: 'worker', sold: false }, { name: 'Cashmere Cat' }), {
     badge: 'WORK', name: 'Cashmere Cat', cost: 3,
+  });
+});
+
+test('worker cats expose production hover details', () => {
+  assert.deepEqual(workerTooltipInfo({ level: 1, role: 'armourer' }, WORKER_INFO.armourer), {
+    kind: 'cat',
+    title: 'L1 Pawladin',
+    stats: 'Produces 1 T1 armour after each battle',
+    detailLabel: 'Production',
+    attack: 'Place in the Production House. Three matching workers evolve to the next level.',
+    note: 'Builds blocking armour',
   });
 });
 

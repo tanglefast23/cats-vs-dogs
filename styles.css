@@ -118,7 +118,8 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
   box-shadow: 3px 3px 0 var(--ink);
 }
 .control-inventory .inventory-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.control-inventory .inventory-slot { min-width: 0; }
+.control-inventory .inventory-slot { min-width: 0; aspect-ratio: 3 / 2; display: grid; place-items: center; }
+.control-inventory .inventory-slot canvas { width: auto; max-width: 100%; height: 100%; }
 .control-inventory .inventory-slot small { display: none; }
 .control-inventory .production-help { color: #50615a; }
 
@@ -654,7 +655,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 
 .cell.has-unit { cursor: help; }
 .shop-card { cursor: pointer; }
-.fighter-offer .shop-card { cursor: help; }
+.fighter-offer .shop-card, .worker-offer .shop-card { cursor: help; }
 
 .unit-tooltip {
   position: fixed;

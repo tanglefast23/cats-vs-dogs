@@ -68,6 +68,22 @@ export function shopCardSummary(slot, info) {
   };
 }
 
+export function workerTooltipInfo(worker, info) {
+  const level = worker.level ?? 1;
+  const output = info.output[level] ?? info.output[1];
+  const tier = output.tier ? ` T${output.tier}` : '';
+  return {
+    kind: 'cat',
+    title: `L${level} ${info.name}`,
+    stats: `Produces ${output.quantity}${tier} ${output.kind} after each battle`,
+    detailLabel: 'Production',
+    attack: 'Place in the Production House. Three matching workers evolve to the next level.',
+    note: worker.pendingOutput
+      ? 'Collect the ready output before the next production cycle replaces it.'
+      : info.blurb,
+  };
+}
+
 export function shopPetAvailability({ sold, gold, benchLength, benchSize, phase, playing }) {
   if (sold) return { interactive: false, canBuy: false, reason: 'sold' };
   if (phase !== 'prep' || playing) return { interactive: false, canBuy: false, reason: 'phase' };

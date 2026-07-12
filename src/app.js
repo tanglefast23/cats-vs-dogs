@@ -10,7 +10,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
@@ -129,7 +129,7 @@ function showUnitTooltip(anchor, info, clientX, clientY) {
   tooltipEl.innerHTML = `
     <strong>${info.title}</strong>
     <span class="tooltip-stats">${info.stats}</span>
-    <p class="tooltip-attack"><b>Attack</b> ${info.attack}</p>
+    <p class="tooltip-attack"><b>${info.detailLabel ?? 'Attack'}</b> ${info.attack}</p>
     <small class="tooltip-note">${info.note}</small>
   `;
   const pad = 12;
@@ -259,7 +259,7 @@ function renderShop() {
       $('#message').textContent = game.message;
     });
     bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
-    if (!isWorker) bindTooltip(button, () => catTooltipInfo(slot));
+    bindTooltip(button, () => isWorker ? workerTooltipInfo(slot, info) : catTooltipInfo(slot));
 
     const save = document.createElement('button');
     save.type = 'button';
@@ -852,12 +852,7 @@ function productionWorkerSlot(index) {
   slot.append(unitCanvas('worker', worker));
   slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
   bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
-  bindTooltip(slot, () => ({
-    kind: 'cat', title: `Worker · ${info.name}`,
-    stats: `Level ${worker.level} · ${info.output[worker.level].quantity} ${info.output[worker.level].kind}`,
-    attack: 'Produces after each completed battle. Three matching workers evolve.',
-    note: worker.pendingOutput ? 'Collect this station before the next production cycle replaces it.' : info.blurb,
-  }));
+  bindTooltip(slot, () => workerTooltipInfo(worker, info));
   return slot;
 }
 
