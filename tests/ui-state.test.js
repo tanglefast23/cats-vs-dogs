@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs } from '../src/ui-state.js';
+import { WORKER_INFO } from '../src/production-rules.js';
 import {
-  CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS,
+  CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
@@ -119,6 +120,23 @@ test('dragging a board cat to another empty cat cell produces a move action', ()
   assert.deepEqual(action, { type: 'move', row: 12, col: 5 });
 });
 
+test('drag highlights respect between-round melee and ranged movement limits', () => {
+  const target = { kind: 'cell', row: 10, col: 3, occupied: false };
+  const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
+  assert.equal(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 1, ability: 'melee', prepOriginRow: 10, prepOriginCol: 1, prepMoved: false },
+  }).type, 'invalid');
+  assert.equal(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 2, ability: 'homing', prepOriginRow: 10, prepOriginCol: 1, prepMoved: false },
+  }).type, 'move');
+  assert.equal(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 3, ability: 'homing', prepOriginRow: 10, prepOriginCol: 2, prepMoved: true },
+  }).type, 'invalid');
+});
+
 test('dropping onto a matching cat produces a merge action', () => {
   const action = getDropAction({
     source: { type: 'bench', id: 'cat-1', level: 2 },
@@ -180,6 +198,13 @@ test('shop workers and owned workers route only to production slots', () => {
     rows: 14,
     cols: 6,
   }), { type: 'purchase-worker', index: 4 });
+  assert.deepEqual(getDropAction({
+    source: shopWorker,
+    target: { kind: 'cell', row: 12, col: 2, occupied: null },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'invalid' });
 
   const owned = { type: 'worker', workerIndex: 0, id: 'worker-1', level: 1, role: 'cook' };
   assert.deepEqual(getDropAction({
@@ -189,28 +214,33 @@ test('shop workers and owned workers route only to production slots', () => {
     rows: 14,
     cols: 6,
   }), { type: 'move-worker', index: 5 });
+  assert.deepEqual(getDropAction({
+    source: owned,
+    target: { kind: 'cell', row: 12, col: 2, occupied: null },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'invalid' });
 });
 
-test('food targets damaged battlefield cats while equipment requires prep or pause', () => {
+test('food and equipment target cats only during a tactics window', () => {
   const target = { kind: 'fighter', id: 'cat-1', hp: 3, maxHp: 6 };
   assert.deepEqual(getDropAction({
     source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
-    target,
-    catZoneStart: 10,
-    rows: 14,
-    cols: 6,
-    phase: 'combat',
-    paused: false,
+    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'combat', paused: false,
+  }), { type: 'invalid' });
+  assert.deepEqual(getDropAction({
+    source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
+    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'tactics', paused: false,
   }), { type: 'use-food', targetId: 'cat-1' });
   assert.deepEqual(getDropAction({
     source: { type: 'item', inventoryIndex: 1, itemKind: 'weapon' },
-    target,
-    catZoneStart: 10,
-    rows: 14,
-    cols: 6,
-    phase: 'combat',
-    paused: false,
+    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'combat', paused: false,
   }), { type: 'invalid' });
+  assert.deepEqual(getDropAction({
+    source: { type: 'item', inventoryIndex: 1, itemKind: 'weapon' },
+    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'tactics', paused: false,
+  }), { type: 'equip', targetId: 'cat-1' });
 });
 
 test('successful placement feedback keeps only forty percent of its former impact', () => {
@@ -255,6 +285,23 @@ test('level two and three cats have progressively stronger visible equipment set
   assert.ok(CAT_EQUIPMENT[3].includes('energy-wings'));
 });
 
+test('production legend lists every worker with a concise economy role', () => {
+  assert.deepEqual(productionLegendRows(WORKER_INFO), [
+    { role: 'cook', name: 'COOK', description: 'cooks healing food' },
+    { role: 'trader', name: 'TRADER', description: 'earns bonus coins' },
+    { role: 'weaponsmith', name: 'SMITH', description: 'forges attack weapons' },
+    { role: 'armourer', name: 'ARMOURER', description: 'makes bite-blocking armour' },
+  ]);
+});
+
+test('Cat & Dog Glossary exposes the three requested roster tabs', () => {
+  assert.deepEqual(glossaryTabs('production'), [
+    { id: 'battle', label: 'Battle Cats', active: false },
+    { id: 'production', label: 'Production Cats', active: true },
+    { id: 'dogs', label: 'Dogs', active: false },
+  ]);
+});
+
 test('production workers and items expose distinct readable art markers', () => {
   assert.deepEqual(Object.keys(WORKER_ART_MARKERS).sort(), ['armourer', 'cook', 'trader', 'weaponsmith']);
   assert.ok(WORKER_ART_MARKERS.cook.includes('straw-hat'));
@@ -264,11 +311,19 @@ test('production workers and items expose distinct readable art markers', () => 
   assert.deepEqual(Object.keys(ITEM_ART_MARKERS).sort(), ['armour', 'coins', 'food', 'weapon']);
 });
 
-test('placeholder unlocks have distinct cat accessories and dog tier gear', () => {
+test('unlockable fighters have distinct accessories and dog tier gear', () => {
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[3], ['calico-patches', 'yarn-ball']);
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[4], ['black-coat', 'bomb-pack']);
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[5], ['prism-coat', 'crystal-crown']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[6], ['ice-coat', 'frost-staff']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[7], ['rift-cloak', 'portal-rings']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[8], ['mirage-mask', 'phantom-double']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[9], ['storm-coat', 'lightning-rod']);
+  assert.deepEqual(CAT_ARCHETYPE_MARKERS[10], ['maestro-coat', 'conductor-baton']);
   assert.deepEqual(DOG_TIER_MARKERS[4], ['alpha-armor', 'crown']);
+  assert.deepEqual(DOG_ROLE_MARKERS.tennis, ['visor', 'tennis-ball']);
+  assert.deepEqual(DOG_ROLE_MARKERS.howler, ['sound-cone', 'purple-bandana']);
+  assert.deepEqual(DOG_ROLE_MARKERS.jumper, ['spring-boots', 'red-cape']);
 });
 
 test('homing shot path uses a sine wave while ending on the target', () => {

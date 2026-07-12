@@ -244,12 +244,12 @@ test('workers sell for one gold during prep and destroy pending output', () => {
   assert.equal(game.workers[2], null);
 });
 
-test('food heals two in live combat and is not consumed on full health', () => {
+test('food heals two in a tactics window and is not consumed on full health', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
   game = addInventoryStack(game, { kind: 'food', quantity: 2 });
-  game.phase = 'combat';
+  game.phase = 'tactics';
 
   const full = useFood(game, 0, game.cats[0].id);
   assert.equal(full, game);

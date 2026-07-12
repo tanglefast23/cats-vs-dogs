@@ -33,11 +33,11 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
 
   if (source.type === 'item' && target.kind === 'fighter') {
     if (source.itemKind === 'food') {
-      return target.hp > 0 && target.hp < target.maxHp
+      return phase === 'tactics' && target.hp > 0 && target.hp < target.maxHp
         ? { type: 'use-food', targetId: target.id }
         : invalid();
     }
-    if ((source.itemKind === 'weapon' || source.itemKind === 'armour') && (phase === 'prep' || paused)) {
+    if ((source.itemKind === 'weapon' || source.itemKind === 'armour') && (phase === 'prep' || phase === 'tactics' || paused)) {
       return { type: 'equip', targetId: target.id };
     }
     return invalid();
@@ -63,6 +63,7 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
   }
 
   if (target.kind === 'cell') {
+    if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
     if (target.occupied) {
@@ -72,12 +73,19 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
     }
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepOriginRow != null && source.prepOriginCol != null) {
+      const maxDistance = source.ability === 'melee' ? 1 : 2;
+      const distance = Math.abs(target.row - source.prepOriginRow) + Math.abs(target.col - source.prepOriginCol);
+      if (distance > maxDistance) return invalid();
+    }
     return source.type === 'bench'
       ? { type: 'place', row: target.row, col: target.col }
       : { type: 'move', row: target.row, col: target.col };
   }
 
   if (target.kind === 'bench') {
+    if (source.type !== 'shop-fighter' && source.type !== 'cat') return invalid();
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
       return source.type === 'shop-fighter'

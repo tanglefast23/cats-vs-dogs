@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   CAT_STATS,
   CAT_COAT,
+  DOG_ROLE,
   catStatsFor,
   ROWS,
   COLS,
@@ -24,6 +25,7 @@ import {
   finishRound,
   createDog,
   generateWave,
+  availableDogRolesForRound,
   buyShopCat,
   refreshShop,
   toggleSaveShopSlot,
@@ -41,6 +43,19 @@ test('desktop board uses six columns, fourteen rows, four cat rows, and two acti
   assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
   assert.equal(MAX_ROUNDS, 7);
+});
+
+test('the next-wave preview is the exact wave released when combat starts', () => {
+  const game = createGame(() => 0.25);
+  const preview = game.nextWave.map(({ id, tier, row, col }) => ({ id, tier, row, col }));
+
+  assert.equal(preview.length, 1);
+  const started = startRound(game);
+  assert.deepEqual(
+    started.dogs.map(({ id, tier, row, col }) => ({ id, tier, row, col })),
+    preview,
+  );
+  assert.deepEqual(started.nextWave, []);
 });
 
 test('SAP economy expands from three to four shop choices while resetting to ten gold', () => {
@@ -79,8 +94,8 @@ test('SAP-style cat tiers unlock on rounds one, three, five, and seven', () => {
   assert.equal(shopTierForRound(7), 4);
   assert.deepEqual(availableCatCoatsForRound(1), [0, 1, 2]);
   assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, 3]);
-  assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, 3, 4]);
-  assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);
+  assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
 test('SAP shop slots grow on rounds five and nine while fighter unlocks remain separate', () => {
@@ -99,8 +114,14 @@ test('SAP shop slots grow on rounds five and nine while fighter unlocks remain s
   assert.equal(roundSeven.length, 4);
   assert.equal(roundNine.length, 5);
   assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, CAT_COAT.CALICO]);
-  assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK]);
-  assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK, CAT_COAT.PRISM]);
+  assert.deepEqual(availableCatCoatsForRound(5), [
+    0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK,
+    CAT_COAT.FROST, CAT_COAT.RIFT, CAT_COAT.MIRAGE, CAT_COAT.STORM, CAT_COAT.ENCORE,
+  ]);
+  assert.deepEqual(availableCatCoatsForRound(7), [
+    0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK, CAT_COAT.PRISM,
+    CAT_COAT.FROST, CAT_COAT.RIFT, CAT_COAT.MIRAGE, CAT_COAT.STORM, CAT_COAT.ENCORE,
+  ]);
 });
 
 test('the round-five shop adds a fourth slot without dropping saved pets', () => {
@@ -349,13 +370,13 @@ test('Prism Sphinx beam pierces up to three dogs in its column', () => {
   assert.equal(game.dogs.find((dog) => dog.col === 4).hp, 7);
 });
 
-test('placeholder dog tiers unlock through the round-seven Alpha Hound', () => {
+test('dog tiers scale through tier four while retaining their strategic role', () => {
   assert.ok(generateWave(3, () => 0.999).some((dog) => dog.tier === 2));
   assert.ok(generateWave(5, () => 0.999).some((dog) => dog.tier === 3));
   const finalWave = generateWave(7, () => 0.999);
   const alpha = finalWave.find((dog) => dog.tier === 4);
   assert.ok(alpha);
-  assert.match(dogTooltipInfo(alpha).title, /Alpha Hound/);
+  assert.match(dogTooltipInfo(alpha).title, /^T4 /);
 });
 
 test('a dog attacks a blocking cat instead of moving through it', () => {
@@ -368,6 +389,70 @@ test('a dog attacks a blocking cat instead of moving through it', () => {
 
   assert.equal(game.dogs[0].row, 9);
   assert.equal(game.cats[0].hp, 3);
+});
+
+test('Tennis Terrier stops at range and throws a weaker tennis ball down its lane', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1 });
+  game = placeCat(game, 0, 10, 1);
+  game.cats[0].attack = 0;
+  game.dogs = [createDog(1, 7, 1, DOG_ROLE.TENNIS)];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs[0].row, 7);
+  assert.equal(game.cats[0].hp, 4);
+  assert.ok(game.events.some((event) => event.type === 'dog-shot' && event.style === 'tennis'));
+});
+
+test('Howler spends its first action buffing nearby dogs for their next bite', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1 });
+  game = placeCat(game, 0, 10, 2);
+  game.cats[0].attack = 0;
+  game.dogs = [
+    createDog(1, 10, 1, DOG_ROLE.HOWLER),
+    createDog(1, 9, 2, DOG_ROLE.SCRUFFY),
+  ];
+
+  game = resolveSection(game);
+
+  assert.equal(game.cats[0].hp, 1);
+  assert.equal(game.dogs[0].row, 10);
+  assert.ok(game.events.some((event) => event.type === 'howl'));
+});
+
+test('Fence Jumper clears one blocker but cannot jump a layered defence', () => {
+  let openLanding = createGame(() => 0.5);
+  openLanding = addCatToBench(openLanding, { level: 1 });
+  openLanding = placeCat(openLanding, 0, 10, 1);
+  openLanding.cats[0].attack = 0;
+  openLanding.dogs = [createDog(1, 9, 1, DOG_ROLE.JUMPER)];
+  openLanding = resolveSection(openLanding);
+  assert.equal(openLanding.dogs[0].row, 11);
+  assert.equal(openLanding.cats[0].hp, 6);
+  assert.ok(openLanding.events.some((event) => event.type === 'dog-jump'));
+
+  let layered = createGame(() => 0.5);
+  layered = addCatToBench(layered, { level: 1 });
+  layered = addCatToBench(layered, { level: 1 });
+  layered = placeCat(layered, 0, 10, 1);
+  layered = placeCat(layered, 0, 11, 1);
+  layered.cats.forEach((cat) => { cat.attack = 0; });
+  layered.dogs = [createDog(1, 9, 1, DOG_ROLE.JUMPER)];
+  layered = resolveSection(layered);
+  assert.equal(layered.dogs[0].row, 9);
+  assert.equal(layered.cats.find((cat) => cat.row === 10).hp, 3);
+});
+
+test('special dog roles unlock gradually and debut in their first eligible wave', () => {
+  assert.deepEqual(availableDogRolesForRound(1), [DOG_ROLE.SCRUFFY]);
+  assert.deepEqual(availableDogRolesForRound(3), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS]);
+  assert.deepEqual(availableDogRolesForRound(4), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER]);
+  assert.deepEqual(availableDogRolesForRound(5), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER, DOG_ROLE.JUMPER]);
+  assert.ok(generateWave(3, () => 0).some((dog) => dog.role === DOG_ROLE.TENNIS));
+  assert.ok(generateWave(4, () => 0).some((dog) => dog.role === DOG_ROLE.HOWLER));
+  assert.ok(generateWave(5, () => 0).some((dog) => dog.role === DOG_ROLE.JUMPER));
 });
 
 test('a breach spends one life and Super Cat clears that column', () => {

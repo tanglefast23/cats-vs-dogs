@@ -24,6 +24,11 @@ export const CAT_ARCHETYPE_MARKERS = {
   3: ['calico-patches', 'yarn-ball'],
   4: ['black-coat', 'bomb-pack'],
   5: ['prism-coat', 'crystal-crown'],
+  6: ['ice-coat', 'frost-staff'],
+  7: ['rift-cloak', 'portal-rings'],
+  8: ['mirage-mask', 'phantom-double'],
+  9: ['storm-coat', 'lightning-rod'],
+  10: ['maestro-coat', 'conductor-baton'],
 };
 
 export const DOG_TIER_MARKERS = {
@@ -31,6 +36,13 @@ export const DOG_TIER_MARKERS = {
   2: ['steel-helmet'],
   3: ['bruiser-plates'],
   4: ['alpha-armor', 'crown'],
+};
+
+export const DOG_ROLE_MARKERS = {
+  scruffy: ['plain-collar'],
+  tennis: ['visor', 'tennis-ball'],
+  howler: ['sound-cone', 'purple-bandana'],
+  jumper: ['spring-boots', 'red-cape'],
 };
 
 export const WORKER_ART_MARKERS = {
@@ -56,6 +68,11 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
     ['#f2d7a7', '#fff0ce', '#a84f35'],
     ['#2f3540', '#697482', '#151923'],
     ['#9f71d8', '#d9c7ff', '#593c91'],
+    ['#8fd3e8', '#e5fbff', '#3f7f9f'],
+    ['#6044a5', '#b9a7ff', '#2a205f'],
+    ['#dca4e8', '#fff0ff', '#79528f'],
+    ['#536675', '#a8c7d4', '#252f3a'],
+    ['#b8444c', '#f1c083', '#632733'],
   ];
   const [fur, light, dark] = coats[coat % coats.length];
   const outline = '#172b36';
@@ -98,6 +115,30 @@ export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
   if (coat === 5) {
     px(ctx, outline, 10, 1, 14, 6); px(ctx, '#60e6ed', 11, 2, 3, 4); px(ctx, '#f0a8ff', 15, 0, 4, 6); px(ctx, '#60e6ed', 20, 2, 3, 4);
     px(ctx, outline, 14, 20, 6, 6); px(ctx, '#79f5ff', 15, 21, 4, 4); px(ctx, '#fff', 16, 21, 2, 2);
+  }
+  if (coat === 6) {
+    px(ctx, outline, 3, 7, 3, 21); px(ctx, '#8eefff', 4, 8, 1, 19);
+    px(ctx, outline, 1, 3, 7, 7); px(ctx, '#dfffff', 2, 4, 5, 5); px(ctx, '#65cce8', 4, 1, 2, 11);
+    px(ctx, '#dfffff', 1, 6, 8, 2); px(ctx, outline, 11, 2, 12, 5); px(ctx, '#8eefff', 12, 2, 3, 4); px(ctx, '#dfffff', 17, 0, 2, 6); px(ctx, '#8eefff', 21, 2, 2, 4);
+  }
+  if (coat === 7) {
+    px(ctx, outline, 4, 16, 7, 12); px(ctx, '#33206f', 5, 17, 5, 10); px(ctx, '#8e72eb', 6, 18, 2, 8);
+    px(ctx, '#5ff4ef', 1, 12, 2, 9); px(ctx, '#9b7cff', 3, 10, 2, 13);
+    px(ctx, '#5ff4ef', 27, 11, 2, 10); px(ctx, '#9b7cff', 29, 13, 2, 7);
+  }
+  if (coat === 8) {
+    px(ctx, '#9cebf1', 2, 9, 5, 12); px(ctx, '#d8a9e8', 3, 7, 4, 4); px(ctx, '#8bcbd8', 1, 15, 5, 8);
+    px(ctx, outline, 9, 9, 16, 6); px(ctx, '#6e3f82', 10, 10, 14, 4); px(ctx, '#f3d8ff', 12, 11, 2, 1); px(ctx, '#f3d8ff', 21, 11, 2, 1);
+  }
+  if (coat === 9) {
+    px(ctx, outline, 26, 4, 3, 24); px(ctx, '#d6e4e8', 27, 5, 1, 22);
+    px(ctx, '#ffe35f', 22, 0, 7, 3); px(ctx, '#ffe35f', 20, 2, 6, 5); px(ctx, '#f59d37', 23, 6, 4, 5); px(ctx, '#ffe35f', 20, 10, 5, 3);
+    px(ctx, '#344552', 10, 18, 14, 9); px(ctx, '#80d8e8', 15, 19, 4, 6);
+  }
+  if (coat === 10) {
+    px(ctx, outline, 9, 0, 16, 7); px(ctx, '#402337', 10, 1, 14, 5); px(ctx, '#f1c083', 11, 4, 12, 2);
+    px(ctx, '#6e2635', 9, 18, 16, 10); px(ctx, '#f1c083', 16, 19, 2, 7);
+    px(ctx, outline, 26, 7, 2, 18); px(ctx, '#f5e6c8', 27, 7, 1, 17); px(ctx, '#ffe56e', 25, 5, 4, 4);
   }
   // Level equipment is deliberately bold enough to read at board scale.
   if (level === 1 && coat <= 2) {
@@ -191,7 +232,7 @@ export function drawItem(canvas, kind = 'food', tier = 1) {
   }
 }
 
-export function drawDog(canvas, tier = 1) {
+export function drawDog(canvas, tier = 1, role = 'scruffy') {
   const ctx = prepare(canvas);
   const outline = '#172b36';
   const dogCoats = {
@@ -227,6 +268,20 @@ export function drawDog(canvas, tier = 1) {
     px(ctx, outline, 8, 14, 18, 13); px(ctx, '#623f78', 9, 15, 16, 11); px(ctx, '#d85c75', 11, 16, 12, 3);
     px(ctx, '#f2cf4a', 9, 1, 4, 5); px(ctx, '#f2cf4a', 15, 0, 4, 6); px(ctx, '#f2cf4a', 21, 1, 4, 5);
     px(ctx, '#fff0a1', 16, 1, 2, 2);
+  }
+  if (role === 'tennis') {
+    // Green visor and an unmistakable tennis ball beside the muzzle.
+    px(ctx, outline, 8, 4, 17, 4); px(ctx, '#4f9f62', 9, 4, 15, 3); px(ctx, '#baf06f', 20, 6, 8, 2);
+    px(ctx, outline, 25, 17, 7, 7); px(ctx, '#cfea4c', 26, 18, 5, 5); px(ctx, '#fff5a0', 27, 18, 1, 5);
+  } else if (role === 'howler') {
+    // Purple bandana plus stepped sound waves leaving the raised muzzle.
+    px(ctx, outline, 7, 20, 19, 5); px(ctx, '#784b9c', 8, 21, 17, 3); px(ctx, '#b96ac4', 23, 23, 6, 4);
+    px(ctx, '#ffe56e', 2, 8, 2, 3); px(ctx, '#ffe56e', 0, 6, 2, 7); px(ctx, '#d9a84a', 4, 10, 2, 2);
+  } else if (role === 'jumper') {
+    // Red cape and bright spring boots make the leap threat readable at board scale.
+    px(ctx, outline, 4, 14, 6, 13); px(ctx, '#c94b46', 5, 15, 5, 10); px(ctx, '#f0775f', 5, 16, 2, 7);
+    px(ctx, '#f3cb45', 8, 26, 8, 3); px(ctx, '#f3cb45', 19, 26, 9, 3);
+    px(ctx, outline, 9, 29, 7, 2); px(ctx, outline, 21, 29, 7, 2);
   }
 }
 
@@ -267,11 +322,4 @@ export function drawBackyard(canvas) {
     px(ctx, i % 2 ? '#f4c95c' : '#e87a70', x - 2, y, 5, 3);
     px(ctx, '#fff0a8', x, y, 1, 1);
   });
-  // Porch at bottom.
-  const porchY = h - 12;
-  px(ctx, '#59413a', 0, porchY, w, 12);
-  for (let x = 0; x < w; x += 20) {
-    px(ctx, '#8c6250', x, porchY + 1, 18, 10);
-    px(ctx, '#b17c5d', x + 2, porchY + 2, 14, 2);
-  }
 }

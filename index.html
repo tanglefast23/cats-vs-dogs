@@ -10,33 +10,30 @@
 </head>
 <body>
   <main class="game-shell">
-    <aside class="production-panel" aria-label="Production Yard">
-      <div class="production-heading">
-        <span class="tiny-label">WORKERS · MATCH 3 TO EVOLVE</span>
-        <h2>Production Yard <small id="worker-count">0/6</small></h2>
-      </div>
-      <div id="production-grid" class="production-grid" aria-label="Production workers and stations"></div>
-
-      <section class="inventory-panel" aria-label="Item inventory">
-        <div class="panel-heading compact">
-          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/9</small></h2></div>
-        </div>
-        <div id="inventory" class="inventory-grid"></div>
-      </section>
-      <p class="production-help">Drag workers here. Collect each station before its next production cycle replaces it.</p>
-    </aside>
 
     <section class="battle-column" aria-label="Backyard battlefield">
-      <div class="board-frame">
-        <div class="zone-label dog-label">DOG ENTRY</div>
-        <div id="board" class="board">
-          <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
-          <div id="grid" class="grid"></div>
-          <div id="effects" class="effects" aria-hidden="true"></div>
+      <div class="field-house-layout">
+        <aside class="dog-preview-wing" aria-label="Next dog wave preview">
+          <div class="preview-sign">
+            <span class="tiny-label">SCOUT REPORT</span>
+            <strong>NEXT WAVE <small id="preview-round">ROUND 1</small></strong>
+          </div>
+          <div id="dog-preview-grid" class="dog-preview-grid"></div>
+        </aside>
+        <aside class="house-wing" aria-label="Production House">
+          <div id="production-grid" class="production-grid" aria-label="Production workers and stations"></div>
+          <span class="house-door-label">DOOR</span>
+        </aside>
+        <div class="board-frame">
+          <div class="zone-label dog-label">DOG ENTRY</div>
+          <div id="board" class="board">
+            <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
+            <div id="grid" class="grid"></div>
+            <div id="effects" class="effects" aria-hidden="true"></div>
+          </div>
+          <div id="wave-banner" class="wave-banner" role="status" hidden></div>
+          <div id="turn-tag" class="turn-tag" aria-hidden="true" hidden></div>
         </div>
-        <div class="zone-label cat-label">CAT TERRITORY</div>
-        <div id="wave-banner" class="wave-banner" role="status" hidden></div>
-        <div id="turn-tag" class="turn-tag" aria-hidden="true" hidden></div>
       </div>
     </section>
 
@@ -59,6 +56,7 @@
         <button id="speed-toggle" class="hud-chip speed-chip" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
         <button id="pause-toggle" class="hud-chip pause-chip" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
       </section>
+      <button id="glossary-open" class="glossary-open" type="button">CAT &amp; DOG GLOSSARY</button>
 
       <section id="shop-panel" class="shop-panel">
         <div class="panel-heading">
@@ -76,18 +74,45 @@
         <div id="bench" class="bench-grid"></div>
       </section>
 
+      <section class="inventory-panel control-inventory" aria-label="Item inventory">
+        <div class="panel-heading compact">
+          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/9</small></h2></div>
+        </div>
+        <div id="inventory" class="inventory-grid"></div>
+        <p class="production-help">Collect output from the House before its next production cycle replaces it.</p>
+      </section>
+
+      <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
+        <div class="tactics-heading">
+          <span class="tiny-label">BETWEEN COMBAT EXCHANGES</span>
+          <h2>Tactics Window</h2>
+        </div>
+        <p id="tactics-help">Feed damaged cats or cast one available ability.</p>
+        <div id="active-abilities" class="active-abilities"></div>
+      </section>
+
       <section class="round-controls">
         <p id="message" class="message" role="status">Build your team, then start the round.</p>
         <button id="done" class="done-button"><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
       </section>
 
-      <section class="coat-legend-panel" aria-label="Cat coats">
-        <span class="tiny-label">CAT COATS · MATCH 3 SAME COAT + LEVEL TO EVOLVE</span>
-        <div id="coat-legend" class="coat-legend"></div>
-        <p class="legend-footnote">Fresh 10 gold each round · 3 shop cats, expanding to 4 on round 5 · new coats unlock on rounds 3 · 5 · 7 · <b>Save</b> keeps a shop pet through rolls</p>
-      </section>
+
     </aside>
   </main>
+
+  <div id="glossary-modal" class="glossary-modal" hidden>
+    <section class="glossary-card" role="dialog" aria-modal="true" aria-labelledby="glossary-title">
+      <header class="glossary-header">
+        <div>
+          <p class="eyebrow">FIELD GUIDE · GAME PAUSED</p>
+          <h2 id="glossary-title">Cat &amp; Dog Glossary</h2>
+        </div>
+        <button id="glossary-close" class="icon-button" aria-label="Close glossary" title="Close">×</button>
+      </header>
+      <nav id="glossary-tabs" class="glossary-tabs" aria-label="Glossary rosters"></nav>
+      <div id="glossary-grid" class="glossary-grid" aria-live="polite"></div>
+    </section>
+  </div>
 
   <div id="settings-modal" class="settings-modal" hidden>
     <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">

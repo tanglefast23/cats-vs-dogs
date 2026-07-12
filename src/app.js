@@ -1,14 +1,15 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_ROUNDS, ACTIONS_PER_ROUND,
-  CAT_COAT_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
+  CAT_COAT_INFO, DOG_STATS, DOG_ROLE_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
+  openTacticsWindow, continueCombat, useActiveAbility,
   shopTierForRound, purchaseShopFighterToBench, purchaseShopFighterToBoard,
   purchaseShopFighterOnto, purchaseShopWorker, moveWorker, mergeWorkerOnto,
   collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
@@ -22,6 +23,12 @@ let dragState = null;
 let suppressNextPetClick = false;
 let dragHoverElement = null;
 let pendingUpgrade = null;
+let activeTargeting = null;
+let glossaryTab = 'battle';
+let manualPaused = false;
+let glossaryPaused = false;
+let pausedAnimations = [];
+let resumeWaiters = [];
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -54,11 +61,13 @@ const $ = (selector) => document.querySelector(selector);
 const shopEl = $('#shop');
 const benchEl = $('#bench');
 const productionEl = $('#production-grid');
+const dogPreviewEl = $('#dog-preview-grid');
 const inventoryEl = $('#inventory');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
 const settingsModalEl = $('#settings-modal');
+const glossaryModalEl = $('#glossary-modal');
 const soundToggleEl = $('#setting-sound');
 
 let tooltipEl = document.querySelector('.unit-tooltip');
@@ -152,7 +161,7 @@ function unitCanvas(type, unit) {
   canvas.width = 32;
   canvas.height = 32;
   if (type === 'cat') drawCat(canvas, unit.level, unit.coat);
-  else if (type === 'dog') drawDog(canvas, unit.tier);
+  else if (type === 'dog') drawDog(canvas, unit.tier, unit.role);
   else if (type === 'worker') drawWorker(canvas, unit.role, unit.level);
   else if (type === 'station') drawStation(canvas, unit.role);
   else if (type === 'item') drawItem(canvas, unit.kind, unit.tier ?? 1);
@@ -370,7 +379,16 @@ function dragSource(type, cat) {
   if (type === 'shop-fighter') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, coat: normalizeCoat(cat.coat) };
   if (type === 'worker') return { type, id: cat.id, workerIndex: cat.workerIndex, level: cat.level, role: cat.role };
   if (type === 'item') return { type, inventoryIndex: cat.inventoryIndex, itemKind: cat.kind, tier: cat.tier ?? 1 };
-  return { type, id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) };
+  return {
+    type,
+    id: cat.id,
+    level: cat.level,
+    coat: normalizeCoat(cat.coat),
+    ability: cat.ability,
+    prepOriginRow: cat.prepOriginRow,
+    prepOriginCol: cat.prepOriginCol,
+    prepMoved: cat.prepMoved,
+  };
 }
 
 function targetFromElement(element) {
@@ -503,7 +521,8 @@ function updateDragHover(clientX, clientY) {
 function bindPetDrag(anchor, type, cat) {
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || game.phase !== 'prep' || playing || dragState) return;
+    const phaseAllowsDrag = game.phase === 'prep' || (type === 'item' && game.phase === 'tactics');
+    if (event.button !== 0 || !phaseAllowsDrag || playing || dragState) return;
     const rect = anchor.getBoundingClientRect();
     dragState = {
       pointerId: event.pointerId,
@@ -740,6 +759,96 @@ function renderProduction() {
   });
 }
 
+function renderDogPreview() {
+  if (!dogPreviewEl) return;
+  dogPreviewEl.innerHTML = '';
+  const positions = [28, 27, 29, 25, 24, 26, 22, 21, 23];
+  const dogsBySlot = new Map((game.nextWave ?? []).map((dog, index) => [positions[index], dog]));
+  for (let index = 0; index < 30; index += 1) {
+    const cell = document.createElement('div');
+    cell.className = 'dog-preview-cell';
+    const dog = dogsBySlot.get(index);
+    if (dog) {
+      cell.classList.add('incoming');
+      cell.append(unitCanvas('dog', dog));
+      cell.insertAdjacentHTML('beforeend', `<b>T${dog.tier}</b>`);
+      bindTooltip(cell, () => dogTooltipInfo(dog));
+    }
+    dogPreviewEl.append(cell);
+  }
+  const label = $('#preview-round');
+  if (label) label.textContent = game.nextWave?.length ? `ROUND ${game.round}` : 'DEPLOYED';
+}
+
+const ACTIVE_COPY = {
+  freeze: ['FREEZE', 'Choose a dog to skip its next action.'],
+  teleport: ['PORTAL', 'Choose an ally, then any empty cat square.'],
+  decoy: ['DECOY', 'Choose an empty cat square for a phantom blocker.'],
+  storm: ['STORM', 'Choose a dog column to strike.'],
+  encore: ['ENCORE', 'Choose another cat for an immediate attack.'],
+};
+
+function renderTacticsPanel() {
+  const panel = $('#tactics-panel');
+  const host = $('#active-abilities');
+  if (!panel || !host) return;
+  panel.hidden = game.phase !== 'tactics';
+  host.innerHTML = '';
+  if (panel.hidden) return;
+  const activeCats = game.cats.filter((cat) => cat.activeAbility);
+  activeCats.forEach((cat) => {
+    const copy = ACTIVE_COPY[cat.activeAbility] ?? ['CAST', 'Choose a target.'];
+    const button = document.createElement('button');
+    button.className = `active-ability ${cat.activeUsed ? 'used' : ''} ${activeTargeting?.casterId === cat.id ? 'targeting' : ''}`;
+    button.disabled = cat.activeUsed;
+    button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
+    button.title = copy[1];
+    button.addEventListener('click', () => {
+      activeTargeting = { casterId: cat.id, mode: cat.activeAbility, targetCatId: null };
+      game.message = copy[1];
+      render();
+    });
+    host.append(button);
+  });
+  if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
+  $('#tactics-help').textContent = activeTargeting
+    ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
+    : 'Drag food or equipment onto a cat, or cast one available ability.';
+}
+
+function tryActiveTarget(row, col, cat, dog) {
+  if (game.phase !== 'tactics' || !activeTargeting) return false;
+  const targeting = activeTargeting;
+  let payload = null;
+  if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
+  else if (targeting.mode === 'storm' && dog) payload = { col };
+  else if (targeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat) payload = { row, col };
+  else if (targeting.mode === 'encore' && cat && cat.id !== targeting.casterId) payload = { targetCatId: cat.id };
+  else if (targeting.mode === 'teleport') {
+    if (!targeting.targetCatId && cat) {
+      activeTargeting = { ...targeting, targetCatId: cat.id };
+      game.message = 'Now choose any empty cat-territory square.';
+      render();
+      return true;
+    }
+    if (targeting.targetCatId && row >= CAT_ZONE_START && !cat) payload = { targetCatId: targeting.targetCatId, row, col };
+  }
+  if (!payload) {
+    game.message = ACTIVE_COPY[targeting.mode]?.[1] ?? 'That is not a valid target.';
+    renderHud();
+    return true;
+  }
+  const before = game;
+  game = useActiveAbility(game, targeting.casterId, payload);
+  if (game !== before) {
+    activeTargeting = null;
+    $('#board')?.classList.add('ability-cast');
+    window.setTimeout(() => $('#board')?.classList.remove('ability-cast'), 420);
+  }
+  render();
+  return true;
+}
+
 function renderBoard() {
   gridEl.innerHTML = '';
   for (let row = 0; row < ROWS; row += 1) {
@@ -750,6 +859,7 @@ function renderBoard() {
       cell.dataset.col = col;
       const cat = game.cats.find((unit) => unit.row === row && unit.col === col);
       const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
+      const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
       const zone = row >= CAT_ZONE_START ? 'cat territory' : row === CAT_ZONE_START - 1 ? 'sidewalk' : 'dog yard';
       cell.setAttribute('aria-label', cat
         ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP, row ${row + 1} column ${col + 1}`
@@ -766,12 +876,42 @@ function renderBoard() {
         cell.append(dogMarkup(dog));
         cell.classList.add('has-unit');
         bindTooltip(cell, () => dogTooltipInfo(dog));
+      } else if (decoy) {
+        const visual = unitCanvas('cat', { level: 1, coat: 8 });
+        visual.classList.add('decoy-unit');
+        cell.append(visual);
+        cell.classList.add('has-unit', 'has-decoy');
+      }
+      if (activeTargeting) {
+        const validActiveTarget = (activeTargeting.mode === 'freeze' && dog)
+          || (activeTargeting.mode === 'storm' && dog)
+          || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat && !decoy)
+          || (activeTargeting.mode === 'encore' && cat && cat.id !== activeTargeting.casterId)
+          || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && cat)
+          || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !decoy);
+        if (validActiveTarget) cell.classList.add('ability-target');
+      }
+      // A click-selected cat lights the same targets, the same way, a drag would.
+      if (!activeTargeting && selected && game.phase === 'prep' && !playing) {
+        const selectedUnit = selected.type === 'bench'
+          ? game.bench.find((entry) => entry.id === selected.id)
+          : selected.type === 'cat' ? game.cats.find((entry) => entry.id === selected.id) : null;
+        if (selectedUnit) {
+          const descriptor = {
+            kind: 'cell', row, col,
+            occupied: cat ? { id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) } : null,
+          };
+          if (dropAction({ ...selectedUnit, type: selected.type }, descriptor).type !== 'invalid') {
+            cell.classList.add('drag-valid');
+          }
+        }
       }
       cell.addEventListener('click', () => {
         if (suppressNextPetClick) {
           suppressNextPetClick = false;
           return;
         }
+        if (tryActiveTarget(row, col, cat, dog)) return;
         if (game.phase !== 'prep' || playing) return;
         if (cat) {
           if (!tryMerge('cat', cat.id)) selectCat('cat', cat);
@@ -844,7 +984,6 @@ function renderHud() {
   $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
-  $('#worker-count').textContent = `${game.workers.filter(Boolean).length}/6`;
   $('#inventory-count').textContent = `${game.inventory.filter(Boolean).length}/9`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
@@ -857,8 +996,11 @@ function renderHud() {
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const returnButton = $('#return-bench');
   returnButton.disabled = game.phase !== 'prep' || selected?.type !== 'cat' || game.bench.length >= BENCH_SIZE;
-  $('#done').disabled = game.phase !== 'prep' || playing || game.cats.length === 0;
-  $('#done-label').textContent = game.cats.length ? `START ROUND ${game.round}` : 'PLACE A CAT FIRST';
+  const canContinueTactics = game.phase === 'tactics';
+  $('#done').disabled = playing || (!canContinueTactics && (game.phase !== 'prep' || game.cats.length === 0));
+  $('#done-label').textContent = canContinueTactics
+    ? 'CONTINUE FIGHT'
+    : game.cats.length ? `START ROUND ${game.round}` : 'PLACE A CAT FIRST';
   $('#shop-panel').style.opacity = game.phase === 'prep' ? '1' : '.62';
   $('#bench-panel').style.opacity = game.phase === 'prep' ? '1' : '.62';
 }
@@ -883,8 +1025,8 @@ function showHit(event, { heavy = false } = {}) {
   playHit({ heavy });
   const target = findUnitElement(event.to);
   const burst = effectAt('impact-burst', event.toRow, event.col);
-  // 'melee' is a dog biting a cat; everything else is damage the player dealt.
-  const tone = event.type === 'melee' ? '' : ' to-dog';
+  // Dog bites and tennis shots hurt cats; cat attacks use the opposing damage tone.
+  const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
   const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
   if (target) {
     target.classList.remove('hurt');
@@ -998,6 +1140,30 @@ async function animateMove(event) {
   await movement.finished.catch(() => {});
 }
 
+async function animateDogJump(event) {
+  const dog = findUnitElement(event.id);
+  if (!dog) return;
+  dog.classList.add('dog-jumping');
+  const movement = dog.animate([
+    { transform: 'translateY(0) scale(1)' },
+    { transform: 'translateY(70%) scale(1.16) rotate(-8deg)', offset: 0.46 },
+    { transform: 'translateY(200%) scale(1) rotate(0deg)' },
+  ], { duration: Math.round(timing.movePauseMs * 1.45), easing: 'steps(6)', fill: 'forwards' });
+  await movement.finished.catch(() => {});
+  dog.classList.remove('dog-jumping');
+}
+
+async function animateHowl(event) {
+  const dog = findUnitElement(event.id);
+  const pulse = effectAt('howl-effect', event.row, event.col, `HOWL! +${event.bonus}`);
+  dog?.classList.add('dog-howling');
+  event.targets?.forEach((id) => findUnitElement(id)?.classList.add('pack-buffed'));
+  await wait(Math.round(timing.meleeMs * 1.25));
+  dog?.classList.remove('dog-howling');
+  event.targets?.forEach((id) => findUnitElement(id)?.classList.remove('pack-buffed'));
+  pulse.remove();
+}
+
 async function animateHeal(event) {
   const target = findUnitElement(event.to);
   const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
@@ -1042,7 +1208,10 @@ async function animateEvents(events) {
   const shots = events.filter((event) => event.type === 'shot');
   const catMelee = events.filter((event) => event.type === 'cat-melee');
   const melee = events.filter((event) => event.type === 'melee');
+  const dogShots = events.filter((event) => event.type === 'dog-shot');
   const moves = events.filter((event) => event.type === 'move');
+  const jumps = events.filter((event) => event.type === 'dog-jump');
+  const howls = events.filter((event) => event.type === 'howl');
   const heals = events.filter((event) => event.type === 'heal');
   const superCats = events.filter((event) => event.type === 'super-cat');
 
@@ -1052,9 +1221,13 @@ async function animateEvents(events) {
     ...catMelee.map(animateCatScratch),
     ...heals.map(animateHeal),
   ]);
-  if (melee.length || moves.length) setTurnTag('dogs');
-  await Promise.all(melee.map((event) => animateMelee(event, 'down')));
-  await Promise.all(moves.map(animateMove));
+  if (melee.length || dogShots.length || moves.length || jumps.length || howls.length) setTurnTag('dogs');
+  await Promise.all([
+    ...melee.map((event) => animateMelee(event, 'down')),
+    ...dogShots.map((event, index) => animateShot(event, index)),
+    ...howls.map(animateHowl),
+  ]);
+  await Promise.all([...moves.map(animateMove), ...jumps.map(animateDogJump)]);
   await Promise.all(superCats.map(animateSuperCat));
   setTurnTag(null);
   effectsEl.innerHTML = '';
@@ -1069,14 +1242,39 @@ function showResult() {
   modalEl.hidden = false;
 }
 
+function renderProductionLegend() {
+  const host = $('#production-legend');
+  if (!host) return;
+  host.innerHTML = '';
+  productionLegendRows(WORKER_INFO).forEach((entry) => {
+    const info = WORKER_INFO[entry.role];
+    const row = document.createElement('div');
+    row.className = 'legend-row production-legend-row';
+    row.title = `${info.blurb}. Produces after each completed battle.`;
+    const canvas = document.createElement('canvas');
+    drawWorker(canvas, entry.role, 1);
+    const name = document.createElement('b');
+    name.textContent = entry.name;
+    const role = document.createElement('span');
+    role.textContent = entry.description;
+    row.append(canvas, name, role);
+    host.append(row);
+  });
+}
+
 /** Legend row per coat: sprite, name, five-word role, and the unlock round when locked. */
 const COAT_ROLE_WORDS = {
   0: 'bursts down its own lane',
   1: 'blocks & bites · extra HP',
   2: 'homing shot, nearest lane',
-  3: 'homing yarn · heals itself',
+  3: 'yarn tangles the next dog move',
   4: 'bomb + splash beside target',
   5: 'beam pierces 3 in its lane',
+  6: 'active · freeze one dog',
+  7: 'active · teleport an ally',
+  8: 'active · summon a decoy',
+  9: 'active · storm one column',
+  10: 'active · grant ally encore',
 };
 
 function renderLegend() {
@@ -1108,13 +1306,136 @@ function renderLegend() {
   });
 }
 
+function isGamePaused() {
+  return manualPaused || glossaryPaused;
+}
+
+function syncPauseState() {
+  const paused = isGamePaused();
+  const pauseButton = $('#pause-toggle');
+  pauseButton?.classList.toggle('is-paused', paused);
+  pauseButton?.setAttribute('aria-pressed', String(paused));
+  if ($('#pause-label')) $('#pause-label').textContent = paused ? '▶' : 'Ⅱ';
+  if (paused && pausedAnimations.length === 0) {
+    pausedAnimations = document.getAnimations().filter((animation) => animation.playState === 'running');
+    pausedAnimations.forEach((animation) => animation.pause());
+  } else if (!paused) {
+    pausedAnimations.forEach((animation) => animation.play());
+    pausedAnimations = [];
+    resumeWaiters.splice(0).forEach((resolve) => resolve());
+  }
+}
+
+function waitForResume() {
+  return isGamePaused() ? new Promise((resolve) => resumeWaiters.push(resolve)) : Promise.resolve();
+}
+
+function glossaryCard({ kind, key, name, kicker, stats, description, note }) {
+  const card = document.createElement('article');
+  card.className = `glossary-entry ${kind}`;
+  const canvas = document.createElement('canvas');
+  if (kind === 'battle') drawCat(canvas, 1, key);
+  else if (kind === 'production') drawWorker(canvas, key, 1);
+  else drawDog(canvas, 1, key);
+  const copy = document.createElement('div');
+  copy.innerHTML = `<small>${kicker}</small><h3>${name}</h3><b>${stats}</b><p>${description}</p>${note ? `<em>${note}</em>` : ''}`;
+  card.append(canvas, copy);
+  return card;
+}
+
+function renderGlossary() {
+  const tabs = $('#glossary-tabs');
+  const grid = $('#glossary-grid');
+  if (!tabs || !grid) return;
+  tabs.innerHTML = '';
+  glossaryTabs(glossaryTab).forEach((tab) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = tab.active ? 'active' : '';
+    button.textContent = tab.label;
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', String(tab.active));
+    button.addEventListener('click', () => {
+      glossaryTab = tab.id;
+      renderGlossary();
+    });
+    tabs.append(button);
+  });
+  grid.innerHTML = '';
+  if (glossaryTab === 'battle') {
+    Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
+      const coat = Number(coatKey);
+      const stats = catStatsFor(1, coat);
+      const round = info.shopTier * 2 - 1;
+      grid.append(glossaryCard({
+        kind: 'battle', key: coat, name: info.name,
+        kicker: `BATTLE CAT · ${round === 1 ? 'STARTER' : `UNLOCKS ROUND ${round}`}`,
+        stats: `♥ ${stats.hp} · ↑ ${stats.attack}`,
+        description: info.attackDetail,
+        note: 'Match 3 of the same cat and level to evolve.',
+      }));
+    });
+  } else if (glossaryTab === 'production') {
+    Object.entries(WORKER_INFO).forEach(([role, info]) => {
+      const outputs = [1, 2, 3].map((level) => {
+        const output = info.output[level];
+        return `L${level}: ${output.quantity} ${output.kind}`;
+      }).join(' · ');
+      grid.append(glossaryCard({
+        kind: 'production', key: role, name: info.name,
+        kicker: `PRODUCTION CAT · ${info.station.toUpperCase()}`,
+        stats: outputs,
+        description: `${info.blurb}. Produces after each completed battle.`,
+        note: 'Lives in the House. Match 3 of the same role and level to evolve.',
+      }));
+    });
+  } else {
+    Object.entries(DOG_ROLE_INFO).forEach(([role, info]) => {
+      const stats = DOG_STATS[1];
+      const roleStat = role === 'tennis'
+        ? `BALL ${Math.ceil(stats.attack * 0.6)}`
+        : role === 'howler'
+          ? 'HOWL +2'
+          : role === 'jumper' ? 'JUMP 1×' : `BITE ${stats.attack}`;
+      grid.append(glossaryCard({
+        kind: 'dogs', key: role, name: info.name,
+        kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS ROUND ${info.unlockRound}`}`,
+        stats: `♥ ${stats.hp} · ${roleStat}${role === 'scruffy' ? '' : ` · BITE ${stats.attack}`}`,
+        description: info.attackDetail,
+        note: `${info.blurb} Higher tiers increase HP and attack without changing this role.`,
+      }));
+    });
+  }
+}
+
+function openGlossary() {
+  hideUnitTooltip();
+  glossaryTab = 'battle';
+  glossaryPaused = true;
+  renderGlossary();
+  if (glossaryModalEl) glossaryModalEl.hidden = false;
+  syncPauseState();
+  $('#glossary-close')?.focus();
+}
+
+function closeGlossary() {
+  if (!glossaryModalEl || glossaryModalEl.hidden) return;
+  glossaryModalEl.hidden = true;
+  glossaryPaused = false;
+  syncPauseState();
+  $('#glossary-open')?.focus();
+}
+
 function render() {
   hideUnitTooltip();
   renderShop();
   renderProduction();
+  renderDogPreview();
   renderBoard();
   renderBench();
   renderHud();
+  renderTacticsPanel();
+  renderProductionLegend();
   renderLegend();
   playPendingUpgrade();
 }
@@ -1134,45 +1455,44 @@ function announceWave() {
   const banner = $('#wave-banner');
   if (!banner) return;
   const fresh = game.dogs.filter((dog) => dog.row === 0);
-  const tough = fresh.filter((dog) => dog.tier >= 2).length;
-  const plain = fresh.length - tough;
-  const parts = [];
-  if (plain) parts.push(`${plain} DOG${plain === 1 ? '' : 'S'}`);
-  if (tough) parts.push(`<b>+ ${tough} TOUGH</b>`);
-  banner.innerHTML = `WAVE ${game.round} · ${parts.join(' ') || 'INCOMING'}`;
+  const roleCounts = fresh.reduce((counts, dog) => {
+    counts[dog.role] = (counts[dog.role] ?? 0) + 1;
+    return counts;
+  }, {});
+  const parts = Object.entries(roleCounts).map(([role, count]) => {
+    const name = DOG_ROLE_INFO[role]?.name ?? 'Dog';
+    return `${count > 1 ? `${count}× ` : ''}${name.toUpperCase()}`;
+  });
+  banner.innerHTML = `WAVE ${game.round} · ${parts.join(' + ') || 'INCOMING'}`;
   banner.hidden = false;
   window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
 }
 
 async function playRound() {
-  if (playing || game.phase !== 'prep' || game.cats.length === 0) return;
+  if (playing || isGamePaused() || (game.phase !== 'prep' && game.phase !== 'tactics')) return;
+  if (game.phase === 'prep' && game.cats.length === 0) return;
+  const startingRound = game.phase === 'prep';
   playing = true;
   selected = null;
-  game = startRound(game);
-  render();
-  announceWave();
-  await wait(Math.round(650 / combatSpeed));
-
-  for (let action = 0; action < ACTIONS_PER_ROUND; action += 1) {
-    if (game.phase !== 'combat') break;
-    // Board already clear mid-level: stop early and go to the next wave / victory check.
-    if (game.dogs.length === 0) break;
-    await runCombatSection();
-    if (game.phase === 'gameover' || game.phase === 'victory') break;
+  activeTargeting = null;
+  if (startingRound) {
+    game = startRound(game);
+    render();
+    announceWave();
+    await wait(Math.round(650 / combatSpeed));
+    await waitForResume();
+  } else {
+    game = continueCombat(game);
+    render();
   }
 
-  // Final wave: keep fighting past the normal 2 actions until dogs are cleared or lives hit 0.
-  while (
-    game.phase === 'combat'
-    && game.round >= MAX_ROUNDS
-    && game.dogs.length > 0
-    && game.lives > 0
-  ) {
-    await runCombatSection();
-    if (game.phase === 'gameover' || game.phase === 'victory') break;
+  await waitForResume();
+  if (game.phase === 'combat' && game.dogs.length > 0) await runCombatSection();
+  if (game.phase === 'combat') {
+    const needsAnotherExchange = game.dogs.length > 0
+      && (game.round >= MAX_ROUNDS || game.section < ACTIONS_PER_ROUND);
+    game = needsAnotherExchange ? openTacticsWindow(game) : finishRound(game);
   }
-
-  if (game.phase === 'combat') game = finishRound(game);
   playing = false;
   render();
   if (game.phase === 'victory' || game.phase === 'gameover') {
@@ -1200,6 +1520,10 @@ function resetGame() {
   game = createGame();
   selected = null;
   playing = false;
+  manualPaused = false;
+  glossaryPaused = false;
+  if (glossaryModalEl) glossaryModalEl.hidden = true;
+  syncPauseState();
   modalEl.hidden = true;
   render();
 }
@@ -1256,6 +1580,17 @@ $('#speed-toggle')?.addEventListener('click', () => {
   game.message = combatSpeed === 2 ? 'Combat speed 2× — replays fly by.' : 'Combat speed 1×.';
   renderHud();
 });
+$('#pause-toggle')?.addEventListener('click', () => {
+  manualPaused = !manualPaused;
+  syncPauseState();
+  game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
+  renderHud();
+});
+$('#glossary-open')?.addEventListener('click', openGlossary);
+$('#glossary-close')?.addEventListener('click', closeGlossary);
+glossaryModalEl?.addEventListener('click', (event) => {
+  if (event.target === glossaryModalEl) closeGlossary();
+});
 $('#settings')?.addEventListener('click', () => { unlockAudio(); openSettings(); });
 $('#settings-close')?.addEventListener('click', closeSettings);
 settingsModalEl?.addEventListener('click', (event) => {
@@ -1268,7 +1603,9 @@ soundToggleEl?.addEventListener('change', () => {
   renderHud();
 });
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && settingsModalEl && !settingsModalEl.hidden) closeSettings();
+  if (event.key !== 'Escape') return;
+  if (glossaryModalEl && !glossaryModalEl.hidden) closeGlossary();
+  else if (settingsModalEl && !settingsModalEl.hidden) closeSettings();
 });
 
 
