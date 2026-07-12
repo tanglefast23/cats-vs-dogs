@@ -159,6 +159,21 @@ export function playHit({ heavy = false } = {}) {
   noiseBurst({ duration: 0.05, volume: 0.04, filterFreq: 1800 });
 }
 
+/** Bright two-stage pickup chime for production output collection. */
+export function playCollection(kind = 'item') {
+  if (!soundEnabled) return;
+  const coin = kind === 'coins';
+  tone({ frequency: coin ? 740 : 520, slideTo: coin ? 1040 : 720, duration: 0.11, type: 'square', volume: 0.055, attack: 0.002, decay: 0.045 });
+  later(85, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: coin ? 1180 : 880, slideTo: coin ? 1540 : 1120, duration: 0.16, type: 'triangle', volume: 0.065, attack: 0.003, decay: 0.07 });
+  });
+  later(170, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: coin ? 1580 : 1320, duration: 0.12, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.06 });
+  });
+}
+
 export function isAudioUnlocked() {
   return unlocked && Boolean(audioCtx) && audioCtx.state === 'running';
 }

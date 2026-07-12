@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -11,6 +11,25 @@ import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-
 import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
+
+test('next-wave dogs fill from top-left in chronological and left-to-right order', () => {
+  const laterLeft = { id: 'later-left', appearanceIndex: 1, col: 0 };
+  const nowRight = { id: 'now-right', appearanceIndex: 0, col: 5 };
+  const nowLeft = { id: 'now-left', appearanceIndex: 0, col: 1 };
+
+  assert.deepEqual(
+    dogPreviewQueue([laterLeft, nowRight, nowLeft]).map((dog) => dog.id),
+    ['now-left', 'now-right', 'later-left'],
+  );
+});
+
+test('production collection feedback targets matching storage, empty storage, or gold', () => {
+  const inventory = [{ kind: 'food', quantity: 2 }, null, { kind: 'weapon', tier: 1, quantity: 1 }];
+  assert.deepEqual(productionCollectionDestination(inventory, { kind: 'food', quantity: 1 }), { type: 'storage', index: 0 });
+  assert.deepEqual(productionCollectionDestination(inventory, { kind: 'armour', tier: 1, quantity: 1 }), { type: 'storage', index: 1 });
+  assert.deepEqual(productionCollectionDestination(inventory, { kind: 'coins', quantity: 2 }), { type: 'gold', index: null });
+  assert.equal(productionCollectionDestination(inventory.map(() => ({ kind: 'blocked' })), { kind: 'food' }), null);
+});
 
 test('zero-gold shop cats stay interactive and readable while purchase is rejected', () => {
   const availability = shopPetAvailability({
@@ -243,6 +262,32 @@ test('food and equipment target cats only during a tactics window', () => {
   }), { type: 'equip', targetId: 'cat-1' });
 });
 
+test('only sellable owned cats route into the adoption box during prep', () => {
+  const target = { kind: 'sell' };
+  const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 'cat-1', level: 2, sellable: true, sellValue: 2 },
+  }), { type: 'sell', value: 2 });
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'bench', id: 'cat-2', level: 1, sellable: true, sellValue: 1 },
+  }), { type: 'sell', value: 1 });
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'shop-fighter', id: 'shop-1', sellable: true, sellValue: 1 },
+  }), { type: 'invalid' });
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 'cat-3', level: 1, sellable: false, sellValue: 1 },
+  }), { type: 'invalid' });
+  assert.deepEqual(getDropAction({
+    ...common,
+    phase: 'combat',
+    source: { type: 'cat', id: 'cat-4', level: 1, sellable: true, sellValue: 1 },
+  }), { type: 'invalid' });
+});
+
 test('successful placement feedback keeps only forty percent of its former impact', () => {
   assert.equal(DROP_IMPACT.intensity, 0.4);
   assert.equal(DROP_IMPACT.boardShakePx, 1.2);
@@ -287,10 +332,10 @@ test('level two and three cats have progressively stronger visible equipment set
 
 test('production legend lists every worker with a concise economy role', () => {
   assert.deepEqual(productionLegendRows(WORKER_INFO), [
-    { role: 'cook', name: 'COOK', description: 'cooks healing food' },
-    { role: 'trader', name: 'TRADER', description: 'earns bonus coins' },
-    { role: 'weaponsmith', name: 'SMITH', description: 'forges attack weapons' },
-    { role: 'armourer', name: 'ARMOURER', description: 'makes bite-blocking armour' },
+    { role: 'cook', name: 'BISCUIT', description: 'cooks healing food' },
+    { role: 'trader', name: 'CASHMERE', description: 'earns bonus coins' },
+    { role: 'weaponsmith', name: 'HAMMER', description: 'forges attack weapons' },
+    { role: 'armourer', name: 'PAWLADIN', description: 'makes bite-blocking armour' },
   ]);
 });
 
@@ -373,9 +418,11 @@ test('sound helpers no-op safely without a browser audio context', async () => {
   const sound = await import('../src/sound.js');
   assert.equal(typeof sound.playCatDrop, 'function');
   assert.equal(typeof sound.playHit, 'function');
+  assert.equal(typeof sound.playCollection, 'function');
   assert.doesNotThrow(() => sound.playCatDrop());
   assert.doesNotThrow(() => sound.playHit());
   assert.doesNotThrow(() => sound.playHit({ heavy: true }));
+  assert.doesNotThrow(() => sound.playCollection('coins'));
   assert.doesNotThrow(() => sound.unlockAudio());
 });
 

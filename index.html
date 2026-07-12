@@ -22,10 +22,8 @@
         </aside>
         <aside class="house-wing" aria-label="Production House">
           <div id="production-grid" class="production-grid" aria-label="Production workers and stations"></div>
-          <span class="house-door-label">DOOR</span>
         </aside>
         <div class="board-frame">
-          <div class="zone-label dog-label">DOG ENTRY</div>
           <div id="board" class="board">
             <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
             <div id="grid" class="grid"></div>
@@ -38,6 +36,7 @@
     </section>
 
     <aside class="control-panel">
+      <section class="information-section" aria-label="Game information">
       <header class="titlebar">
         <div>
           <p class="eyebrow">LEVEL 1 · HOME TURF</p>
@@ -57,7 +56,9 @@
         <button id="pause-toggle" class="hud-chip pause-chip" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
       </section>
       <button id="glossary-open" class="glossary-open" type="button">CAT &amp; DOG GLOSSARY</button>
+      </section>
 
+      <section class="gameplay-section" aria-label="Gameplay controls">
       <section id="shop-panel" class="shop-panel">
         <div class="panel-heading">
           <div><span class="tiny-label">PICK YOUR DEFENDERS</span><h2>Cat Cart</h2></div>
@@ -66,20 +67,22 @@
         <div id="shop" class="shop-grid"></div>
       </section>
 
-      <section id="bench-panel" class="bench-panel">
-        <div class="panel-heading compact">
-          <div><span class="tiny-label">SELECT · PLACE · MATCH TO MERGE</span><h2>Bench <small id="bench-count">0/6</small></h2></div>
-          <button id="return-bench" class="small-button" disabled>To bench</button>
-        </div>
-        <div id="bench" class="bench-grid"></div>
-      </section>
-
       <section class="inventory-panel control-inventory" aria-label="Item inventory">
         <div class="panel-heading compact">
-          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/9</small></h2></div>
+          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/6</small></h2></div>
         </div>
         <div id="inventory" class="inventory-grid"></div>
         <p class="production-help">Collect output from the House before its next production cycle replaces it.</p>
+      </section>
+
+      <section id="adoption-box" class="adoption-box" aria-label="Adoption Box sell target">
+        <span class="adoption-box-icon" aria-hidden="true">▱</span>
+        <span class="adoption-box-copy">
+          <small>SAFE CAT SELLING</small>
+          <strong>ADOPTION BOX</strong>
+          <em id="adoption-box-hint">Drag an owned cat here</em>
+        </span>
+        <b id="adoption-box-value">+1</b>
       </section>
 
       <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
@@ -93,7 +96,8 @@
 
       <section class="round-controls">
         <p id="message" class="message" role="status">Build your team, then start the round.</p>
-        <button id="done" class="done-button"><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
+        <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
+      </section>
       </section>
 
 

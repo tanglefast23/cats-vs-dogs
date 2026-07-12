@@ -31,6 +31,14 @@ function sameCatKind(source, occupied) {
 export function getDropAction({ source, target, catZoneStart, rows, cols, phase = 'prep', paused = false }) {
   if (!source || !target) return invalid();
 
+  if (target.kind === 'sell') {
+    return phase === 'prep'
+      && (source.type === 'cat' || source.type === 'bench')
+      && source.sellable
+      ? { type: 'sell', value: source.sellValue }
+      : invalid();
+  }
+
   if (source.type === 'item' && target.kind === 'fighter') {
     if (source.itemKind === 'food') {
       return phase === 'tactics' && target.hp > 0 && target.hp < target.maxHp

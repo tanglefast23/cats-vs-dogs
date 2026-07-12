@@ -18,13 +18,14 @@ under `src/` stays browser-pure (no Electron/Node imports).
 ## Game notes
 
 - Six cat coats with different abilities; later coats unlock on rounds 3, 5, and 7:
-  - **Orange Tabby** — 3-shot column burst
-  - **Blue Brawler** — heavy front melee, double HP
-  - **Snow Ghost** — weaker homing sine-wave shot
-  - **Calico Medic** (R3) — homing yarn that heals itself on hit
-  - **Black Bombardier** (R5) — bomb with splash to adjacent columns
-  - **Prism Sphinx** (R7) — beam that pierces up to three dogs in its lane
-- Dog tiers scale with rounds up to the round-seven **Alpha Hound**
+  - **Purrcy Pew-Pew** — 3-shot column burst
+  - **Clawdius** — heavy front melee, double HP
+  - **Hissiletoe** — weaker homing sine-wave shot
+  - **Knotty Kitty** (R3) — homing yarn that skips the target's next move
+  - **Bombay Boom** (R5) — bomb with splash to adjacent columns
+  - **Laserpaw** (R7) — beam that pierces up to three dogs in its lane
+- Dog roles escalate from **Chomps McGraw** to **Bark McEnroe**, **Howl Pacino**, and **Barkour Bandit**
+- Dog tiers scale from **Yard Punk** through **Ironhide** and **Bonecrusher** to round-seven **Top Dog**
 - Cats only stack/merge with the **same color and level**
 - Shop pets can be **Saved** through refresh and into the next round
 - HUD **SPEED** chip toggles 1×/2× combat (persisted; reduced-motion users default to 2×)

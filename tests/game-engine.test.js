@@ -34,6 +34,8 @@ import {
   dogTooltipInfo,
   closestDogByColumnPriority,
   splitDamage,
+  catSaleQuote,
+  sellCat,
 } from '../src/game-engine.js';
 
 test('desktop board uses six columns, fourteen rows, four cat rows, and two actions', () => {
@@ -391,7 +393,7 @@ test('a dog attacks a blocking cat instead of moving through it', () => {
   assert.equal(game.cats[0].hp, 3);
 });
 
-test('Tennis Terrier stops at range and throws a weaker tennis ball down its lane', () => {
+test('Bark McEnroe stops at range and throws a weaker tennis ball down its lane', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1 });
   game = placeCat(game, 0, 10, 1);
@@ -405,7 +407,7 @@ test('Tennis Terrier stops at range and throws a weaker tennis ball down its lan
   assert.ok(game.events.some((event) => event.type === 'dog-shot' && event.style === 'tennis'));
 });
 
-test('Howler spends its first action buffing nearby dogs for their next bite', () => {
+test('Howl Pacino spends its first action buffing nearby dogs for their next bite', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1 });
   game = placeCat(game, 0, 10, 2);
@@ -422,7 +424,7 @@ test('Howler spends its first action buffing nearby dogs for their next bite', (
   assert.ok(game.events.some((event) => event.type === 'howl'));
 });
 
-test('Fence Jumper clears one blocker but cannot jump a layered defence', () => {
+test('Barkour Bandit clears one blocker but cannot jump a layered defence', () => {
   let openLanding = createGame(() => 0.5);
   openLanding = addCatToBench(openLanding, { level: 1 });
   openLanding = placeCat(openLanding, 0, 10, 1);
@@ -677,4 +679,48 @@ test('cats still act with miss events when no dogs are in range', () => {
   assert.equal(shots.every((shot) => shot.miss), true);
   assert.equal(melees[0].miss, true);
   assert.equal(melees[0].to, null);
+});
+
+test('selling a cat returns gold equal to its SAP-style level value', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game = addCatToBench(game, { level });
+    const catId = game.bench[0].id;
+    assert.deepEqual(catSaleQuote(game, 'bench', catId), { canSell: true, value: level, reason: '' });
+    game = sellCat(game, 'bench', catId);
+    assert.equal(game.gold, 10 + level);
+    assert.equal(game.bench.length, 0);
+    assert.ok(game.events.some((event) => event.type === 'sell-cat' && event.gold === level));
+  }
+});
+
+test('selling a battlefield cat returns equipped items to Storage', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 2 });
+  game = placeCat(game, 0, 10, 2);
+  game.cats[0].equipment.weapon = { tier: 2, attack: 2 };
+  game.cats[0].equipment.armour = { tier: 1, block: 2, uses: 2 };
+  const catId = game.cats[0].id;
+
+  game = sellCat(game, 'cat', catId);
+
+  assert.equal(game.cats.length, 0);
+  assert.equal(game.gold, 12);
+  assert.ok(game.inventory.some((stack) => stack?.kind === 'weapon' && stack.tier === 2));
+  assert.ok(game.inventory.some((stack) => stack?.kind === 'armour' && stack.tier === 1));
+});
+
+test('a cat with equipment cannot be sold when Storage has no room', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1 });
+  game.bench[0].equipment.weapon = { tier: 2, attack: 2 };
+  game.inventory = Array.from({ length: 6 }, (_, index) => ({ id: `full-${index}`, kind: `other-${index}`, tier: 1, quantity: 1 }));
+  const catId = game.bench[0].id;
+
+  assert.deepEqual(catSaleQuote(game, 'bench', catId), {
+    canSell: false,
+    value: 1,
+    reason: 'Storage needs room for equipped items.',
+  });
+  assert.equal(sellCat(game, 'bench', catId), game);
 });

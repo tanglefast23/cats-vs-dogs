@@ -30,71 +30,71 @@ export const CAT_COAT = {
 
 export const CAT_COAT_INFO = {
   0: {
-    name: 'Orange Tabby',
-    shortName: 'Tabby',
+    name: 'Purrcy Pew-Pew',
+    shortName: 'Purrcy',
     ability: 'column-shot',
     blurb: '3-shot column burst',
     attackDetail: 'Each action, fires 3 rapid column shots that split its attack damage. Shots retarget the nearest dog ahead in its column.',
     shopTier: 1,
   },
   1: {
-    name: 'Blue Brawler',
-    shortName: 'Brawler',
+    name: 'Clawdius',
+    shortName: 'Clawdius',
     ability: 'melee',
     blurb: 'Heavy melee · 2× HP',
     attackDetail: 'Does not shoot. Only melee-attacks the dog directly in the tile in front. Double HP and very high damage.',
     shopTier: 1,
   },
   2: {
-    name: 'Snow Ghost',
-    shortName: 'Ghost',
+    name: 'Hissiletoe',
+    shortName: 'Hissile',
     ability: 'homing',
     blurb: 'Homing wave shot',
     attackDetail: 'Each action, fires one weaker sine-wave shot that homes by nearest column first (own column, then adjacent, then farther). In a tied column distance, it picks the lowest dog; a full tie is random.',
     shopTier: 1,
   },
   3: {
-    name: 'Calico Tangler',
-    shortName: 'Tangler',
+    name: 'Knotty Kitty',
+    shortName: 'Knotty',
     ability: 'tangle-homing',
     blurb: 'Yarn stops next move',
     attackDetail: 'Unlocked on round 3. Fires homing yarn at the nearest-column dog. A hit tangles that dog so its next unblocked move is skipped.',
     shopTier: 2,
   },
   4: {
-    name: 'Black Bombardier',
-    shortName: 'Bomber',
+    name: 'Bombay Boom',
+    shortName: 'Bombay',
     ability: 'splash',
     blurb: 'Adjacent splash bomb',
     attackDetail: 'Unlocked on round 5. Bombs the nearest-column dog, then deals 1 splash damage to dogs beside it in adjacent columns.',
     shopTier: 3,
   },
   5: {
-    name: 'Prism Sphinx',
-    shortName: 'Prism',
+    name: 'Laserpaw',
+    shortName: 'Laser',
     ability: 'piercing',
     blurb: '3-target prism beam',
     attackDetail: 'Unlocked on round 7. Fires a prism beam through up to three dogs ahead in its own column.',
     shopTier: 4,
   },
   6: {
-    name: 'Frostpoint Witch', shortName: 'Frost', ability: 'homing', activeAbility: 'freeze',
+    name: 'Frosty Paws', shortName: 'Frosty', ability: 'homing', activeAbility: 'freeze',
     blurb: 'Freezes one dog', attackDetail: 'Unlocked on round 5. Fires a weak homing spell and can freeze one dog during a Tactics Window.', shopTier: 3,
   },
   7: {
-    name: 'Rift Walker', shortName: 'Rift', ability: 'homing', activeAbility: 'teleport',
+    name: 'Purrtal', shortName: 'Purrtal', ability: 'homing', activeAbility: 'teleport',
     blurb: 'Teleports one ally', attackDetail: 'Unlocked on round 5. Can teleport one allied battlefield cat to any empty cat square once per battle.', shopTier: 3,
   },
   8: {
-    name: 'Mirage Maker', shortName: 'Mirage', ability: 'homing', activeAbility: 'decoy',
+    name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
     blurb: 'Summons a blocker', attackDetail: 'Unlocked on round 5. Can summon a temporary phantom blocker during a Tactics Window.', shopTier: 3,
   },
   9: {
-    name: 'Stormcaller', shortName: 'Storm', ability: 'homing', activeAbility: 'storm',
+    name: 'Thunderpaws', shortName: 'Thunder', ability: 'homing', activeAbility: 'storm',
     blurb: 'Strikes one column', attackDetail: 'Unlocked on round 5. Can strike every dog in one selected column with lightning.', shopTier: 3,
   },
   10: {
-    name: 'Encore Maestro', shortName: 'Encore', ability: 'homing', activeAbility: 'encore',
+    name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'encore',
     blurb: 'Grants an extra attack', attackDetail: 'Unlocked on round 5. Can command one ally to make an immediate reduced-strength attack.', shopTier: 3,
   },
 };
@@ -151,28 +151,28 @@ export const DOG_ROLE = Object.freeze({
 
 export const DOG_ROLE_INFO = Object.freeze({
   [DOG_ROLE.SCRUFFY]: Object.freeze({
-    name: 'Scruffy Scout', unlockRound: 1, blurb: 'The dependable front-line biter.',
+    name: 'Chomps McGraw', unlockRound: 1, blurb: 'The dependable front-line biter.',
     attackDetail: 'Steps toward the porch and bites the cat directly ahead.',
   }),
   [DOG_ROLE.TENNIS]: Object.freeze({
-    name: 'Tennis Terrier', unlockRound: 3, blurb: 'Ranged lane attacker with lower impact damage.',
+    name: 'Bark McEnroe', unlockRound: 3, blurb: 'Ranged lane attacker with lower impact damage.',
     attackDetail: 'Stops two or three squares away and throws a tennis ball at the nearest cat in its lane.',
   }),
   [DOG_ROLE.HOWLER]: Object.freeze({
-    name: 'Howler', unlockRound: 4, blurb: 'Support dog that empowers a nearby pack.',
+    name: 'Howl Pacino', unlockRound: 4, blurb: 'Support dog that empowers a nearby pack.',
     attackDetail: 'Its first useful action is a howl that grants nearby dogs +2 damage on their next attack.',
   }),
   [DOG_ROLE.JUMPER]: Object.freeze({
-    name: 'Fence Jumper', unlockRound: 5, blurb: 'Leaps over one isolated defender.',
+    name: 'Barkour Bandit', unlockRound: 5, blurb: 'Leaps over one isolated defender.',
     attackDetail: 'Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
   }),
 });
 
 export const DOG_TIER_INFO = {
-  1: { name: 'Standard', blurb: 'Baseline dog stats.' },
-  2: { name: 'Armored', blurb: 'Helmet gear adds HP and bite strength.' },
-  3: { name: 'Bruiser', blurb: 'Heavy plates add substantial HP and bite strength.' },
-  4: { name: 'Alpha', blurb: 'Alpha armor marks the strongest dog tier.' },
+  1: { name: 'Yard Punk', blurb: 'Baseline dog stats.' },
+  2: { name: 'Ironhide', blurb: 'Helmet gear adds HP and bite strength.' },
+  3: { name: 'Bonecrusher', blurb: 'Heavy plates add substantial HP and bite strength.' },
+  4: { name: 'Top Dog', blurb: 'Top Dog armor marks the strongest dog tier.' },
 };
 
 let nextId = 1;
@@ -267,7 +267,7 @@ export function createGame(random = Math.random) {
     decoys: [],
     bench: [],
     workers: Array(6).fill(null),
-    inventory: Array(9).fill(null),
+    inventory: Array(6).fill(null),
     shop: makeShop(random),
     nextWave: generateWave(1, random),
     events: [],
@@ -524,6 +524,55 @@ export function addInventoryStack(game, item) {
   if (!item?.kind || item.kind === 'coins') return game;
   const next = copy(game);
   return addInventoryStackTo(next, item) >= 0 ? next : game;
+}
+
+export function catSellValue(cat) {
+  return Math.max(1, Math.min(3, Math.floor(Number(cat?.level) || 1)));
+}
+
+function catForSale(game, sourceType, catId) {
+  const collection = sourceType === 'cat' ? game.cats : sourceType === 'bench' ? game.bench : null;
+  return collection?.find((cat) => cat.id === catId) ?? null;
+}
+
+function equippedItems(cat) {
+  return ['weapon', 'armour']
+    .filter((kind) => cat.equipment?.[kind])
+    .map((kind) => ({ kind, tier: cat.equipment[kind].tier ?? 1, quantity: 1 }));
+}
+
+export function catSaleQuote(game, sourceType, catId) {
+  const cat = catForSale(game, sourceType, catId);
+  const value = catSellValue(cat);
+  if (game.phase !== 'prep' || !cat) {
+    return { canSell: false, value, reason: 'Cats can only be sold during prep.' };
+  }
+  const preview = copy(game);
+  for (const item of equippedItems(cat)) {
+    if (addInventoryStackTo(preview, item) < 0) {
+      return { canSell: false, value, reason: 'Storage needs room for equipped items.' };
+    }
+  }
+  return { canSell: true, value, reason: '' };
+}
+
+export function sellCat(game, sourceType, catId) {
+  const quote = catSaleQuote(game, sourceType, catId);
+  if (!quote.canSell) return game;
+  const next = copy(game);
+  const collection = sourceType === 'cat' ? next.cats : next.bench;
+  const index = collection.findIndex((cat) => cat.id === catId);
+  if (index < 0) return game;
+  const [cat] = collection.splice(index, 1);
+  const returnedItems = equippedItems(cat);
+  returnedItems.forEach((item) => addInventoryStackTo(next, item));
+  next.gold += quote.value;
+  next.events.push({
+    type: 'sell-cat', catId: cat.id, level: cat.level,
+    gold: quote.value, returnedItems,
+  });
+  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} adopted for ${quote.value} gold${returnedItems.length ? '; equipment returned to Storage' : ''}.`;
+  return next;
 }
 
 export function mergeInventoryItems(game, inventoryIndex) {
@@ -930,7 +979,7 @@ function nearestDogInColumn(cat, dogs) {
 }
 
 /**
- * Snow Ghost targeting:
+ * Hissiletoe targeting:
  * 1) nearest column first (0 = own column, then 1, then 2, ...)
  * 2) within that column distance, lowest dog on the board (highest row index = closest to cats)
  * 3) full ties (same col distance + same row) → random among them

@@ -7,8 +7,8 @@ export const WORKER_ROLE = Object.freeze({
 
 export const WORKER_INFO = Object.freeze({
   [WORKER_ROLE.COOK]: Object.freeze({
-    name: 'Calico Cook',
-    shortName: 'Cook',
+    name: 'Whisker Biscuit',
+    shortName: 'Biscuit',
     blurb: 'Makes healing food',
     station: 'cookfire',
     output: Object.freeze({
@@ -18,8 +18,8 @@ export const WORKER_INFO = Object.freeze({
     }),
   }),
   [WORKER_ROLE.TRADER]: Object.freeze({
-    name: 'Tuxedo Trader',
-    shortName: 'Trader',
+    name: 'Cashmere Cat',
+    shortName: 'Cashmere',
     blurb: 'Makes collectible coins',
     station: 'market',
     output: Object.freeze({
@@ -29,8 +29,8 @@ export const WORKER_INFO = Object.freeze({
     }),
   }),
   [WORKER_ROLE.WEAPONSMITH]: Object.freeze({
-    name: 'Ginger Weaponsmith',
-    shortName: 'Smith',
+    name: 'Clawhammer',
+    shortName: 'Hammer',
     blurb: 'Forges attack weapons',
     station: 'weapon-forge',
     output: Object.freeze({
@@ -40,8 +40,8 @@ export const WORKER_INFO = Object.freeze({
     }),
   }),
   [WORKER_ROLE.ARMOURER]: Object.freeze({
-    name: 'Silver Armourer',
-    shortName: 'Armourer',
+    name: 'Pawladin',
+    shortName: 'Pawladin',
     blurb: 'Builds blocking armour',
     station: 'armour-forge',
     output: Object.freeze({

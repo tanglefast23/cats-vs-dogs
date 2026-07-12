@@ -300,24 +300,26 @@ export function drawBackyard(canvas) {
       px(ctx, '#94bc63', col * 32 + 20 - (seed % 7), row * 32 + 21, 1, 3);
     }
   }
-  // Back fence.
-  px(ctx, '#5b3d31', 0, 0, w, 5);
-  for (let x = 0; x < w; x += 16) {
-    px(ctx, '#7a5238', x, 2, 14, 23);
-    px(ctx, '#a7764b', x + 2, 4, 10, 18);
-    px(ctx, '#c18b57', x + 3, 5, 2, 15);
-    px(ctx, '#4b352e', x + 13, 2, 3, 23);
+  // Stone patio forms the two-row threshold immediately above cat territory.
+  const patioStartRow = CAT_ZONE_START - 2;
+  px(ctx, '#8f8568', 0, patioStartRow * 32, w, 64);
+  for (let row = patioStartRow; row < CAT_ZONE_START; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const sx = col * 32;
+      const sy = row * 32;
+      const seed = col * 31 + row * 17;
+      px(ctx, '#b9ad87', sx + 2, sy + 2, 28, 28);
+      px(ctx, '#d4c69a', sx + 2, sy + 2, 28, 3);
+      px(ctx, '#d4c69a', sx + 2, sy + 2, 3, 28);
+      px(ctx, '#9c9070', sx + 26, sy + 5, 4, 25);
+      px(ctx, '#9c9070', sx + 5, sy + 26, 25, 4);
+      px(ctx, '#8f8568', sx + 7 + (seed % 13), sy + 10 + (seed % 9), 2, 1);
+      px(ctx, '#8f8568', sx + 21 - (seed % 7), sy + 22, 1, 2);
+    }
   }
-  px(ctx, '#5b3d31', 0, 20, w, 4);
-  // Neutral paving strip immediately above cat territory.
-  const neutralY = (CAT_ZONE_START - 1) * 32;
-  px(ctx, '#648f49', 0, neutralY, w, 32);
-  for (let x = 8; x < w; x += 32) {
-    px(ctx, '#b9ad87', x, neutralY + 11, 17, 9);
-    px(ctx, '#d4c69a', x + 2, neutralY + 12, 13, 6);
-  }
+
   // Small, sparse flower details.
-  [[8,70],[w-14,101],[17,205],[w-18,301],[50,380],[w-50,420]].forEach(([x,y], i) => {
+  [[8,70],[w-14,101],[17,205],[50,380],[w-50,420]].forEach(([x,y], i) => {
     px(ctx, '#3f763f', x, y + 2, 1, 5);
     px(ctx, i % 2 ? '#f4c95c' : '#e87a70', x - 2, y, 5, 3);
     px(ctx, '#fff0a8', x, y, 1, 1);

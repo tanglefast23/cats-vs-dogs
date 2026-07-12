@@ -35,6 +35,30 @@ export function glossaryTabs(activeId = 'battle') {
   return GLOSSARY_TABS.map((tab) => ({ ...tab, active: tab.id === activeId }));
 }
 
+/** Queue dogs by arrival, then by their battlefield column for simultaneous arrivals. */
+export function dogPreviewQueue(dogs = []) {
+  return dogs
+    .map((dog, index) => ({ dog, index }))
+    .sort((left, right) => (
+      (left.dog.appearanceIndex ?? 0) - (right.dog.appearanceIndex ?? 0)
+      || (left.dog.col ?? 0) - (right.dog.col ?? 0)
+      || left.index - right.index
+    ))
+    .map(({ dog }) => dog);
+}
+
+/** Resolve where production output will land so collection animation matches engine behavior. */
+export function productionCollectionDestination(inventory = [], output = null) {
+  if (!output?.kind) return null;
+  if (output.kind === 'coins') return { type: 'gold', index: null };
+  const matchingIndex = inventory.findIndex((stack) => (
+    stack?.kind === output.kind && (stack.tier ?? null) === (output.tier ?? null)
+  ));
+  if (matchingIndex >= 0) return { type: 'storage', index: matchingIndex };
+  const emptyIndex = inventory.findIndex((stack) => !stack);
+  return emptyIndex >= 0 ? { type: 'storage', index: emptyIndex } : null;
+}
+
 export function shopPetAvailability({ sold, gold, benchLength, benchSize, phase, playing }) {
   if (sold) return { interactive: false, canBuy: false, reason: 'sold' };
   if (phase !== 'prep' || playing) return { interactive: false, canBuy: false, reason: 'phase' };

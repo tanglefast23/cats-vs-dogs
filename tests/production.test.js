@@ -62,10 +62,10 @@ test('ordinary shops can roll all workers while the opening shop guarantees two 
   assert.equal(opening.filter((slot) => slot.category === 'fighter').length, 2);
 });
 
-test('new games start with six empty production slots and nine empty inventory slots', () => {
+test('new games start with six empty production slots and six empty inventory slots', () => {
   const game = createGame(() => 0.5);
   assert.deepEqual(game.workers, Array(6).fill(null));
-  assert.deepEqual(game.inventory, Array(9).fill(null));
+  assert.deepEqual(game.inventory, Array(6).fill(null));
 });
 
 test('fighter purchase charges only after a valid bench or battlefield drop', () => {
@@ -152,7 +152,7 @@ test('completed battles replace pending output using each worker level', () => {
   assert.deepEqual(game.workers[2].pendingOutput, { kind: 'weapon', tier: 3, quantity: 1 });
 });
 
-test('collection stacks identical items with no quantity limit and uses nine distinct slots', () => {
+test('collection stacks identical items with no quantity limit and uses six distinct slots', () => {
   let game = createGame(() => 0.5);
   game = addInventoryStack(game, { kind: 'food', quantity: 999 });
   game = addInventoryStack(game, { kind: 'food', quantity: 2 });
@@ -163,7 +163,7 @@ test('collection stacks identical items with no quantity limit and uses nine dis
     game = addInventoryStack(game, { kind: 'weapon', tier, quantity: 1 });
     game = addInventoryStack(game, { kind: 'armour', tier, quantity: 1 });
   }
-  assert.equal(game.inventory.filter(Boolean).length, 7);
+  assert.equal(game.inventory.filter(Boolean).length, 6);
 });
 
 test('station item collection persists in inventory while merchant coins go directly to gold', () => {
