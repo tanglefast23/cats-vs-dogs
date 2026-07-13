@@ -406,6 +406,7 @@ export function createGame(random = Math.random) {
     section: 0,
     gold: 10,
     lives: 3,
+    tacticsMoveUsed: false,
     cats: [],
     dogs: [],
     decoys: [],
@@ -1026,6 +1027,29 @@ export function moveCat(game, catId, row, col) {
   return next;
 }
 
+// The one combat reposition: 1 cat, 1 orthogonal square, once per battle.
+export function moveCatInTactics(game, catId, row, col) {
+  if (game.phase !== 'tactics' || game.tacticsMoveUsed) return game;
+  if (row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  const source = game.cats.find((cat) => cat.id === catId);
+  if (!source) return game;
+  if (Math.abs(row - source.row) + Math.abs(col - source.col) !== 1) return game;
+  const blocked = game.cats.some((cat) => cat.id !== catId && cat.row === row && cat.col === col)
+    || game.decoys.some((decoy) => decoy.row === row && decoy.col === col)
+    || game.dogs.some((dog) => dog.hp > 0 && dog.row === row && dog.col === col);
+  if (blocked) return game;
+  const next = copy(game);
+  const cat = next.cats.find((unit) => unit.id === catId);
+  const fromRow = cat.row;
+  const fromCol = cat.col;
+  cat.row = row;
+  cat.col = col;
+  next.tacticsMoveUsed = true;
+  next.events.push({ type: 'tactics-move', id: cat.id, fromRow, fromCol, row, col });
+  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} repositioned — combat move spent.`;
+  return next;
+}
+
 export function returnCatToBench(game, catId) {
   if (game.phase !== 'prep' || game.bench.length >= BENCH_SIZE) return game;
   const next = copy(game);
@@ -1110,6 +1134,7 @@ export function startRound(game) {
   next.phase = 'combat';
   next.section = 0;
   next.decoys = [];
+  next.tacticsMoveUsed = false;
   next.cats.forEach((cat) => {
     cat.activeUsed = false;
     cat.guard = 0;

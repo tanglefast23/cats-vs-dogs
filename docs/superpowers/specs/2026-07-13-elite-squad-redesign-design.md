@@ -1,7 +1,7 @@
 # Elite Squad Redesign — Design Doc
 
 - **Date:** 2026-07-13
-- **Status:** Balance core implemented; Tactics-window movement remains future work
+- **Status:** Implemented (balance core + Tactics-window movement); pacing under playtest per §5
 - **Goal in one line:** Make the game genuinely strategic by capping how many cats you can field, so that saving units, hunting for combos, and merging finally matter.
 
 ---
@@ -96,6 +96,7 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 - Wave sizes by round: **1, 2, 2, 3, 3, 4, 4, 5, 5, 6**.
 - Tier floors: tier 1 in rounds 1–4, tier 2 in rounds 5–8, and tier 3 in rounds 9–10.
 - Featured specialists: Fetch Armstrong and Bone Jovi are forced into round 6; Bone Jovi and Dr. Droolittle into round 8; the last two waves guarantee three ranged/support roles, including Growl Gadot in round 10.
+- Tactics-window movement: `moveCatInTactics` moves 1 cat 1 orthogonal square onto an empty legal tile, once per combat (`tacticsMoveUsed`, reset by `startRound`); drag-only during tactics (clicks stay reserved for ability targeting), with the drop rule blocking mid-combat deploys/merges and the tactics-help line advertising the move until it is spent.
 
 ## Non-goals (explicitly out of scope for now)
 

@@ -7,7 +7,7 @@ export const DRAG_FEEDBACK = Object.freeze({
   returnMs: 260,
 });
 
-export const CAT_MOVE_LIMIT_MESSAGE = 'During prep, each cat can move only one adjacent square.';
+export const CAT_MOVE_LIMIT_MESSAGE = 'A cat can only move one adjacent square.';
 export const FIELD_CAP_MESSAGE = 'Elite Squad full (6/6). Merge, bench, or sell a cat before deploying another.';
 
 // Placement feedback retains 40% of the original landing force (a 60% cut).
@@ -33,7 +33,7 @@ function sameCatKind(source, occupied) {
 
 export function getDropAction({
   source, target, catZoneStart, rows, cols, phase = 'prep', paused = false,
-  fieldCount = 0, fieldCap = Number.POSITIVE_INFINITY,
+  fieldCount = 0, fieldCap = Number.POSITIVE_INFINITY, tacticsMoveUsed = false,
 }) {
   if (!source || !target) return invalid();
 
@@ -80,6 +80,14 @@ export function getDropAction({
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
+    if (phase === 'tactics') {
+      // Mid-combat: only the one reposition — no deploys, no merges.
+      if (source.type !== 'cat' || tacticsMoveUsed || target.occupied) return invalid();
+      const distance = Math.abs(target.row - source.row) + Math.abs(target.col - source.col);
+      return distance === 1
+        ? { type: 'tactics-move', row: target.row, col: target.col }
+        : invalid('move-distance');
+    }
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
       return source.type === 'shop-fighter'

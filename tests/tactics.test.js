@@ -17,6 +17,7 @@ import {
   createGame,
   finishRound,
   moveCat,
+  moveCatInTactics,
   openTacticsWindow,
   placeCat,
   resolveSection,
@@ -196,4 +197,97 @@ test('starting a battle resets active casts and finishing fully heals survivors'
   assert.equal(game.cats[0].activeUsed, false);
   game = finishRound(game);
   assert.equal(game.cats[0].hp, game.cats[0].maxHp);
+});
+
+test('a cat can reposition one square during a tactics window, once per combat', () => {
+  let game = createGame(() => 0.5);
+  assert.equal(game.tacticsMoveUsed, false, 'new games start with the combat move available');
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
+  game = startRound(game);
+  game = openTacticsWindow(game);
+  const catId = game.cats[0].id;
+
+  game = moveCatInTactics(game, catId, 12, 3);
+  const moved = game.cats.find((cat) => cat.id === catId);
+  assert.deepEqual([moved.row, moved.col], [12, 3]);
+  assert.equal(game.tacticsMoveUsed, true);
+  assert.equal(game.events.some((event) => event.type === 'tactics-move'), true);
+
+  assert.equal(moveCatInTactics(game, catId, 12, 2), game, 'the single combat move is spent');
+});
+
+test('tactics moves obey the one-square, empty-target rules', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.ORANGE, 10, 2);
+  game = placeCoat(game, CAT_COAT.GREY, 10, 3);
+  game = startRound(game);
+  game = openTacticsWindow(game);
+  const catId = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE).id;
+
+  assert.equal(moveCatInTactics(game, catId, 10, 4), game, 'two squares is too far');
+  assert.equal(moveCatInTactics(game, catId, 11, 3), game, 'diagonals are not a single step');
+  assert.equal(moveCatInTactics(game, catId, 10, 3), game, 'blocked by an ally');
+  assert.equal(moveCatInTactics(game, catId, 9, 2), game, 'cannot leave the cat zone');
+
+  game.dogs = [createDog(1, 11, 2)];
+  assert.equal(moveCatInTactics(game, catId, 11, 2), game, 'blocked by a dog');
+
+  game.decoys = [{ id: 'decoy-1', kind: 'phantom-cat', row: 10, col: 1, hp: 3, maxHp: 3 }];
+  assert.equal(moveCatInTactics(game, catId, 10, 1), game, 'blocked by a decoy');
+});
+
+test('the combat reposition is tactics-only and refreshes each battle', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
+  const catId = game.cats[0].id;
+  assert.equal(moveCatInTactics(game, catId, 12, 3), game, 'prep uses the normal move instead');
+  game = startRound(game);
+  assert.equal(moveCatInTactics(game, catId, 12, 3), game, 'live combat is not a tactics window');
+
+  game = openTacticsWindow(game);
+  game = moveCatInTactics(game, catId, 12, 3);
+  assert.equal(game.tacticsMoveUsed, true);
+
+  game = continueCombat(game);
+  game = finishRound(game);
+  assert.equal(game.phase, 'prep');
+  game = startRound(game);
+  assert.equal(game.tacticsMoveUsed, false, 'a new battle grants a fresh combat move');
+  game = openTacticsWindow(game);
+  game = moveCatInTactics(game, catId, 12, 2);
+  assert.equal(game.cats.find((cat) => cat.id === catId).col, 2);
+});
+
+test('drag rules allow exactly one single-square tactics reposition mid-combat', () => {
+  const drop = (source, target, extra = {}) => getDropAction({
+    source,
+    target,
+    catZoneStart: CAT_ZONE_START,
+    rows: ROWS,
+    cols: COLS,
+    phase: 'tactics',
+    ...extra,
+  });
+  const cat = { type: 'cat', id: 'cat-9', level: 1, coat: CAT_COAT.ORANGE, row: 12, col: 2 };
+
+  assert.deepEqual(
+    drop(cat, { kind: 'cell', row: 12, col: 3, occupied: null }),
+    { type: 'tactics-move', row: 12, col: 3 },
+  );
+  assert.equal(
+    drop(cat, { kind: 'cell', row: 12, col: 3, occupied: null }, { tacticsMoveUsed: true }).type,
+    'invalid',
+    'the spent combat move blocks further drags',
+  );
+  assert.equal(drop(cat, { kind: 'cell', row: 12, col: 4, occupied: null }).type, 'invalid', 'two squares is too far');
+  assert.equal(
+    drop(cat, { kind: 'cell', row: 12, col: 3, occupied: { id: 'cat-2', level: 1, coat: CAT_COAT.ORANGE } }).type,
+    'invalid',
+    'no mid-combat merges',
+  );
+  assert.equal(
+    drop({ type: 'bench', id: 'bench-1', level: 1, coat: CAT_COAT.ORANGE }, { kind: 'cell', row: 12, col: 3, occupied: null }).type,
+    'invalid',
+    'no mid-combat deployment',
+  );
 });

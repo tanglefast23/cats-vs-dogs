@@ -203,7 +203,8 @@ test('a full squad blocks new deployments while still allowing moves and merges'
 });
 
 test('drag highlights give every cat the same one-square between-round limit', () => {
-  assert.equal(CAT_MOVE_LIMIT_MESSAGE, 'During prep, each cat can move only one adjacent square.');
+  // Phase-neutral copy: the same limit message now also appears for tactics repositions.
+  assert.equal(CAT_MOVE_LIMIT_MESSAGE, 'A cat can only move one adjacent square.');
   const target = { kind: 'cell', row: 10, col: 3, occupied: false };
   const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
   assert.equal(getDropAction({

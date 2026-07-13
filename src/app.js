@@ -1,7 +1,7 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
-  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
+  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility,
   purchaseShopFighterToBench, purchaseShopFighterToBoard,
@@ -423,6 +423,8 @@ function dragSource(type, cat) {
     level: cat.level,
     coat: normalizeCoat(cat.coat),
     ability: cat.ability,
+    row: cat.row,
+    col: cat.col,
     prepOrigin: cat.prepOrigin,
     prepMoved: cat.prepMoved,
     sellable: sale.canSell,
@@ -488,6 +490,7 @@ function dropAction(source, descriptor) {
     paused: false,
     fieldCount: game.cats.length,
     fieldCap: MAX_FIELD_CATS,
+    tacticsMoveUsed: game.tacticsMoveUsed,
   });
 }
 
@@ -574,7 +577,9 @@ function updateDragHover(clientX, clientY) {
 function bindPetDrag(anchor, type, cat) {
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
-    const phaseAllowsDrag = game.phase === 'prep' || (type === 'item' && game.phase === 'tactics');
+    const phaseAllowsDrag = game.phase === 'prep'
+      || (type === 'item' && game.phase === 'tactics')
+      || (type === 'cat' && game.phase === 'tactics' && !game.tacticsMoveUsed);
     if (event.button !== 0 || !phaseAllowsDrag || playing || dragState) return;
     const rect = anchor.getBoundingClientRect();
     dragState = {
@@ -639,6 +644,8 @@ function applyDropAction(action, source) {
     game = placeCat(game, benchIndex, action.row, action.col);
   } else if (action.type === 'move') {
     game = moveCat(game, source.id, action.row, action.col);
+  } else if (action.type === 'tactics-move') {
+    game = moveCatInTactics(game, source.id, action.row, action.col);
   } else if (action.type === 'merge') {
     game = mergeUnitOnto(game, source.type, source.id, action.targetType, action.targetId);
     if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
@@ -743,7 +750,7 @@ async function finishDrag(event, cancelled = false) {
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
-    game.message = action.type === 'sell'
+    game.message = action.type === 'sell' || action.type === 'tactics-move'
       ? game.message
       : action.type === 'equip'
         ? `T${state.source.tier ?? 1} ${state.source.itemKind} equipped!`
@@ -977,7 +984,9 @@ function renderTacticsPanel() {
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
   $('#tactics-help').textContent = activeTargeting
     ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
-    : 'Drag food or equipment onto a cat, or cast one available ability.';
+    : game.tacticsMoveUsed
+      ? 'Combat move spent. Drag food or equipment onto a cat, or cast one available ability.'
+      : 'Drag food or equipment, cast an ability, or move 1 cat 1 square (once per battle).';
 }
 
 function tryActiveTarget(row, col, cat, dog) {
