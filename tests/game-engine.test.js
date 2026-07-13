@@ -13,6 +13,7 @@ import {
   CAT_ZONE_START,
   MAX_ROUNDS,
   ACTIONS_PER_ROUND,
+  MAX_FIELD_CATS,
   MAX_SHOP_SIZE,
   createGame,
   makeShop,
@@ -22,13 +23,18 @@ import {
   addCatToBench,
   combineCats,
   placeCat,
+  moveCat,
   resolveSection,
   startRound,
   finishRound,
   createDog,
   generateWave,
   availableDogRolesForRound,
+  waveCountForRound,
+  minimumDogTierForRound,
+  featuredDogRolesForRound,
   buyShopCat,
+  purchaseShopFighterToBoard,
   refreshShop,
   toggleSaveShopSlot,
   mergeUnitOnto,
@@ -40,12 +46,13 @@ import {
   sellCat,
 } from '../src/game-engine.js';
 
-test('desktop board uses six columns, fourteen rows, four cat rows, and two actions', () => {
+test('desktop board uses six columns, fourteen rows, a six-cat squad, and two actions', () => {
   assert.equal(COLS, 6);
   assert.equal(ROWS, 14);
   assert.equal(CAT_ZONE_START, 10);
   assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
+  assert.equal(MAX_FIELD_CATS, 6);
   assert.equal(MAX_ROUNDS, 10);
 });
 
@@ -123,6 +130,19 @@ test('every cat has one explicit strength and a real weakness at every level', (
     assert.ok(hissiletoe.attack > bombay.attack, `L${level} balanced homing beats splash against one dog`);
     assert.ok(clawdius.hp > Math.max(...nonTankStats.map((stats) => stats.hp)));
     assert.ok(clawdius.attack < hissiletoe.attack, `L${level} tank damage stays below the generalist`);
+  }
+});
+
+test('each merge tier slightly beats the three cats combined into it', () => {
+  for (const coat of Object.keys(CAT_COAT_INFO).map(Number)) {
+    const levelOne = catStatsFor(1, coat);
+    const levelTwo = catStatsFor(2, coat);
+    const levelThree = catStatsFor(3, coat);
+
+    assert.ok(levelTwo.hp > levelOne.hp * 3, `coat ${coat} L2 health should beat three L1 cats`);
+    assert.ok(levelTwo.attack > levelOne.attack * 3, `coat ${coat} L2 attack should beat three L1 cats`);
+    assert.ok(levelThree.hp > levelTwo.hp * 3, `coat ${coat} L3 health should beat three L2 cats`);
+    assert.ok(levelThree.attack > levelTwo.attack * 3, `coat ${coat} L3 attack should beat three L2 cats`);
   }
 });
 
@@ -251,17 +271,17 @@ test('orange cat burst keeps hitting the nearest dog in its column', () => {
   assert.equal(lowerDog.hp, 4);
 });
 
-test('level-two Purrcy splits its seven damage across three pellets', () => {
+test('level-two Purrcy splits its fourteen damage across three pellets', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
-  game.dogs = [createDog(1, 0, 2)];
+  game.dogs = [createDog(2, 0, 2)];
 
   game = resolveSection(game);
   const shots = game.events.filter((event) => event.type === 'shot');
   assert.equal(shots.length, 3);
-  assert.deepEqual(shots.map((shot) => shot.damage), [3, 2, 2]);
-  assert.equal(game.dogs[0].hp, 1);
+  assert.deepEqual(shots.map((shot) => shot.damage), [5, 5, 4]);
+  assert.equal(game.dogs.length, 0);
 });
 
 test('white cat prefers a same-column dog over a nearer dog in another column', () => {
@@ -411,6 +431,28 @@ test('dog tiers scale through tier four while retaining their strategic role', (
   const alpha = finalWave.find((dog) => dog.tier === 4);
   assert.ok(alpha);
   assert.match(dogTooltipInfo(alpha).title, /^T4 /);
+});
+
+test('dog waves scale in count and stop rolling low tiers late', () => {
+  assert.deepEqual(
+    Array.from({ length: MAX_ROUNDS }, (_, index) => waveCountForRound(index + 1)),
+    [1, 2, 2, 3, 3, 4, 4, 5, 5, 6],
+  );
+  assert.deepEqual(
+    Array.from({ length: MAX_ROUNDS }, (_, index) => minimumDogTierForRound(index + 1)),
+    [1, 1, 1, 1, 2, 2, 2, 2, 3, 3],
+  );
+
+  const roundNine = generateWave(9, () => 0);
+  const roundTen = generateWave(10, () => 0);
+  assert.equal(roundNine.length, 5);
+  assert.equal(roundTen.length, 6);
+  assert.ok(roundNine.every((dog) => dog.tier >= 3));
+  assert.ok(roundTen.every((dog) => dog.tier >= 3));
+  assert.deepEqual(featuredDogRolesForRound(9), [DOG_ROLE.FRISBEE, DOG_ROLE.LOBBER, DOG_ROLE.MEDIC]);
+  assert.deepEqual(featuredDogRolesForRound(10), [DOG_ROLE.LOBBER, DOG_ROLE.MEDIC, DOG_ROLE.GROWLER]);
+  assert.ok(featuredDogRolesForRound(9).every((role) => roundNine.some((dog) => dog.role === role)));
+  assert.ok(featuredDogRolesForRound(10).every((role) => roundTen.some((dog) => dog.role === role)));
 });
 
 test('dog roles pay for their special ability with distinct health and bite curves', () => {
@@ -653,7 +695,7 @@ test('resolveSection grants victory when the final wave is fully cleared', () =>
   game.round = MAX_ROUNDS;
   game.phase = 'combat';
   game.dogs = [createDog(1, 11, 2)];
-  // L3 Purrcy's 11 damage is intentionally enough to erase a tier-one dog in one action.
+  // L3 Purrcy is intentionally strong enough to erase a tier-one dog in one action.
   game = resolveSection(game);
   assert.equal(game.dogs.length, 0);
   assert.equal(game.phase, 'victory');
@@ -667,6 +709,24 @@ test('illegal placement above cat territory leaves the bench unchanged', () => {
 
   assert.equal(unchanged.bench.length, 1);
   assert.equal(unchanged.cats.length, 0);
+});
+
+test('the field cap blocks a seventh deployment but still allows board movement', () => {
+  let game = createGame(() => 0.2);
+  for (let index = 0; index < MAX_FIELD_CATS; index += 1) {
+    game = addCatToBench(game, { level: 1, coat: index % 3 });
+    game = placeCat(game, 0, CAT_ZONE_START, index);
+  }
+  game = addCatToBench(game, { level: 1 });
+
+  const blockedBenchPlacement = placeCat(game, 0, CAT_ZONE_START + 1, 0);
+  const blockedShopPlacement = purchaseShopFighterToBoard(game, 0, CAT_ZONE_START + 1, 1);
+  const moved = moveCat(game, game.cats[0].id, CAT_ZONE_START + 1, 0);
+
+  assert.equal(blockedBenchPlacement, game);
+  assert.equal(blockedShopPlacement, game);
+  assert.equal(moved.cats.length, MAX_FIELD_CATS);
+  assert.equal(moved.cats.find((cat) => cat.id === game.cats[0].id).row, CAT_ZONE_START + 1);
 });
 
 test('buying a cat costs three gold and a full bench rejects the purchase', () => {

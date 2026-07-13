@@ -27,6 +27,8 @@ under `src/` stays browser-pure (no Electron/Node imports).
   - **Frosty, Purrtal, Faux Paw, Thunderpaws, and Meowstro** (R4) — low normal stats traded for one specialized Tactics ability
 - Dog roles are equally specialized: **Chomps McGraw** bites hardest; **Fetch Armstrong**, **Bark McEnroe**, and **Bone Jovi** attack at range; **Howl Pacino** buffs the pack; **Barkour Bandit** bypasses a defender; **Dr. Droolittle** heals allies; and **Growl Gadot** weakens a cat's next attack
 - Dog tiers scale from **Yard Punk** through **Ironhide** and **Bonecrusher** to round-seven **Top Dog**
+- The battlefield is an **Elite Squad**: deploy up to 6 cats, then strengthen those slots through same-color merges; each new merge tier slightly beats the three inputs combined
+- Waves grow from 1 dog in round 1 to 6 in round 10; rounds 5–8 no longer roll tier-one dogs, rounds 9–10 start at tier three, and late waves guarantee a mix of the new ranged/support specialists
 - Cats only stack/merge with the **same color and level**
 - Shop pets can be **Saved** through refresh and into the next round
 - HUD **SPEED** chip toggles 1×/2× combat (persisted; reduced-motion users default to 2×)

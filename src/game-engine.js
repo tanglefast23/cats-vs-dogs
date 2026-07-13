@@ -11,6 +11,7 @@ export const CAT_ZONE_START = 10;
 export const MAX_ROUNDS = 10;
 export const ACTIONS_PER_ROUND = 2;
 export const BENCH_SIZE = 6;
+export const MAX_FIELD_CATS = 6;
 export const MAX_SHOP_SIZE = 5;
 
 /** Coat 0 orange tabby: column shot. Coat 1 grey/blue: melee tank. Coat 2 white: homing shot. */
@@ -131,37 +132,37 @@ export const CAT_COAT_INFO = {
 // Default Purrcy stats are exported for older callers; every coat has its own curve below.
 export const CAT_STATS = {
   1: { hp: 4, attack: 4 },
-  2: { hp: 6, attack: 7 },
-  3: { hp: 9, attack: 11 },
+  2: { hp: 13, attack: 14 },
+  3: { hp: 40, attack: 44 },
 };
 
 // A unit pays for targeting or active utility with damage. Purrcy is the damage benchmark.
 const COAT_ATTACK = {
-  0: { 1: 4, 2: 7, 3: 11 },
-  1: { 1: 1, 2: 2, 3: 3 },
-  2: { 1: 2, 2: 3, 3: 5 },
-  3: { 1: 1, 2: 1, 3: 2 },
-  4: { 1: 1, 2: 2, 3: 3 },
-  5: { 1: 3, 2: 5, 3: 8 },
-  6: { 1: 1, 2: 1, 3: 2 },
-  7: { 1: 1, 2: 2, 3: 3 },
-  8: { 1: 1, 2: 2, 3: 3 },
-  9: { 1: 1, 2: 1, 3: 2 },
-  10: { 1: 1, 2: 1, 3: 2 },
+  0: { 1: 4, 2: 14, 3: 44 },
+  1: { 1: 1, 2: 4, 3: 13 },
+  2: { 1: 2, 2: 7, 3: 22 },
+  3: { 1: 1, 2: 4, 3: 13 },
+  4: { 1: 1, 2: 4, 3: 13 },
+  5: { 1: 3, 2: 10, 3: 31 },
+  6: { 1: 1, 2: 4, 3: 13 },
+  7: { 1: 1, 2: 4, 3: 13 },
+  8: { 1: 1, 2: 4, 3: 13 },
+  9: { 1: 1, 2: 4, 3: 13 },
+  10: { 1: 1, 2: 4, 3: 13 },
 };
 
 const COAT_HP = {
-  0: { 1: 4, 2: 6, 3: 9 },
-  1: { 1: 18, 2: 27, 3: 40 },
-  2: { 1: 7, 2: 10, 3: 14 },
-  3: { 1: 5, 2: 7, 3: 10 },
-  4: { 1: 4, 2: 6, 3: 9 },
-  5: { 1: 4, 2: 6, 3: 9 },
-  6: { 1: 5, 2: 8, 3: 12 },
-  7: { 1: 6, 2: 9, 3: 13 },
-  8: { 1: 4, 2: 6, 3: 9 },
-  9: { 1: 4, 2: 6, 3: 9 },
-  10: { 1: 5, 2: 8, 3: 12 },
+  0: { 1: 4, 2: 13, 3: 40 },
+  1: { 1: 18, 2: 56, 3: 171 },
+  2: { 1: 7, 2: 22, 3: 68 },
+  3: { 1: 5, 2: 16, 3: 49 },
+  4: { 1: 4, 2: 13, 3: 40 },
+  5: { 1: 4, 2: 13, 3: 40 },
+  6: { 1: 5, 2: 16, 3: 49 },
+  7: { 1: 6, 2: 19, 3: 58 },
+  8: { 1: 4, 2: 13, 3: 40 },
+  9: { 1: 4, 2: 13, 3: 40 },
+  10: { 1: 5, 2: 16, 3: 49 },
 };
 
 export const DOG_STATS = {
@@ -570,6 +571,7 @@ export function purchaseShopFighterToBoard(game, shopIndex, row, col) {
   const slot = purchasableFighterSlot(game, shopIndex);
   if (
     !slot || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS
+    || game.cats.length >= MAX_FIELD_CATS
     || game.cats.some((cat) => cat.row === row && cat.col === col)
   ) return game;
   const next = copy(game);
@@ -993,6 +995,7 @@ export function mergeUnitOnto(game, sourceType, sourceId, targetType, targetId) 
 
 export function placeCat(game, benchIndex, row, col) {
   if (game.phase !== 'prep' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  if (game.cats.length >= MAX_FIELD_CATS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col)) return game;
   const source = game.bench[benchIndex];
   if (!source) return game;
@@ -1041,9 +1044,33 @@ export function availableDogRolesForRound(round = 1) {
     .filter((role) => DOG_ROLE_INFO[role].unlockRound <= safeRound);
 }
 
+export function waveCountForRound(round = 1) {
+  const counts = [1, 2, 2, 3, 3, 4, 4, 5, 5, 6];
+  const safeRound = Math.max(1, Math.floor(Number(round) || 1));
+  return counts[Math.min(safeRound - 1, counts.length - 1)];
+}
+
+export function minimumDogTierForRound(round = 1) {
+  const safeRound = Math.max(1, Math.floor(Number(round) || 1));
+  if (safeRound >= 9) return 3;
+  if (safeRound >= 5) return 2;
+  return 1;
+}
+
+export function featuredDogRolesForRound(round = 1) {
+  const featured = {
+    6: [DOG_ROLE.FRISBEE, DOG_ROLE.LOBBER],
+    7: [DOG_ROLE.FRISBEE],
+    8: [DOG_ROLE.LOBBER, DOG_ROLE.MEDIC],
+    9: [DOG_ROLE.FRISBEE, DOG_ROLE.LOBBER, DOG_ROLE.MEDIC],
+    10: [DOG_ROLE.LOBBER, DOG_ROLE.MEDIC, DOG_ROLE.GROWLER],
+  };
+  return featured[Math.max(1, Math.floor(Number(round) || 1))] ?? [];
+}
+
 export function generateWave(round, random = Math.random) {
-  const counts = [1, 2, 2, 3, 3, 4, 4];
-  const count = counts[Math.min(round - 1, counts.length - 1)];
+  const count = waveCountForRound(round);
+  const minTier = minimumDogTierForRound(round);
   const maxTier = shopTierForRound(round);
   const availableRoles = availableDogRolesForRound(round);
   const available = Array.from({ length: COLS }, (_, col) => col);
@@ -1051,7 +1078,8 @@ export function generateWave(round, random = Math.random) {
   for (let i = 0; i < count; i += 1) {
     const pick = Math.floor(random() * available.length);
     const col = available.splice(pick, 1)[0];
-    const tier = 1 + Math.min(maxTier - 1, Math.floor(random() * maxTier));
+    const tierSpan = Math.max(1, maxTier - minTier + 1);
+    const tier = minTier + Math.min(tierSpan - 1, Math.floor(random() * tierSpan));
     const role = availableRoles[Math.min(availableRoles.length - 1, Math.floor(random() * availableRoles.length))];
     dogs.push(createDog(tier, 0, col, role));
   }
@@ -1062,12 +1090,16 @@ export function generateWave(round, random = Math.random) {
   }
   const debutRoles = Object.values(DOG_ROLE)
     .filter((role) => DOG_ROLE_INFO[role].unlockRound === round && role !== DOG_ROLE.SCRUFFY);
-  for (const debutRole of debutRoles) {
-    if (!dogs.length || dogs.some((dog) => dog.role === debutRole)) continue;
-    const ordinaryIndex = dogs.findIndex((dog) => !debutRoles.includes(dog.role));
-    const replaceIndex = ordinaryIndex >= 0 ? ordinaryIndex : dogs.length - 1;
-    const replaced = dogs[replaceIndex];
-    dogs[replaceIndex] = createDog(replaced.tier, 0, replaced.col, debutRole);
+  const requiredRoles = [...new Set([...debutRoles, ...featuredDogRolesForRound(round)])];
+  for (const requiredRole of requiredRoles) {
+    if (!dogs.length || dogs.some((dog) => dog.role === requiredRole)) continue;
+    const replaceIndex = dogs.findIndex((dog) => !requiredRoles.includes(dog.role));
+    const fallbackIndex = replaceIndex >= 0
+      ? replaceIndex
+      : dogs.findIndex((dog, index) => dogs.findIndex((other) => other.role === dog.role) !== index);
+    const safeIndex = fallbackIndex >= 0 ? fallbackIndex : dogs.length - 1;
+    const replaced = dogs[safeIndex];
+    dogs[safeIndex] = createDog(replaced.tier, 0, replaced.col, requiredRole);
   }
   return dogs;
 }

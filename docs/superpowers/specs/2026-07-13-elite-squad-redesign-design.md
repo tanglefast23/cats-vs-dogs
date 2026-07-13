@@ -1,7 +1,7 @@
 # Elite Squad Redesign — Design Doc
 
 - **Date:** 2026-07-13
-- **Status:** Approved design, not yet implemented
+- **Status:** Balance core implemented; Tactics-window movement remains future work
 - **Goal in one line:** Make the game genuinely strategic by capping how many cats you can field, so that saving units, hunting for combos, and merging finally matter.
 
 ---
@@ -88,6 +88,14 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 - **Exact merge stat curves** per coat — start from the "beat the sum by a little" rule, tune in playtest.
 - **Whether flat 6 holds** — confirm it feels right after playing; adjust the number if not.
 - **Incoming-wave visibility** — confirm the UI shows the *columns* of the next wave during prep. The engine knows them (`nextWave`); movement is far more strategic if the player can see where the dogs are about to come. If it's not shown, showing it becomes part of this work.
+
+## Implemented balance baseline
+
+- Field cap: **6 cats**, shown in the HUD; purchases and bench placements cannot create a seventh field cat, while moves and merges remain legal.
+- Merge curve: every coat's level 2 health and attack are just over 3× level 1; level 3 is just over 3× level 2.
+- Wave sizes by round: **1, 2, 2, 3, 3, 4, 4, 5, 5, 6**.
+- Tier floors: tier 1 in rounds 1–4, tier 2 in rounds 5–8, and tier 3 in rounds 9–10.
+- Featured specialists: Fetch Armstrong and Bone Jovi are forced into round 6; Bone Jovi and Dr. Droolittle into round 8; the last two waves guarantee three ranged/support roles, including Growl Gadot in round 10.
 
 ## Non-goals (explicitly out of scope for now)
 

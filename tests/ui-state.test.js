@@ -8,7 +8,7 @@ import {
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
-import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { CAT_MOVE_LIMIT_MESSAGE, FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
@@ -170,6 +170,36 @@ test('dragging a board cat to another empty cat cell produces a move action', ()
   });
 
   assert.deepEqual(action, { type: 'move', row: 12, col: 5 });
+});
+
+test('a full squad blocks new deployments while still allowing moves and merges', () => {
+  const common = {
+    target: { kind: 'cell', row: 10, col: 2, occupied: null },
+    catZoneStart: 9,
+    rows: 14,
+    cols: 6,
+    fieldCount: 6,
+    fieldCap: 6,
+  };
+
+  assert.equal(FIELD_CAP_MESSAGE, 'Elite Squad full (6/6). Merge, bench, or sell a cat before deploying another.');
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'bench', id: 'cat-1', level: 1 },
+  }), { type: 'invalid', reason: 'field-cap' });
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'shop-fighter', id: 'shop-1', level: 1 },
+  }), { type: 'invalid', reason: 'field-cap' });
+  assert.deepEqual(getDropAction({
+    ...common,
+    source: { type: 'cat', id: 'cat-1', level: 1 },
+  }), { type: 'move', row: 10, col: 2 });
+  assert.deepEqual(getDropAction({
+    ...common,
+    target: { kind: 'cell', row: 10, col: 2, occupied: { id: 'cat-2', level: 1 } },
+    source: { type: 'bench', id: 'cat-1', level: 1 },
+  }), { type: 'merge', targetType: 'cat', targetId: 'cat-2' });
 });
 
 test('drag highlights give every cat the same one-square between-round limit', () => {

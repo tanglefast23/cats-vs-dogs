@@ -8,6 +8,7 @@ export const DRAG_FEEDBACK = Object.freeze({
 });
 
 export const CAT_MOVE_LIMIT_MESSAGE = 'During prep, each cat can move only one adjacent square.';
+export const FIELD_CAP_MESSAGE = 'Elite Squad full (6/6). Merge, bench, or sell a cat before deploying another.';
 
 // Placement feedback retains 40% of the original landing force (a 60% cut).
 export const DROP_IMPACT = Object.freeze({
@@ -30,7 +31,10 @@ function sameCatKind(source, occupied) {
   return sameLevel && sameCoat;
 }
 
-export function getDropAction({ source, target, catZoneStart, rows, cols, phase = 'prep', paused = false }) {
+export function getDropAction({
+  source, target, catZoneStart, rows, cols, phase = 'prep', paused = false,
+  fieldCount = 0, fieldCap = Number.POSITIVE_INFINITY,
+}) {
   if (!source || !target) return invalid();
 
   if (target.kind === 'sell') {
@@ -81,6 +85,9 @@ export function getDropAction({ source, target, catZoneStart, rows, cols, phase 
       return source.type === 'shop-fighter'
         ? { type: 'purchase-merge', targetType: 'cat', targetId: target.occupied.id }
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
+    }
+    if ((source.type === 'shop-fighter' || source.type === 'bench') && fieldCount >= fieldCap) {
+      return invalid('field-cap');
     }
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
     if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();

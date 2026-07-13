@@ -1,5 +1,5 @@
 import {
-  ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_ROUNDS, ACTIONS_PER_ROUND,
+  ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
@@ -13,7 +13,7 @@ import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } fro
 import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
-import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { CAT_MOVE_LIMIT_MESSAGE, FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 
@@ -486,6 +486,8 @@ function dropAction(source, descriptor) {
     cols: COLS,
     phase: game.phase,
     paused: false,
+    fieldCount: game.cats.length,
+    fieldCap: MAX_FIELD_CATS,
   });
 }
 
@@ -725,7 +727,10 @@ async function finishDrag(event, cancelled = false) {
 
   if (!valid) {
     const moveDistanceExceeded = action.reason === 'move-distance';
-    game.message = moveDistanceExceeded
+    const fieldCapReached = action.reason === 'field-cap';
+    game.message = fieldCapReached
+      ? FIELD_CAP_MESSAGE
+      : moveDistanceExceeded
       ? CAT_MOVE_LIMIT_MESSAGE
       : target.descriptor?.kind === 'sell' && state.source.sellReason
       ? state.source.sellReason
@@ -1093,6 +1098,8 @@ function renderBoard() {
             if (game !== before) {
               selected = null;
               playCatDrop();
+            } else if (game.cats.length >= MAX_FIELD_CATS) {
+              game.message = FIELD_CAP_MESSAGE;
             }
           } else if (selected.type === 'cat') {
             const movingCat = game.cats.find((unit) => unit.id === selected.id);
@@ -1125,6 +1132,7 @@ function renderHud() {
   $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
+  $('#squad-count').textContent = `${game.cats.length}/${MAX_FIELD_CATS}`;
   $('#inventory-count').textContent = `${game.inventory.filter(Boolean).length}/${game.inventory.length}`;
   $('#message').textContent = game.message;
   const speedChip = $('#speed-toggle');
