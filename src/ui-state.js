@@ -1,5 +1,3 @@
-import { REALTIME } from './game-engine.js';
-
 export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
 }
@@ -77,19 +75,19 @@ export function workerTooltipInfo(worker, info) {
   return {
     kind: 'cat',
     title: `L${level} ${info.name}`,
-    stats: `Produces ${output.quantity}${tier} ${output.kind} every ${REALTIME.workerProduceMs / 1000}s`,
+    stats: `Produces ${output.quantity}${tier} ${output.kind} after each battle`,
     detailLabel: 'Production',
     attack: 'Place in the Production House. Three matching workers evolve to the next level.',
     note: worker.pendingOutput
-      ? 'Napping — collect the finished item to start the next batch.'
+      ? 'Collect the ready output before the next production cycle replaces it.'
       : info.blurb,
   };
 }
 
-/** The shop is always open in real time; only pause and price gate a purchase. */
-export function shopPetAvailability({ sold, gold, paused = false }) {
+export function shopPetAvailability({ sold, gold, benchLength, benchSize, phase, playing }) {
   if (sold) return { interactive: false, canBuy: false, reason: 'sold' };
-  if (paused) return { interactive: false, canBuy: false, reason: 'paused' };
+  if (phase !== 'prep' || playing) return { interactive: false, canBuy: false, reason: 'phase' };
   if (gold < 3) return { interactive: true, canBuy: false, reason: 'gold' };
+  if (benchLength >= benchSize) return { interactive: true, canBuy: false, reason: 'bench' };
   return { interactive: true, canBuy: true, reason: null };
 }

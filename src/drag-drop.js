@@ -7,6 +7,8 @@ export const DRAG_FEEDBACK = Object.freeze({
   returnMs: 260,
 });
 
+export const CAT_MOVE_LIMIT_MESSAGE = 'During prep, each cat can move only one adjacent square.';
+
 // Placement feedback retains 40% of the original landing force (a 60% cut).
 export const DROP_IMPACT = Object.freeze({
   intensity: 0.4,
@@ -28,27 +30,24 @@ function sameCatKind(source, occupied) {
   return sameLevel && sameCoat;
 }
 
-/**
- * Everything is decided by what is dragged onto what — the battle always runs,
- * so there are no phase gates. Placed cats never move again: a board cat can
- * only merge onto a matching cat or ride to the adoption box.
- */
-export function getDropAction({ source, target, catZoneStart, rows, cols }) {
+export function getDropAction({ source, target, catZoneStart, rows, cols, phase = 'prep', paused = false }) {
   if (!source || !target) return invalid();
 
   if (target.kind === 'sell') {
-    return (source.type === 'cat' || source.type === 'bench') && source.sellable
+    return phase === 'prep'
+      && (source.type === 'cat' || source.type === 'bench')
+      && source.sellable
       ? { type: 'sell', value: source.sellValue }
       : invalid();
   }
 
   if (source.type === 'item' && target.kind === 'fighter') {
     if (source.itemKind === 'food') {
-      return target.hp > 0 && target.hp < target.maxHp
+      return phase === 'tactics' && target.hp > 0 && target.hp < target.maxHp
         ? { type: 'use-food', targetId: target.id }
         : invalid();
     }
-    if (source.itemKind === 'weapon' || source.itemKind === 'armour') {
+    if ((source.itemKind === 'weapon' || source.itemKind === 'armour') && (phase === 'prep' || phase === 'tactics' || paused)) {
       return { type: 'equip', targetId: target.id };
     }
     return invalid();
@@ -77,8 +76,6 @@ export function getDropAction({ source, target, catZoneStart, rows, cols }) {
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
-    // A square held by a decoy or a dog is not free, even with no cat on it.
-    if (target.blocked) return invalid();
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
       return source.type === 'shop-fighter'
@@ -86,8 +83,14 @@ export function getDropAction({ source, target, catZoneStart, rows, cols }) {
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
     }
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
-    if (source.type === 'bench') return { type: 'place', row: target.row, col: target.col };
-    return invalid('placement-permanent');
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepOrigin) {
+      const distance = Math.abs(target.row - source.prepOrigin.row) + Math.abs(target.col - source.prepOrigin.col);
+      if (distance > 1) return invalid('move-distance');
+    }
+    return source.type === 'bench'
+      ? { type: 'place', row: target.row, col: target.col }
+      : { type: 'move', row: target.row, col: target.col };
   }
 
   if (target.kind === 'bench') {
@@ -98,7 +101,8 @@ export function getDropAction({ source, target, catZoneStart, rows, cols }) {
         ? { type: 'purchase-merge', targetType: 'bench', targetId: target.occupied.id }
         : { type: 'merge', targetType: 'bench', targetId: target.occupied.id };
     }
-    return source.type === 'shop-fighter' ? { type: 'purchase-bench', index: target.index } : invalid();
+    if (source.type === 'shop-fighter') return { type: 'purchase-bench', index: target.index };
+    return source.type === 'cat' ? { type: 'return' } : invalid();
   }
 
   return invalid();

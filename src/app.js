@@ -1,22 +1,25 @@
 import {
-  ROWS, COLS, CAT_ZONE_START, MAX_WAVES, REALTIME, cellBlocked,
+  ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_STATS, DOG_ROLE_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
-  WORKER_INFO, createGame, advance, refreshShop, toggleSaveShopSlot,
-  mergeUnitOnto, useActiveAbility,
-  shopTierForRound, purchaseShopFighterToBoard,
+  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
+  returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
+  openTacticsWindow, continueCombat, useActiveAbility,
+  shopTierForRound, purchaseShopFighterToBench, purchaseShopFighterToBoard,
   purchaseShopFighterOnto, purchaseShopWorker, moveWorker, mergeWorkerOnto,
   collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
-import { DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 
 let game = createGame();
+let selected = null;
+let playing = false;
 let dragState = null;
 let suppressNextPetClick = false;
 let dragHoverElement = null;
@@ -25,17 +28,13 @@ let activeTargeting = null;
 let glossaryTab = 'battle';
 let manualPaused = false;
 let glossaryPaused = false;
-// Real-time battles must not run in a window nobody is watching.
-let blurPaused = document.hidden || !document.hasFocus();
 let pausedAnimations = [];
-let pauseStartedAt = null;
-const pausedAnimSteps = [];
-let resultShown = false;
+let resumeWaiters = [];
 const collectingStations = new Set();
 
-/** Combat speed: 1× or 2×, persisted. Speed now changes real difficulty, so
- * everyone starts at 1× — reduced-motion no longer implies a faster clock. */
+/** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
+const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 let combatSpeed = loadCombatSpeed();
 let timing = combatTiming(combatSpeed);
 
@@ -47,7 +46,7 @@ function loadCombatSpeed() {
   } catch {
     // Private mode / quota — fall through to the default.
   }
-  return 1;
+  return prefersReducedMotion ? 2 : 1;
 }
 
 function setCombatSpeed(speed) {
@@ -66,7 +65,6 @@ const productionEl = $('#production-grid');
 const dogPreviewEl = $('#dog-preview-grid');
 const inventoryEl = $('#inventory');
 const gridEl = $('#grid');
-const unitsEl = $('#units');
 const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
 const settingsModalEl = $('#settings-modal');
@@ -85,6 +83,31 @@ if (!tooltipEl) {
 const TOOLTIP_HOVER_DELAY_MS = 450;
 let tooltipTimer = null;
 let tooltipPointer = { x: 0, y: 0 };
+let moveLimitTooltipTimer = null;
+
+function showMoveLimitTooltip(clientX, clientY) {
+  let tip = document.querySelector('.move-limit-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'move-limit-tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.append(tip);
+  }
+  window.clearTimeout(moveLimitTooltipTimer);
+  tip.textContent = CAT_MOVE_LIMIT_MESSAGE;
+  tip.hidden = false;
+  tip.classList.remove('is-visible');
+  void tip.offsetWidth;
+  tip.classList.add('is-visible');
+  const rect = tip.getBoundingClientRect();
+  const pad = 12;
+  tip.style.left = `${Math.max(pad, Math.min(clientX + 14, window.innerWidth - rect.width - pad))}px`;
+  tip.style.top = `${Math.max(pad, Math.min(clientY + 16, window.innerHeight - rect.height - pad))}px`;
+  moveLimitTooltipTimer = window.setTimeout(() => {
+    tip.hidden = true;
+    tip.classList.remove('is-visible');
+  }, 2800);
+}
 
 function clearTooltipTimer() {
   if (tooltipTimer != null) {
@@ -171,108 +194,91 @@ function unitCanvas(type, unit) {
   return canvas;
 }
 
+function selectedMatches(type, id) {
+  return selected?.type === type && selected?.id === id;
+}
+
+function ownedCat(type, id) {
+  const collection = type === 'cat' ? game.cats : type === 'bench' ? game.bench : [];
+  return collection.find((cat) => cat.id === id) ?? null;
+}
+
 function catLabel(cat) {
   return CAT_COAT_INFO[normalizeCoat(cat.coat)]?.shortName ?? 'Cat';
 }
 
-// ---------------------------------------------------------------------------
-// Game clock: one requestAnimationFrame loop drives the whole battle.
-// ---------------------------------------------------------------------------
+function showShopPurchaseDenied(button, reason) {
+  const goldChip = $('#gold')?.closest('.hud-chip');
+  button.classList.remove('purchase-denied');
+  goldChip?.classList.remove('gold-denied');
+  void button.offsetWidth;
+  button.classList.add('purchase-denied');
+  if (reason === 'gold') goldChip?.classList.add('gold-denied');
 
-function uiPaused() {
-  return manualPaused || glossaryPaused || blurPaused;
-}
+  game.message = reason === 'gold'
+    ? `Not enough gold — this cat costs 3 and you have ${game.gold}.`
+    : 'The bench is full — place a cat in the yard before adopting another.';
+  $('#message').textContent = game.message;
 
-function slowMoActive() {
-  return Boolean(activeTargeting) || Boolean(dragState?.started);
-}
-
-function clockRate() {
-  return combatSpeed * (slowMoActive() ? REALTIME.slowMoFactor : 1);
-}
-
-let lastFrameTs = null;
-
-function frame(ts) {
-  const dt = lastFrameTs == null ? 0 : Math.min(200, ts - lastFrameTs);
-  lastFrameTs = ts;
-
-  const running = dt > 0 && !uiPaused() && game.phase === 'battle';
-  if (running) {
-    const advanced = advance(game, dt * clockRate());
-    if (advanced !== game) {
-      game = advanced;
-      if (game.events.length) handleEvents(game.events);
-    }
-
-    // Aiming with a dead caster would soft-lock slow-mo — release it.
-    if (activeTargeting && !game.cats.some((cat) => cat.id === activeTargeting.casterId)) {
-      activeTargeting = null;
-      syncSlowMo();
-    }
-  }
-
-  // A paused or finished board is static — skip the per-frame DOM work.
-  if (running) {
-    syncUnits();
-    updateClockUi();
-  }
-  maybeShowResult();
-  requestAnimationFrame(frame);
-}
-
-function syncSlowMo() {
-  document.body.classList.toggle('slow-mo', slowMoActive() && game.phase === 'battle');
-}
-
-function maybeShowResult() {
-  if (resultShown || (game.phase !== 'victory' && game.phase !== 'gameover')) return;
-  resultShown = true;
-  activeTargeting = null;
-  syncSlowMo();
-  syncUnits();
-  renderSidePanels();
-  window.setTimeout(showResult, 700);
-}
-
-// ---------------------------------------------------------------------------
-// Units layer: one persistent element per living unit, moved via left/top.
-// ---------------------------------------------------------------------------
-
-const unitEls = new Map();
-/** unit id → {count, expiresAt}: while held, syncUnits leaves hp/removal to the hit animation. */
-const animLocks = new Map();
-
-/** A timeout whose callback waits out a pause instead of firing into a frozen board. */
-function scheduleAnimStep(ms, fn) {
   window.setTimeout(() => {
-    if (uiPaused()) pausedAnimSteps.push(fn);
-    else fn();
-  }, ms);
+    button.classList.remove('purchase-denied');
+    goldChip?.classList.remove('gold-denied');
+  }, 560);
 }
 
-function lockUnit(id, forMs) {
-  const entry = animLocks.get(id) ?? { count: 0, expiresAt: 0 };
-  entry.count += 1;
-  entry.expiresAt = Math.max(entry.expiresAt, performance.now() + forMs + 400);
-  animLocks.set(id, entry);
-}
+function renderShop() {
+  shopEl.innerHTML = '';
+  shopEl.dataset.count = String(game.shop.length);
+  game.shop.forEach((slot, index) => {
+    const isWorker = slot.category === 'worker';
+    const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
+    const summary = shopCardSummary(slot, info);
+    const interactive = !slot.sold && game.phase === 'prep' && !playing;
+    const canBuy = interactive && game.gold >= 3;
+    const reason = slot.sold ? 'sold' : game.gold < 3 ? 'gold' : 'ready';
+    const wrap = document.createElement('div');
+    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
 
-function unlockUnit(id) {
-  const entry = animLocks.get(id);
-  if (!entry) return;
-  entry.count -= 1;
-  if (entry.count <= 0) animLocks.delete(id);
-}
+    const button = document.createElement('button');
+    button.className = 'shop-card';
+    button.disabled = !interactive;
+    button.setAttribute('aria-disabled', canBuy ? 'false' : 'true');
+    button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
+    button.insertAdjacentHTML('beforeend', `
+      <span class="shop-tier">${summary.badge}</span>
+      <strong>${summary.name}</strong>
+      <span class="price">● ${summary.cost}</span>`);
+    button.addEventListener('click', () => {
+      if (!canBuy) {
+        showShopPurchaseDenied(button, reason);
+        return;
+      }
+      game.message = isWorker
+        ? `Drag ${info.name} into the Production Yard.`
+        : `Drag ${info.name} onto the battlefield or a matching fighter.`;
+      $('#message').textContent = game.message;
+    });
+    bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
+    bindTooltip(button, () => isWorker ? workerTooltipInfo(slot, info) : catTooltipInfo(slot));
 
-function unitLocked(id) {
-  const entry = animLocks.get(id);
-  if (!entry) return false;
-  if (performance.now() > entry.expiresAt) {
-    animLocks.delete(id);
-    return false;
-  }
-  return true;
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = `shop-save ${slot.saved ? 'is-saved' : ''}`;
+    save.textContent = slot.saved ? 'Saved' : 'Save';
+    save.title = slot.saved
+      ? 'Unsave this pet so it can refresh'
+      : 'Save this pet through refresh and the next round';
+    save.setAttribute('aria-pressed', slot.saved ? 'true' : 'false');
+    save.disabled = slot.sold || game.phase !== 'prep' || playing;
+    save.addEventListener('click', (event) => {
+      event.stopPropagation();
+      game = toggleSaveShopSlot(game, index);
+      render();
+    });
+
+    wrap.append(button, save);
+    shopEl.append(wrap);
+  });
 }
 
 function catMarkup(cat) {
@@ -280,10 +286,11 @@ function catMarkup(cat) {
   unit.className = 'unit';
   unit.dataset.unitId = cat.id;
   unit.append(unitCanvas('cat', cat));
+  const copies = cat.copies ?? 1;
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">L${cat.level}</span>
-    <span class="copy-pips"></span>
-    <span class="hp-wrap"><span class="hp-bar hp-full" style="width:100%"></span></span>`);
+    <span class="copy-pips">${Array.from({ length: copies }, () => '<i></i>').join('')}</span>
+    <span class="hp-wrap"><span class="hp-bar hp-${hpTone(cat.hp, cat.maxHp)}" style="width:${Math.max(0, cat.hp / cat.maxHp * 100)}%"></span></span>`);
   return unit;
 }
 
@@ -294,477 +301,98 @@ function dogMarkup(dog) {
   unit.append(unitCanvas('dog', dog));
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">T${dog.tier}</span>
-    <span class="hp-wrap"><span class="hp-bar hp-full" style="width:100%"></span></span>`);
+    <span class="hp-wrap"><span class="hp-bar hp-${hpTone(dog.hp, dog.maxHp)}" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
   return unit;
 }
 
-function decoyMarkup(decoy) {
-  const unit = document.createElement('div');
-  unit.className = 'unit';
-  unit.dataset.unitId = decoy.id;
-  const visual = unitCanvas('cat', { level: 1, coat: 8 });
-  visual.classList.add('decoy-unit');
-  unit.append(visual);
-  unit.insertAdjacentHTML('beforeend', `
-    <span class="hp-wrap"><span class="hp-bar hp-full" style="width:100%"></span></span>`);
-  return unit;
+function catFromState(state, type, id) {
+  const list = type === 'bench' ? state.bench : state.cats;
+  return list.find((cat) => cat.id === id);
 }
 
-function liveCat(id) {
-  return game.cats.find((cat) => cat.id === id) ?? null;
+function queueUpgradeReveal(beforeState, afterState, targetType, targetId) {
+  const before = catFromState(beforeState, targetType, targetId);
+  const after = catFromState(afterState, targetType, targetId);
+  const reveal = describeUpgrade(before, after);
+  if (!reveal) return null;
+  pendingUpgrade = { ...reveal, targetType, targetId };
+  return reveal;
 }
 
-function liveDog(id) {
-  return game.dogs.find((dog) => dog.id === id) ?? null;
-}
-
-function buildUnitElement(entity, type) {
-  const el = document.createElement('div');
-  el.className = `rt-unit rt-${type}`;
-  el.dataset.unitId = entity.id;
-  el.dataset.type = type;
-
-  if (type === 'cat') {
-    el.append(catMarkup(entity));
-    el.insertAdjacentHTML('beforeend', '<span class="cd-ring"></span>');
-    if (entity.activeAbility) el.insertAdjacentHTML('beforeend', '<span class="ability-badge"></span>');
-    bindTooltip(el, () => {
-      const cat = liveCat(entity.id);
-      return cat ? catTooltipInfo(cat) : null;
-    });
-    bindPetDrag(el, 'cat', () => liveCat(entity.id));
-    el.addEventListener('click', () => onCatUnitClick(entity.id));
-  } else if (type === 'dog') {
-    el.append(dogMarkup(entity));
-    bindTooltip(el, () => {
-      const dog = liveDog(entity.id);
-      return dog ? dogTooltipInfo(dog) : null;
-    });
-    el.addEventListener('click', () => onDogUnitClick(entity.id));
-  } else {
-    el.append(decoyMarkup(entity));
+function upgradeAnchor(targetType, targetId) {
+  if (targetType === 'bench') {
+    return document.querySelector(`.bench-slot[data-unit-id="${targetId}"]`);
   }
-  // The frame loop touches these sixty times a second — resolve them once.
-  el.refs = {
-    hpBar: el.querySelector('.hp-bar'),
-    badge: el.querySelector('.unit-badge'),
-    pips: el.querySelector('.copy-pips'),
-    ring: el.querySelector('.cd-ring'),
-    abilityBadge: el.querySelector('.ability-badge'),
-    canvas: el.querySelector('canvas'),
-  };
-  return el;
+  return document.querySelector(`.unit[data-unit-id="${targetId}"]`)?.closest('.cell');
 }
 
-/** Countdown sweep from the game clock, so pause/slow-mo/2× all stay in sync. */
-function setRingProgress(ring, readyAt, durationMs) {
-  const progress = 1 - Math.min(1, Math.max(0, (readyAt - game.clockMs) / durationMs));
-  ring.style.setProperty('--p', progress.toFixed(3));
-}
+function playPendingUpgrade() {
+  if (!pendingUpgrade) return;
+  const reveal = pendingUpgrade;
+  pendingUpgrade = null;
+  const anchor = upgradeAnchor(reveal.targetType, reveal.targetId);
+  if (!anchor) return;
 
-function updateUnitElement(el, entity, type) {
-  const refs = el.refs ?? {};
-  if (!unitLocked(entity.id) && refs.hpBar && el.lastHp !== entity.hp) {
-    el.lastHp = entity.hp;
-    refs.hpBar.style.width = `${Math.max(0, (entity.hp / entity.maxHp) * 100)}%`;
-    refs.hpBar.className = `hp-bar hp-${hpTone(entity.hp, entity.maxHp)}`;
-  }
+  const rect = anchor.getBoundingClientRect();
+  const overlay = document.createElement('div');
+  overlay.className = `upgrade-reveal upgrade-${reveal.intensity}`;
+  overlay.style.left = `${rect.left + rect.width / 2}px`;
+  overlay.style.top = `${rect.top + rect.height / 2}px`;
+  overlay.style.width = `${Math.max(58, rect.width)}px`;
+  overlay.style.height = `${Math.max(58, rect.height)}px`;
 
-  if (type === 'cat') {
-    const signature = `${entity.level}|${normalizeCoat(entity.coat)}`;
-    if (el.dataset.signature !== signature) {
-      el.dataset.signature = signature;
-      if (refs.canvas) drawCat(refs.canvas, entity.level, entity.coat);
-      if (refs.badge) refs.badge.textContent = `L${entity.level}`;
-    }
-    const copies = entity.copies ?? 1;
-    if (refs.pips && Number(el.dataset.copies ?? 0) !== copies) {
-      el.dataset.copies = String(copies);
-      refs.pips.innerHTML = Array.from({ length: copies }, () => '<i></i>').join('');
-    }
-    if (refs.ring) setRingProgress(refs.ring, entity.nextAttackAt, REALTIME.catAttackMs);
-    if (refs.abilityBadge) {
-      const ready = game.clockMs >= (entity.abilityReadyAt ?? 0);
-      refs.abilityBadge.classList.toggle('is-ready', ready);
-      if ((refs.abilityBadge.textContent === '✦') !== ready) refs.abilityBadge.textContent = ready ? '✦' : '';
-      if (!ready) setRingProgress(refs.abilityBadge, entity.abilityReadyAt, REALTIME.abilityCooldownMs);
-      el.classList.toggle('has-ready-ability', ready);
-    }
-    el.classList.toggle('is-caster', activeTargeting?.casterId === entity.id);
-    el.classList.toggle('ability-target', Boolean(activeTargeting) && isAbilityTargetCat(entity));
-  } else if (type === 'dog') {
-    el.classList.toggle('is-frozen', (entity.frozenActions ?? 0) > 0);
-    el.classList.toggle('is-tangled', Boolean(entity.tangled));
-    el.classList.toggle('ability-target', Boolean(activeTargeting) && isAbilityTargetDog());
-  }
-}
-
-function isAbilityTargetDog() {
-  return activeTargeting?.mode === 'freeze' || activeTargeting?.mode === 'storm';
-}
-
-function isAbilityTargetCat(cat) {
-  if (!activeTargeting) return false;
-  if (activeTargeting.mode === 'encore') return cat.id !== activeTargeting.casterId;
-  if (activeTargeting.mode === 'teleport') return !activeTargeting.targetCatId;
-  return false;
-}
-
-function removeUnitElement(id, el) {
-  unitEls.delete(id);
-  el.classList.add('rt-dying');
-  // 360ms outlives the .34s rt-unit-pop animation in styles.css — keep in step.
-  scheduleAnimStep(360, () => el.remove());
-}
-
-function placeUnit(entity, type) {
-  let el = unitEls.get(entity.id);
-  if (!el) {
-    el = buildUnitElement(entity, type);
-    unitEls.set(entity.id, el);
-    unitsEl.append(el);
-  }
-  const cellKey = entity.row * COLS + entity.col;
-  if (el.lastCellKey !== cellKey) {
-    el.lastCellKey = cellKey;
-    const position = cellCenter(entity.row, entity.col);
-    el.style.left = `${position.xPercent}%`;
-    el.style.top = `${position.yPercent}%`;
-  }
-  updateUnitElement(el, entity, type);
-  return entity.id;
-}
-
-function syncUnits() {
-  const seen = new Set();
-  game.cats.forEach((cat) => seen.add(placeUnit(cat, 'cat')));
-  game.dogs.forEach((dog) => seen.add(placeUnit(dog, 'dog')));
-  (game.decoys ?? []).forEach((decoy) => seen.add(placeUnit(decoy, 'decoy')));
-
-  // Deleting entries mid-iteration is safe for Map, so no snapshot copy.
-  for (const [id, el] of unitEls) {
-    if (!seen.has(id) && !unitLocked(id)) removeUnitElement(id, el);
-  }
-}
-
-function clearUnits() {
-  unitEls.forEach((el) => el.remove());
-  unitEls.clear();
-  animLocks.clear();
-  effectsEl.innerHTML = '';
-}
-
-// ---------------------------------------------------------------------------
-// Per-frame HUD: gold counter, wave countdown, pause chip.
-// ---------------------------------------------------------------------------
-
-const waveCountdownEl = $('#wave-countdown');
-const goldEl = $('#gold');
-const refreshEl = $('#refresh');
-let workerRingSlots = [];
-let lastGoldShown = null;
-let lastWaveText = null;
-let lastWaveSoon = null;
-let lastAffordable = null;
-
-function updateClockUi() {
-  const gold = Math.floor(game.gold);
-  if (gold !== lastGoldShown) {
-    lastGoldShown = gold;
-    goldEl.textContent = gold;
-    // Passive income can cross price thresholds between renders — refresh the
-    // shop's affordability the moment it flips instead of waiting for an event.
-    const affordable = `${gold >= 3}|${gold >= 1}`;
-    if (affordable !== lastAffordable) {
-      lastAffordable = affordable;
-      renderShop();
-      refreshEl.disabled = uiPaused() || gold < 1 || game.phase !== 'battle';
-    }
-  }
-
-  if (waveCountdownEl) {
-    if (game.phase === 'battle' && game.waveDueAt != null) {
-      const remaining = Math.max(0, game.waveDueAt - game.clockMs);
-      const text = `WAVE ${Math.min(MAX_WAVES, game.waveNumber + 1)} IN ${Math.ceil(remaining / 1000)}s`;
-      if (text !== lastWaveText) {
-        lastWaveText = text;
-        waveCountdownEl.textContent = text;
-        waveCountdownEl.hidden = false;
-      }
-      const soon = remaining < 5000;
-      if (soon !== lastWaveSoon) {
-        lastWaveSoon = soon;
-        waveCountdownEl.classList.toggle('is-soon', soon);
-      }
-    } else if (!waveCountdownEl.hidden) {
-      waveCountdownEl.hidden = true;
-      lastWaveText = null;
-      lastWaveSoon = null;
-    }
-  }
-
-  workerRingSlots.forEach(({ ring, index }) => {
-    const worker = game.workers[index];
-    if (!worker || worker.pendingOutput || worker.outputReadyAt == null) return;
-    setRingProgress(ring, worker.outputReadyAt, REALTIME.workerProduceMs);
+  const radiance = document.createElement('span');
+  radiance.className = 'upgrade-radiance';
+  const smoke = document.createElement('span');
+  smoke.className = 'upgrade-smoke';
+  const vectors = [[-32,-18],[-12,-35],[14,-36],[34,-15],[-36,12],[-15,28],[16,30],[38,10]];
+  vectors.forEach(([x, y], index) => {
+    const puff = document.createElement('i');
+    puff.style.setProperty('--smoke-x', `${x}px`);
+    puff.style.setProperty('--smoke-y', `${y}px`);
+    puff.style.setProperty('--smoke-delay', `${index * 24}ms`);
+    smoke.append(puff);
   });
-}
+  const badge = document.createElement('b');
+  badge.className = 'upgrade-callout';
+  badge.textContent = reveal.label;
+  const note = document.createElement('em');
+  note.textContent = reveal.kind === 'level-up' ? 'NEW LOOK!' : 'STACKED!';
+  overlay.append(radiance, smoke, badge, note);
+  document.body.append(overlay);
 
-// ---------------------------------------------------------------------------
-// Event animations: everything schedules and returns — nothing blocks the clock.
-// ---------------------------------------------------------------------------
-
-function findUnitInner(id) {
-  return unitEls.get(id)?.querySelector('.unit') ?? null;
-}
-
-function effectAt(className, row, col, text = '') {
-  const position = cellCenter(row, col);
-  const effect = document.createElement('i');
-  effect.className = className;
-  effect.style.left = `${position.xPercent}%`;
-  effect.style.top = `${position.yPercent}%`;
-  effect.textContent = text;
-  effectsEl.append(effect);
-  return effect;
-}
-
-function applyHitVisual(event, { heavy = false } = {}) {
-  if (event.miss || !event.to) return;
-  playHit({ heavy });
-  const burst = effectAt('impact-burst', event.toRow, event.col);
-  const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
-  const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
-  const inner = findUnitInner(event.to);
-  if (inner) {
-    inner.classList.remove('hurt');
-    void inner.offsetWidth;
-    inner.classList.add('hurt');
-    const hpBar = inner.querySelector('.hp-bar');
-    if (hpBar) {
-      hpBar.style.width = `${Math.max(0, (event.hpAfter / event.maxHp) * 100)}%`;
-      hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
-    }
-    window.setTimeout(() => inner.classList.remove('hurt'), timing.impactMs);
-  }
-  window.setTimeout(() => burst.remove(), timing.impactMs);
-  window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
-}
-
-/** Impact resolution shared by every damaging animation. */
-function resolveHit(event, options = {}) {
-  applyHitVisual(event, options);
-  unlockUnit(event.to);
-  if (event.hpAfter <= 0) {
-    const el = unitEls.get(event.to);
-    if (el) removeUnitElement(event.to, el);
-  }
-}
-
-function scheduleShot(event, index = 0) {
-  const isBurst = Boolean(event.burst);
-  const isHoming = event.style === 'homing' || event.style === 'medic';
-  const stagger = isBurst
-    ? (event.pelletIndex ?? 0) * timing.burstStaggerMs + index * 8
-    : index * timing.shotStaggerMs;
-  const flightMs = isHoming ? timing.homingMs : isBurst ? timing.burstProjectileMs : timing.projectileMs;
-
-  if (!event.miss && event.to) lockUnit(event.to, stagger + flightMs);
-
-  scheduleAnimStep(stagger, () => {
-    const fromCol = event.fromCol ?? event.col;
-    const start = cellCenter(event.fromRow, fromCol);
-    const end = cellCenter(event.toRow, event.col);
-    const projectileStyle = event.style ? `${event.style}-projectile` : '';
-    const projectile = effectAt(
-      `projectile-effect ${isHoming ? 'homing-projectile' : ''} ${isBurst ? 'burst-projectile' : ''} ${projectileStyle}`.trim(),
-      event.fromRow,
-      fromCol,
-    );
-    const flight = projectile.animate(
-      isHoming
-        ? homingShotKeyframes(start, end)
-        : [
-          { left: `${start.xPercent}%`, top: `${start.yPercent}%`, transform: 'translate(-50%, -50%) scale(.7) rotate(0deg)' },
-          { left: `${end.xPercent}%`, top: `${end.yPercent}%`, transform: `translate(-50%, -50%) scale(${isBurst ? 0.95 : 1.15}) rotate(360deg)` },
-        ],
-      { duration: flightMs, easing: 'linear', fill: 'forwards' },
-    );
-    flight.finished.catch(() => {}).then(() => {
-      projectile.remove();
-      if (event.miss || !event.to) {
-        const fizzle = effectAt('impact-burst miss-fizzle', event.toRow, event.col);
-        window.setTimeout(() => fizzle.remove(), timing.impactMs);
-        return;
-      }
-      resolveHit(event);
-    });
+  anchor.classList.add('upgrade-transforming', `upgrade-${reveal.intensity}`);
+  if (reveal.kind === 'level-up') $('#board')?.classList.add('upgrade-board-pulse');
+  requestAnimationFrame(() => {
+    overlay.classList.add('is-revealing');
+    window.setTimeout(() => anchor.classList.add('upgrade-revealed'), UPGRADE_TIMING.revealDelayMs);
   });
-}
 
-function scheduleMelee(event, direction = 'down') {
-  const attacker = findUnitInner(event.from);
-  const className = direction === 'up' ? 'melee-lunge-up' : 'melee-lunge';
-  attacker?.classList.add(className);
-  if (!event.miss && event.to) lockUnit(event.to, timing.meleeMs);
-  scheduleAnimStep(Math.floor(timing.meleeMs / 2), () => {
-    if (!event.miss && event.to) resolveHit(event, { heavy: true });
-  });
-  scheduleAnimStep(timing.meleeMs, () => attacker?.classList.remove(className));
-}
-
-function scheduleCatScratch(event) {
-  const attacker = findUnitInner(event.from);
-  const flurry = document.createElement('span');
-  flurry.className = BLUE_SCRATCH_FLURRY.effectClass;
-  for (const side of ['left', 'right']) {
-    const paw = document.createElement('i');
-    paw.className = `scratch-paw scratch-paw-${side}`;
-    flurry.append(paw);
-  }
-  for (let index = 0; index < BLUE_SCRATCH_FLURRY.swipes; index += 1) {
-    const claw = document.createElement('i');
-    claw.className = `scratch-claw scratch-claw-${index + 1}`;
-    flurry.append(claw);
-  }
-  attacker?.classList.add(BLUE_SCRATCH_FLURRY.attackerClass);
-  attacker?.append(flurry);
-
-  const hitAt = Math.round(BLUE_SCRATCH_FLURRY.hitAtMs / combatSpeed);
-  const total = Math.round(BLUE_SCRATCH_FLURRY.durationMs / combatSpeed);
-  if (!event.miss && event.to) lockUnit(event.to, hitAt);
-  scheduleAnimStep(hitAt, () => {
-    if (!event.miss && event.to) resolveHit(event, { heavy: true });
-  });
-  scheduleAnimStep(total, () => {
-    flurry.remove();
-    attacker?.classList.remove(BLUE_SCRATCH_FLURRY.attackerClass);
-  });
-}
-
-function scheduleDogJump(event) {
-  const inner = findUnitInner(event.id);
-  if (!inner) return;
-  inner.animate([
-    { transform: 'translateY(-30%) scale(1)' },
-    { transform: 'translateY(-12%) scale(1.16) rotate(-8deg)', offset: 0.46 },
-    { transform: 'translateY(0) scale(1) rotate(0deg)' },
-  ], { duration: Math.round(timing.movePauseMs * 1.45), easing: 'steps(6)' });
-}
-
-function scheduleHowl(event) {
-  const inner = findUnitInner(event.id);
-  const pulse = effectAt('howl-effect', event.row, event.col, `HOWL! +${event.bonus}`);
-  inner?.classList.add('dog-howling');
-  event.targets?.forEach((id) => findUnitInner(id)?.classList.add('pack-buffed'));
   window.setTimeout(() => {
-    inner?.classList.remove('dog-howling');
-    event.targets?.forEach((id) => findUnitInner(id)?.classList.remove('pack-buffed'));
-    pulse.remove();
-  }, Math.round(timing.meleeMs * 2.5));
+    anchor.classList.remove('upgrade-transforming', 'upgrade-revealed', `upgrade-${reveal.intensity}`);
+    $('#board')?.classList.remove('upgrade-board-pulse');
+    overlay.remove();
+  }, UPGRADE_TIMING.totalMs);
 }
 
-function scheduleHeal(event) {
-  const inner = findUnitInner(event.to);
-  const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
-  inner?.classList.add('healed');
-  const hpBar = inner?.querySelector('.hp-bar');
-  if (hpBar) {
-    hpBar.style.width = `${Math.max(0, (event.hpAfter / event.maxHp) * 100)}%`;
-    hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
-  }
-  window.setTimeout(() => {
-    heal.remove();
-    inner?.classList.remove('healed');
-  }, Math.round(680 / combatSpeed));
+function tryMerge(targetType, targetId) {
+  if (!selected || (selected.type !== 'bench' && selected.type !== 'cat')) return false;
+  const before = game;
+  game = mergeUnitOnto(game, selected.type, selected.id, targetType, targetId);
+  if (game === before) return false;
+  const reveal = queueUpgradeReveal(before, game, targetType, targetId);
+  selected = null;
+  game.message = reveal?.kind === 'level-up'
+    ? `${reveal.label} New gear unlocked!`
+    : 'Same-color cats stacked! Add one more matching color + level to evolve.';
+  return true;
 }
 
-function scheduleSuperCat(event) {
-  const runner = document.createElement('div');
-  runner.className = 'super-effect';
-  runner.style.left = `${event.col * (100 / COLS)}%`;
-  const canvas = document.createElement('canvas');
-  drawCat(canvas, 3, 0, true);
-  runner.append(canvas);
-  effectsEl.append(runner);
-  window.setTimeout(() => runner.remove(), Math.round(720 / combatSpeed));
+function selectCat(type, cat) {
+  selected = { type, id: cat.id };
+  const info = CAT_COAT_INFO[normalizeCoat(cat.coat)];
+  game.message = `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
 }
-
-function scheduleFloatingCue(event, text, className = 'heal-number') {
-  const cue = effectAt(className, event.row, event.col, text);
-  window.setTimeout(() => cue.remove(), Math.round(650 / combatSpeed));
-}
-
-/** Drop-in banner naming exactly the dogs this wave spawned (from the event). */
-function announceWave(event) {
-  const banner = $('#wave-banner');
-  if (!banner) return;
-  const roleCounts = (event.roles ?? []).reduce((counts, role) => {
-    counts[role] = (counts[role] ?? 0) + 1;
-    return counts;
-  }, {});
-  const parts = Object.entries(roleCounts).map(([role, count]) => {
-    const name = DOG_ROLE_INFO[role]?.name ?? 'Dog';
-    return `${count > 1 ? `${count}× ` : ''}${name.toUpperCase()}`;
-  });
-  banner.innerHTML = `WAVE ${event.wave} · ${parts.join(' + ') || 'INCOMING'}`;
-  banner.hidden = false;
-  window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
-}
-
-/** Events that change what the side panels (shop, production, HUD) display. */
-const PANEL_EVENTS = new Set([
-  'item-heal', 'wave', 'worker-output-ready', 'collect-output', 'sell-cat',
-  'sell-worker', 'combine', 'worker-combine', 'equip', 'item-merge', 'encore',
-  'level-clear',
-]);
-
-/** Kick off the animation for one engine event; returns the next shot stagger index. */
-function scheduleEventAnimation(event, shotIndex) {
-  switch (event.type) {
-    case 'shot':
-      scheduleShot(event, shotIndex);
-      return shotIndex + (event.burst ? 0 : 1);
-    case 'dog-shot':
-      scheduleShot(event, shotIndex);
-      return shotIndex + 1;
-    case 'spell':
-      resolveHit(event);
-      scheduleFloatingCue({ row: event.toRow, col: event.col }, '⚡', 'damage-number to-dog');
-      break;
-    case 'cat-melee': scheduleCatScratch(event); break;
-    case 'melee': scheduleMelee(event, 'down'); break;
-    case 'dog-jump': scheduleDogJump(event); break;
-    case 'howl': scheduleHowl(event); break;
-    case 'freeze-cast': scheduleFloatingCue({ row: event.row, col: event.col }, '❄'); break;
-    case 'freeze-skip': scheduleFloatingCue(event, '❄ FROZEN'); break;
-    case 'tangle-skip': scheduleFloatingCue(event, '✱ TANGLED'); break;
-    case 'teleport':
-      scheduleFloatingCue({ row: event.fromRow, col: event.fromCol }, '✧');
-      scheduleFloatingCue({ row: event.row, col: event.col }, '✧');
-      break;
-    case 'decoy-cast': scheduleFloatingCue(event, '✦'); break;
-    case 'item-heal': scheduleHeal(event); break;
-    case 'super-cat': scheduleSuperCat(event); break;
-    case 'wave': announceWave(event); break;
-    default: break;
-  }
-  return shotIndex;
-}
-
-function handleEvents(events) {
-  let panelsDirty = false;
-  let shotIndex = 0;
-  for (const event of events) {
-    shotIndex = scheduleEventAnimation(event, shotIndex);
-    if (PANEL_EVENTS.has(event.type)) panelsDirty = true;
-  }
-  if (panelsDirty) renderSidePanels();
-}
-
-// ---------------------------------------------------------------------------
-// Drag and drop (live at all times unless paused).
-// ---------------------------------------------------------------------------
 
 function dragSource(type, cat) {
   if (type === 'shop-worker') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, role: cat.role };
@@ -778,22 +406,11 @@ function dragSource(type, cat) {
     level: cat.level,
     coat: normalizeCoat(cat.coat),
     ability: cat.ability,
+    prepOrigin: cat.prepOrigin,
+    prepMoved: cat.prepMoved,
     sellable: sale.canSell,
     sellValue: sale.value,
     sellReason: sale.reason,
-  };
-}
-
-function cellDescriptorAt(row, col) {
-  const occupied = game.cats.find((cat) => cat.row === row && cat.col === col);
-  if (dragState?.source.type === 'item' && occupied) {
-    return { kind: 'fighter', id: occupied.id, hp: occupied.hp, maxHp: occupied.maxHp };
-  }
-  return {
-    kind: 'cell', row, col,
-    occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
-    // Decoys and dogs also claim their square — highlights must match the engine.
-    blocked: !occupied && cellBlocked(game, row, col),
   };
 }
 
@@ -812,20 +429,33 @@ function targetFromElement(element) {
       },
     };
   }
-  // Persistent unit elements sit above the grid — map them back to their square.
-  const unitEl = element?.closest?.('.rt-unit');
-  if (unitEl) {
-    const cat = game.cats.find((unit) => unit.id === unitEl.dataset.unitId);
-    if (cat) return { element: unitEl, descriptor: cellDescriptorAt(cat.row, cat.col) };
-    const dog = game.dogs.find((unit) => unit.id === unitEl.dataset.unitId);
-    if (dog) return { element: unitEl, descriptor: cellDescriptorAt(dog.row, dog.col) };
-    return { element: null, descriptor: null };
-  }
   const cell = element?.closest?.('.cell');
   if (cell) {
     const row = Number(cell.dataset.row);
     const col = Number(cell.dataset.col);
-    return { element: cell, descriptor: cellDescriptorAt(row, col) };
+    const occupied = game.cats.find((cat) => cat.row === row && cat.col === col);
+    if (dragState?.source.type === 'item' && occupied) {
+      return { element: cell, descriptor: { kind: 'fighter', id: occupied.id, hp: occupied.hp, maxHp: occupied.maxHp } };
+    }
+    return {
+      element: cell,
+      descriptor: {
+        kind: 'cell', row, col,
+        occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
+      },
+    };
+  }
+  const bench = element?.closest?.('.bench-slot');
+  if (bench) {
+    const index = Number(bench.dataset.benchIndex);
+    const occupied = game.bench[index];
+    return {
+      element: bench,
+      descriptor: {
+        kind: 'bench', index,
+        occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
+      },
+    };
   }
   return { element: null, descriptor: null };
 }
@@ -837,6 +467,8 @@ function dropAction(source, descriptor) {
     catZoneStart: CAT_ZONE_START,
     rows: ROWS,
     cols: COLS,
+    phase: game.phase,
+    paused: false,
   });
 }
 
@@ -887,13 +519,12 @@ function startDragVisual(event) {
   dragState.started = true;
   suppressNextPetClick = true;
   hideUnitTooltip();
-  syncSlowMo();
   dragState.sourceElement.classList.add('drag-origin');
   const visuals = makeDragGhost(dragState.cat, dragState.sourceRect, dragState.source);
   dragState.ghost = visuals.ghost;
   dragState.shadow = visuals.shadow;
   document.body.classList.add('pet-dragging');
-  if (dragState.source.type === 'cat') {
+  if (dragState.source.type === 'cat' || dragState.source.type === 'bench') {
     document.body.classList.add('cat-sell-dragging');
     const adoptionBox = $('#adoption-box');
     adoptionBox?.classList.toggle('sale-blocked', !dragState.source.sellable);
@@ -921,12 +552,11 @@ function updateDragHover(clientX, clientY) {
   if (target.element) target.element.classList.add(action.type === 'invalid' ? 'drag-invalid-hover' : 'drag-over');
 }
 
-function bindPetDrag(anchor, type, catOrFactory) {
+function bindPetDrag(anchor, type, cat) {
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || uiPaused() || dragState || game.phase !== 'battle') return;
-    const cat = typeof catOrFactory === 'function' ? catOrFactory() : catOrFactory;
-    if (!cat) return;
+    const phaseAllowsDrag = game.phase === 'prep' || (type === 'item' && game.phase === 'tactics');
+    if (event.button !== 0 || !phaseAllowsDrag || playing || dragState) return;
     const rect = anchor.getBoundingClientRect();
     dragState = {
       pointerId: event.pointerId,
@@ -966,84 +596,15 @@ async function animateGhostTo(rect, valid) {
   await animation.finished.catch(() => {});
 }
 
-function catFromState(state, targetId) {
-  return state.cats.find((cat) => cat.id === targetId) ?? state.bench.find((cat) => cat.id === targetId);
-}
-
-function queueUpgradeReveal(beforeState, afterState, targetId) {
-  const before = catFromState(beforeState, targetId);
-  const after = catFromState(afterState, targetId);
-  const reveal = describeUpgrade(before, after);
-  if (!reveal) return null;
-  pendingUpgrade = { ...reveal, targetId };
-  return reveal;
-}
-
-function playPendingUpgrade() {
-  if (!pendingUpgrade) return;
-  const reveal = pendingUpgrade;
-  pendingUpgrade = null;
-  const anchor = unitEls.get(reveal.targetId);
-  if (!anchor) return;
-
-  const rect = anchor.getBoundingClientRect();
-  const overlay = document.createElement('div');
-  overlay.className = `upgrade-reveal upgrade-${reveal.intensity}`;
-  overlay.style.left = `${rect.left + rect.width / 2}px`;
-  overlay.style.top = `${rect.top + rect.height / 2}px`;
-  overlay.style.width = `${Math.max(58, rect.width)}px`;
-  overlay.style.height = `${Math.max(58, rect.height)}px`;
-
-  const radiance = document.createElement('span');
-  radiance.className = 'upgrade-radiance';
-  const smoke = document.createElement('span');
-  smoke.className = 'upgrade-smoke';
-  const vectors = [[-32,-18],[-12,-35],[14,-36],[34,-15],[-36,12],[-15,28],[16,30],[38,10]];
-  vectors.forEach(([x, y], index) => {
-    const puff = document.createElement('i');
-    puff.style.setProperty('--smoke-x', `${x}px`);
-    puff.style.setProperty('--smoke-y', `${y}px`);
-    puff.style.setProperty('--smoke-delay', `${index * 24}ms`);
-    smoke.append(puff);
-  });
-  const badge = document.createElement('b');
-  badge.className = 'upgrade-callout';
-  badge.textContent = reveal.label;
-  const note = document.createElement('em');
-  note.textContent = reveal.kind === 'level-up' ? 'NEW LOOK!' : 'STACKED!';
-  overlay.append(radiance, smoke, badge, note);
-  document.body.append(overlay);
-
-  anchor.classList.add('upgrade-transforming', `upgrade-${reveal.intensity}`);
-  if (reveal.kind === 'level-up') $('#board')?.classList.add('upgrade-board-pulse');
-  requestAnimationFrame(() => {
-    overlay.classList.add('is-revealing');
-    window.setTimeout(() => anchor.classList.add('upgrade-revealed'), UPGRADE_TIMING.revealDelayMs);
-  });
-
-  window.setTimeout(() => {
-    anchor.classList.remove('upgrade-transforming', 'upgrade-revealed', `upgrade-${reveal.intensity}`);
-    $('#board')?.classList.remove('upgrade-board-pulse');
-    overlay.remove();
-  }, UPGRADE_TIMING.totalMs);
-}
-
 function applyDropAction(action, source) {
   const before = game;
-  // Waves reroll the shop mid-battle; a drag that started before the reroll
-  // must not buy whatever pet now happens to sit at the same slot index.
-  if (action.type.startsWith('purchase')) {
-    const slot = game.shop[source.shopIndex];
-    if (!slot || slot.id !== source.id || slot.sold) {
-      game.message = 'The Cat Cart rerolled mid-drag — that pet has moved on.';
-      return false;
-    }
-  }
   if (action.type === 'purchase-place') {
     game = purchaseShopFighterToBoard(game, source.shopIndex, action.row, action.col);
+  } else if (action.type === 'purchase-bench') {
+    game = purchaseShopFighterToBench(game, source.shopIndex, action.index);
   } else if (action.type === 'purchase-merge') {
     game = purchaseShopFighterOnto(game, source.shopIndex, action.targetType, action.targetId);
-    if (game !== before) queueUpgradeReveal(before, game, action.targetId);
+    if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
   } else if (action.type === 'purchase-worker') {
     game = purchaseShopWorker(game, source.shopIndex, action.index);
   } else if (action.type === 'move-worker') {
@@ -1053,30 +614,41 @@ function applyDropAction(action, source) {
   } else if (action.type === 'use-food') {
     game = useFood(game, source.inventoryIndex, action.targetId);
   } else if (action.type === 'equip') {
-    game = equipInventoryItem(game, source.inventoryIndex, 'cat', action.targetId);
+    game = equipInventoryItem(game, source.inventoryIndex, action.targetId, false);
+  } else if (action.type === 'place') {
+    const benchIndex = game.bench.findIndex((cat) => cat.id === source.id);
+    game = placeCat(game, benchIndex, action.row, action.col);
+  } else if (action.type === 'move') {
+    game = moveCat(game, source.id, action.row, action.col);
   } else if (action.type === 'merge') {
     game = mergeUnitOnto(game, source.type, source.id, action.targetType, action.targetId);
-    if (game !== before) queueUpgradeReveal(before, game, action.targetId);
+    if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
+  } else if (action.type === 'return') {
+    game = returnCatToBench(game, source.id);
   } else if (action.type === 'sell') {
     game = sellCat(game, source.type, source.id);
   }
-  if (game !== before && game.events.length) handleEvents(game.events);
   return game !== before;
 }
 
 function showDropWeight(action, descriptor) {
-  if (descriptor?.kind !== 'cell') return;
-  const cell = document.querySelector(`.cell[data-row="${descriptor.row}"][data-col="${descriptor.col}"]`);
-  cell?.classList.add('cat-landed');
-  $('#board')?.classList.add('board-drop-thump');
-  const ring = effectAt('cat-drop-ring', descriptor.row, descriptor.col);
-  const dust = effectAt('cat-drop-dust', descriptor.row, descriptor.col, '✦');
-  window.setTimeout(() => {
-    cell?.classList.remove('cat-landed');
-    $('#board')?.classList.remove('board-drop-thump');
-    ring.remove();
-    dust.remove();
-  }, 520);
+  if (descriptor?.kind === 'cell') {
+    const cell = document.querySelector(`.cell[data-row="${descriptor.row}"][data-col="${descriptor.col}"]`);
+    cell?.classList.add('cat-landed');
+    $('#board')?.classList.add('board-drop-thump');
+    const ring = effectAt('cat-drop-ring', descriptor.row, descriptor.col);
+    const dust = effectAt('cat-drop-dust', descriptor.row, descriptor.col, '✦');
+    window.setTimeout(() => {
+      cell?.classList.remove('cat-landed');
+      $('#board')?.classList.remove('board-drop-thump');
+      ring.remove();
+      dust.remove();
+    }, 520);
+  } else {
+    const filled = [...document.querySelectorAll('.bench-slot.filled')].at(-1);
+    filled?.classList.add('bench-landed');
+    window.setTimeout(() => filled?.classList.remove('bench-landed'), 420);
+  }
 }
 
 function showAdoptionFeedback(cat, value) {
@@ -1123,253 +695,40 @@ async function finishDrag(event, cancelled = false) {
   const destinationRect = valid && target.element ? target.element.getBoundingClientRect() : state.sourceRect;
   await animateGhostTo(destinationRect, valid);
   dragState = null;
-  syncSlowMo();
   cleanupDragVisual(state);
-  // The drag-ending click usually lands on a shared ancestor, so no cell handler
+  // The drag-ending click usually lands on a shared ancestor, so no cell/bench handler
   // consumes the suppress flag — clear it once the click phase has passed.
   window.setTimeout(() => { suppressNextPetClick = false; }, 0);
 
   if (!valid) {
-    game.message = action.reason === 'placement-permanent'
-      ? 'Placed cats hold their ground — sell them or let Purrtal teleport them.'
+    const moveDistanceExceeded = action.reason === 'move-distance';
+    game.message = moveDistanceExceeded
+      ? CAT_MOVE_LIMIT_MESSAGE
       : target.descriptor?.kind === 'sell' && state.source.sellReason
-        ? state.source.sellReason
-        : 'That is not a valid drop. Cats defend the four glowing rows and merge with the same color + level.';
-    renderSidePanels();
+      ? state.source.sellReason
+      : 'That is not a valid drop. Cats can only use the lower yard and merge with the same color + level.';
+    render();
+    if (moveDistanceExceeded) showMoveLimitTooltip(event.clientX, event.clientY);
     return;
   }
 
   const changed = applyDropAction(action, state.source);
+  selected = null;
   if (changed) {
     game.message = action.type === 'sell'
       ? game.message
-      : action.type === 'merge' || action.type === 'purchase-merge'
-        ? pendingUpgrade?.kind === 'level-up'
-          ? `${pendingUpgrade.label} New gear unlocked!`
-          : 'Matching cats stacked — one step closer to evolving!'
-        : action.type === 'use-food' || action.type === 'equip'
-          ? game.message
-          : 'Cat deployed!';
+      : action.type === 'merge'
+      ? pendingUpgrade?.kind === 'level-up'
+        ? `${pendingUpgrade.label} New gear unlocked!`
+        : 'Matching cats stacked — one step closer to evolving!'
+      : action.type === 'return'
+        ? 'Cat returned safely to the bench.'
+        : 'Cat deployed!';
     playCatDrop();
   }
-  renderSidePanels();
-  syncUnits();
+  render();
   if (changed && action.type === 'sell') showAdoptionFeedback(state.cat, action.value);
-  else if (changed && (action.type === 'purchase-place' || action.type === 'purchase-worker')) showDropWeight(action, target.descriptor);
-  playPendingUpgrade();
-}
-
-// ---------------------------------------------------------------------------
-// Active abilities: tap a READY cat, then tap its target. Slow-mo while aiming.
-// ---------------------------------------------------------------------------
-
-const ACTIVE_COPY = {
-  freeze: ['FREEZE', 'Tap a dog to skip its next action.'],
-  teleport: ['PORTAL', 'Tap an ally, then any empty cat square.'],
-  decoy: ['DECOY', 'Tap an empty cat square for a phantom blocker.'],
-  storm: ['STORM', 'Tap any dog to strike its whole column.'],
-  encore: ['ENCORE', 'Tap another cat for an immediate attack.'],
-};
-
-function cancelTargeting(message = null) {
-  if (!activeTargeting) return;
-  activeTargeting = null;
-  if (message) game.message = message;
-  syncSlowMo();
-  renderMessage();
-  updateCellTargetHighlights();
-}
-
-function castAbility(payload) {
-  const before = game;
-  game = useActiveAbility(game, activeTargeting.casterId, payload);
-  if (game === before) {
-    game.message = ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'That is not a valid target.';
-    renderMessage();
-    return false;
-  }
-  activeTargeting = null;
-  syncSlowMo();
-  if (game.events.length) handleEvents(game.events);
-  $('#board')?.classList.add('ability-cast');
-  window.setTimeout(() => $('#board')?.classList.remove('ability-cast'), 420);
-  renderSidePanels();
-  syncUnits();
-  return true;
-}
-
-function onCatUnitClick(catId) {
-  if (suppressNextPetClick) {
-    suppressNextPetClick = false;
-    return;
-  }
-  if (uiPaused() || game.phase !== 'battle') return;
-  const cat = liveCat(catId);
-  if (!cat) return;
-
-  if (activeTargeting) {
-    if (activeTargeting.casterId === catId) {
-      cancelTargeting('Ability aiming cancelled.');
-      return;
-    }
-    if (activeTargeting.mode === 'encore') {
-      castAbility({ targetCatId: catId });
-      return;
-    }
-    if (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId) {
-      activeTargeting = { ...activeTargeting, targetCatId: catId };
-      game.message = 'Now tap any empty cat-territory square.';
-      renderMessage();
-      updateCellTargetHighlights();
-      return;
-    }
-    return;
-  }
-
-  if (cat.activeAbility && game.clockMs >= (cat.abilityReadyAt ?? 0)) {
-    const copy = ACTIVE_COPY[cat.activeAbility] ?? ['CAST', 'Tap a target.'];
-    activeTargeting = { casterId: catId, mode: cat.activeAbility, targetCatId: null };
-    game.message = `${copy[0]} ready — ${copy[1]} Tap the caster again to cancel.`;
-    syncSlowMo();
-    renderMessage();
-    updateCellTargetHighlights();
-  }
-}
-
-function onDogUnitClick(dogId) {
-  if (suppressNextPetClick) {
-    suppressNextPetClick = false;
-    return;
-  }
-  if (uiPaused() || !activeTargeting) return;
-  const dog = liveDog(dogId);
-  if (!dog) return;
-  if (activeTargeting.mode === 'freeze') castAbility({ dogId });
-  else if (activeTargeting.mode === 'storm') castAbility({ col: dog.col });
-}
-
-function onCellClick(row, col) {
-  if (suppressNextPetClick) {
-    suppressNextPetClick = false;
-    return;
-  }
-  if (uiPaused() || !activeTargeting || game.phase !== 'battle') return;
-  const blocked = cellBlocked(game, row, col);
-  if (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !blocked) {
-    castAbility({ row, col });
-  } else if (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !blocked) {
-    castAbility({ targetCatId: activeTargeting.targetCatId, row, col });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Static board grid: drop targets, targeting highlights, and empty-square taps.
-// ---------------------------------------------------------------------------
-
-function buildBoardGrid() {
-  gridEl.innerHTML = '';
-  for (let row = 0; row < ROWS; row += 1) {
-    for (let col = 0; col < COLS; col += 1) {
-      const cell = document.createElement('button');
-      cell.className = `cell ${row >= CAT_ZONE_START ? 'cat-zone' : ''} ${row === CAT_ZONE_START ? 'middle' : ''}`;
-      cell.dataset.row = row;
-      cell.dataset.col = col;
-      const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
-      cell.setAttribute('aria-label', `${zone}, row ${row + 1} column ${col + 1}`);
-      cell.addEventListener('click', () => onCellClick(row, col));
-      gridEl.append(cell);
-    }
-  }
-}
-
-/** Cat-zone squares glow while an area ability is waiting for a square. */
-function updateCellTargetHighlights() {
-  const active = activeTargeting
-    && (activeTargeting.mode === 'decoy' || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId));
-  gridEl.querySelectorAll('.cell').forEach((cell) => {
-    const row = Number(cell.dataset.row);
-    const col = Number(cell.dataset.col);
-    cell.classList.toggle(
-      'ability-target',
-      Boolean(active) && row >= CAT_ZONE_START && !cellBlocked(game, row, col),
-    );
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Side panels (shop, production, storage, preview, HUD text, legends).
-// ---------------------------------------------------------------------------
-
-function showShopPurchaseDenied(button, reason) {
-  const goldChip = $('#gold')?.closest('.hud-chip');
-  button.classList.remove('purchase-denied');
-  goldChip?.classList.remove('gold-denied');
-  void button.offsetWidth;
-  button.classList.add('purchase-denied');
-  if (reason === 'gold') goldChip?.classList.add('gold-denied');
-
-  game.message = reason === 'gold'
-    ? `Not enough gold — this pet costs 3 and you have ${game.gold}.`
-    : 'This pet is paused right now.';
-  renderMessage();
-
-  window.setTimeout(() => {
-    button.classList.remove('purchase-denied');
-    goldChip?.classList.remove('gold-denied');
-  }, 560);
-}
-
-function renderShop() {
-  shopEl.innerHTML = '';
-  shopEl.dataset.count = String(game.shop.length);
-  game.shop.forEach((slot, index) => {
-    const isWorker = slot.category === 'worker';
-    const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
-    const summary = shopCardSummary(slot, info);
-    const availability = shopPetAvailability({ sold: slot.sold, gold: game.gold, paused: uiPaused() });
-    const wrap = document.createElement('div');
-    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${availability.reason === 'gold' ? 'unaffordable' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
-
-    const button = document.createElement('button');
-    button.className = 'shop-card';
-    button.disabled = !availability.interactive;
-    button.setAttribute('aria-disabled', availability.canBuy ? 'false' : 'true');
-    button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
-    button.insertAdjacentHTML('beforeend', `
-      <span class="shop-tier">${summary.badge}</span>
-      <strong>${summary.name}</strong>
-      <span class="price">● ${summary.cost}</span>`);
-    button.addEventListener('click', () => {
-      if (!availability.canBuy) {
-        showShopPurchaseDenied(button, availability.reason);
-        return;
-      }
-      game.message = isWorker
-        ? `Drag ${info.name} into the Production Yard.`
-        : `Drag ${info.name} onto the battlefield or a matching fighter.`;
-      renderMessage();
-    });
-    bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
-    bindTooltip(button, () => isWorker ? workerTooltipInfo(slot, info) : catTooltipInfo(slot));
-
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = `shop-save ${slot.saved ? 'is-saved' : ''}`;
-    save.textContent = slot.saved ? 'Saved' : 'Save';
-    save.title = slot.saved
-      ? 'Unsave this pet so it can refresh'
-      : 'Save this pet through refresh and the next wave';
-    save.setAttribute('aria-pressed', slot.saved ? 'true' : 'false');
-    save.disabled = slot.sold || uiPaused();
-    save.addEventListener('click', (event) => {
-      event.stopPropagation();
-      game = toggleSaveShopSlot(game, index);
-      renderSidePanels();
-    });
-
-    wrap.append(button, save);
-    shopEl.append(wrap);
-  });
+  else if (changed && action.type !== 'merge') showDropWeight(action, target.descriptor);
 }
 
 const COLLECTION_TIMING = Object.freeze({ sourceMs: 280, flightMs: 430, cueMs: 900 });
@@ -1417,13 +776,13 @@ function showCollectionArrival(destination, quantity) {
 }
 
 function collectProductionOutput(index, station, outputHost) {
-  if (collectingStations.has(index) || uiPaused()) return;
+  if (collectingStations.has(index)) return;
   const output = game.workers[index]?.pendingOutput;
   const destination = productionCollectionDestination(game.inventory, output);
   const before = game;
   game = collectWorkerOutput(game, index);
   if (game === before || !destination) {
-    game.message = 'Storage is full — use or merge an item first.';
+    game.message = 'Inventory is full — use or merge an item first.';
     station.classList.add('collection-blocked');
     window.setTimeout(() => station.classList.remove('collection-blocked'), 380);
     renderHud();
@@ -1440,7 +799,7 @@ function collectProductionOutput(index, station, outputHost) {
   window.setTimeout(() => flyCollectedOutput(output, sourceRect, targetRect), COLLECTION_TIMING.sourceMs - 70);
   window.setTimeout(() => {
     collectingStations.delete(index);
-    renderSidePanels();
+    render();
     showCollectionArrival(destination, output.quantity);
   }, COLLECTION_TIMING.sourceMs + COLLECTION_TIMING.flightMs);
 }
@@ -1470,11 +829,11 @@ function productionStation(worker, index) {
     outputHost.append(output);
     station.append(outputHost);
     station.title = `Collect ${worker.pendingOutput.quantity} ${worker.pendingOutput.kind}`;
-    station.disabled = uiPaused();
+    station.disabled = game.phase !== 'prep' || playing;
     station.addEventListener('click', () => collectProductionOutput(index, station, outputHost));
   } else {
     station.disabled = true;
-    station.title = `${info.name} is making the next batch`;
+    station.title = `${info.name} produces after the next battle`;
   }
   return station;
 }
@@ -1483,7 +842,7 @@ function productionWorkerSlot(index) {
   const worker = game.workers[index];
   const slot = document.createElement('button');
   slot.type = 'button';
-  slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'} ${worker?.pendingOutput ? 'is-napping' : ''}`;
+  slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'}`;
   slot.dataset.workerIndex = String(index);
   if (!worker) {
     slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
@@ -1492,14 +851,8 @@ function productionWorkerSlot(index) {
   const info = WORKER_INFO[worker.role];
   slot.append(unitCanvas('worker', worker));
   slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
-  if (!worker.pendingOutput && worker.outputReadyAt != null) {
-    slot.insertAdjacentHTML('beforeend', '<span class="cd-ring"></span>');
-  }
   bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
-  bindTooltip(slot, () => {
-    const current = game.workers[index];
-    return current ? workerTooltipInfo(current, WORKER_INFO[current.role]) : null;
-  });
+  bindTooltip(slot, () => workerTooltipInfo(worker, info));
   return slot;
 }
 
@@ -1510,9 +863,6 @@ function renderProduction() {
   [0, 1, 2].forEach((index) => productionEl.append(productionWorkerSlot(index)));
   [3, 4, 5].forEach((index) => productionEl.append(productionWorkerSlot(index)));
   [3, 4, 5].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
-
-  workerRingSlots = [...productionEl.querySelectorAll('.worker-slot .cd-ring')]
-    .map((ring) => ({ ring, index: Number(ring.closest('.worker-slot').dataset.workerIndex) }));
 
   inventoryEl.innerHTML = '';
   game.inventory.forEach((item, index) => {
@@ -1531,9 +881,9 @@ function renderProduction() {
         slot.classList.add('can-merge');
         slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
         slot.addEventListener('click', () => {
-          if (suppressNextPetClick || uiPaused()) return;
+          if (suppressNextPetClick) return;
           game = mergeInventoryItems(game, index);
-          renderSidePanels();
+          render();
         });
       } else {
         slot.title = item.kind === 'food' ? 'Drag onto a damaged battlefield cat' : 'Drag onto a battlefield cat to equip';
@@ -1561,36 +911,456 @@ function renderDogPreview() {
     dogPreviewEl.append(cell);
   }
   const label = $('#preview-round');
-  if (label) {
-    label.textContent = game.nextWave?.length
-      ? `WAVE ${Math.min(MAX_WAVES, game.waveNumber + 1)}`
-      : 'ALL OUT';
+  if (label) label.textContent = game.nextWave?.length ? `ROUND ${game.round}` : 'DEPLOYED';
+}
+
+const ACTIVE_COPY = {
+  freeze: ['FREEZE', 'Choose a dog to skip its next action.'],
+  teleport: ['PORTAL', 'Choose an ally, then any empty cat square.'],
+  decoy: ['DECOY', 'Choose an empty cat square for a phantom blocker.'],
+  storm: ['STORM', 'Choose a dog column to strike.'],
+  encore: ['ENCORE', 'Choose another cat for an immediate attack.'],
+};
+
+function renderTacticsPanel() {
+  const panel = $('#tactics-panel');
+  const host = $('#active-abilities');
+  if (!panel || !host) return;
+  panel.hidden = game.phase !== 'tactics';
+  host.innerHTML = '';
+  if (panel.hidden) return;
+  const activeCats = game.cats.filter((cat) => cat.activeAbility);
+  activeCats.forEach((cat) => {
+    const copy = ACTIVE_COPY[cat.activeAbility] ?? ['CAST', 'Choose a target.'];
+    const button = document.createElement('button');
+    button.className = `active-ability ${cat.activeUsed ? 'used' : ''} ${activeTargeting?.casterId === cat.id ? 'targeting' : ''}`;
+    button.disabled = cat.activeUsed;
+    button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
+    button.title = copy[1];
+    button.addEventListener('click', () => {
+      activeTargeting = { casterId: cat.id, mode: cat.activeAbility, targetCatId: null };
+      game.message = copy[1];
+      render();
+    });
+    host.append(button);
+  });
+  if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
+  $('#tactics-help').textContent = activeTargeting
+    ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
+    : 'Drag food or equipment onto a cat, or cast one available ability.';
+}
+
+function tryActiveTarget(row, col, cat, dog) {
+  if (game.phase !== 'tactics' || !activeTargeting) return false;
+  const targeting = activeTargeting;
+  let payload = null;
+  if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
+  else if (targeting.mode === 'storm' && dog) payload = { col };
+  else if (targeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat) payload = { row, col };
+  else if (targeting.mode === 'encore' && cat && cat.id !== targeting.casterId) payload = { targetCatId: cat.id };
+  else if (targeting.mode === 'teleport') {
+    if (!targeting.targetCatId && cat) {
+      activeTargeting = { ...targeting, targetCatId: cat.id };
+      game.message = 'Now choose any empty cat-territory square.';
+      render();
+      return true;
+    }
+    if (targeting.targetCatId && row >= CAT_ZONE_START && !cat) payload = { targetCatId: targeting.targetCatId, row, col };
+  }
+  if (!payload) {
+    game.message = ACTIVE_COPY[targeting.mode]?.[1] ?? 'That is not a valid target.';
+    renderHud();
+    return true;
+  }
+  const before = game;
+  game = useActiveAbility(game, targeting.casterId, payload);
+  if (game !== before) {
+    activeTargeting = null;
+    $('#board')?.classList.add('ability-cast');
+    window.setTimeout(() => $('#board')?.classList.remove('ability-cast'), 420);
+  }
+  render();
+  return true;
+}
+
+function renderBoard() {
+  gridEl.innerHTML = '';
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const cell = document.createElement('button');
+      cell.className = `cell ${row >= CAT_ZONE_START ? 'cat-zone' : ''} ${row === CAT_ZONE_START ? 'middle' : ''}`;
+      cell.dataset.row = row;
+      cell.dataset.col = col;
+      const cat = game.cats.find((unit) => unit.row === row && unit.col === col);
+      const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
+      const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
+      const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
+      cell.setAttribute('aria-label', cat
+        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP, row ${row + 1} column ${col + 1}`
+        : dog
+          ? `${dogTooltipInfo(dog).title}, ${dog.hp} of ${dog.maxHp} HP, row ${row + 1} column ${col + 1}`
+          : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
+      if (cat) {
+        cell.append(catMarkup(cat));
+        if (selectedMatches('cat', cat.id)) cell.classList.add('selected');
+        cell.classList.add('has-unit');
+        bindPetDrag(cell, 'cat', cat);
+        bindTooltip(cell, () => catTooltipInfo(cat));
+      } else if (dog) {
+        cell.append(dogMarkup(dog));
+        cell.classList.add('has-unit');
+        bindTooltip(cell, () => dogTooltipInfo(dog));
+      } else if (decoy) {
+        const visual = unitCanvas('cat', { level: 1, coat: 8 });
+        visual.classList.add('decoy-unit');
+        cell.append(visual);
+        cell.classList.add('has-unit', 'has-decoy');
+      }
+      if (activeTargeting) {
+        const validActiveTarget = (activeTargeting.mode === 'freeze' && dog)
+          || (activeTargeting.mode === 'storm' && dog)
+          || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat && !decoy)
+          || (activeTargeting.mode === 'encore' && cat && cat.id !== activeTargeting.casterId)
+          || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && cat)
+          || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !decoy);
+        if (validActiveTarget) cell.classList.add('ability-target');
+      }
+      // A click-selected cat lights the same targets, the same way, a drag would.
+      if (!activeTargeting && selected && game.phase === 'prep' && !playing) {
+        const selectedUnit = selected.type === 'bench'
+          ? game.bench.find((entry) => entry.id === selected.id)
+          : selected.type === 'cat' ? game.cats.find((entry) => entry.id === selected.id) : null;
+        if (selectedUnit) {
+          const descriptor = {
+            kind: 'cell', row, col,
+            occupied: cat ? { id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) } : null,
+          };
+          if (dropAction({ ...selectedUnit, type: selected.type }, descriptor).type !== 'invalid') {
+            cell.classList.add('drag-valid');
+          }
+        }
+      }
+      cell.addEventListener('click', (event) => {
+        if (suppressNextPetClick) {
+          suppressNextPetClick = false;
+          return;
+        }
+        if (tryActiveTarget(row, col, cat, dog)) return;
+        if (game.phase !== 'prep' || playing) return;
+        if (cat) {
+          if (!tryMerge('cat', cat.id)) selectCat('cat', cat);
+        } else if (selected && row < CAT_ZONE_START) {
+          // A silent no-op reads as a broken game — shake and say why instead.
+          game.message = 'Cats stay in the four glowing rows at the bottom of the yard.';
+          const board = $('#board');
+          board?.classList.remove('board-shake');
+          void board?.offsetWidth;
+          board?.classList.add('board-shake');
+          window.setTimeout(() => board?.classList.remove('board-shake'), 320);
+        } else if (selected) {
+          if (selected.type === 'bench') {
+            const benchIndex = game.bench.findIndex((unit) => unit.id === selected.id);
+            const before = game;
+            game = placeCat(game, benchIndex, row, col);
+            if (game !== before) {
+              selected = null;
+              playCatDrop();
+            }
+          } else if (selected.type === 'cat') {
+            const movingCat = game.cats.find((unit) => unit.id === selected.id);
+            const attemptedAction = dropAction(
+              movingCat ? { ...movingCat, type: 'cat' } : null,
+              { kind: 'cell', row, col, occupied: null },
+            );
+            const before = game;
+            game = moveCat(game, selected.id, row, col);
+            if (game !== before) {
+              selected = null;
+              playCatDrop();
+            } else {
+              selected = null;
+            }
+            if (attemptedAction.reason === 'move-distance') {
+              game.message = CAT_MOVE_LIMIT_MESSAGE;
+              window.setTimeout(() => showMoveLimitTooltip(event.clientX, event.clientY), 0);
+            }
+          }
+        }
+        render();
+      });
+      gridEl.append(cell);
+    }
   }
 }
 
-function renderMessage() {
-  $('#message').textContent = game.message;
-}
-
 function renderHud() {
-  lastGoldShown = Math.floor(game.gold);
-  $('#gold').textContent = lastGoldShown;
+  $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
-  $('#wave').textContent = `${Math.max(1, Math.min(MAX_WAVES, game.waveNumber || 1))}/${MAX_WAVES}`;
+  $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
   $('#inventory-count').textContent = `${game.inventory.filter(Boolean).length}/${game.inventory.length}`;
-  renderMessage();
+  $('#message').textContent = game.message;
   const speedChip = $('#speed-toggle');
   if (speedChip) {
     speedChip.classList.toggle('is-fast', combatSpeed === 2);
     speedChip.setAttribute('aria-pressed', combatSpeed === 2 ? 'true' : 'false');
     $('#speed-label').textContent = `${combatSpeed}×`;
   }
-  $('#refresh').disabled = uiPaused() || game.gold < 1 || game.phase !== 'battle';
+  $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
+  const selectedUnit = selected ? ownedCat(selected.type, selected.id) : null;
+  const sale = selectedUnit ? catSaleQuote(game, selected.type, selected.id) : null;
+  const adoptionBox = $('#adoption-box');
+  adoptionBox?.classList.toggle('has-selected-cat', Boolean(selectedUnit));
   if (!document.body.classList.contains('cat-sell-dragging')) {
-    $('#adoption-box-value').textContent = '+1';
-    $('#adoption-box-hint').textContent = 'Drag an owned cat here';
+    $('#adoption-box-value').textContent = `+${sale?.value ?? 1}`;
+    $('#adoption-box-hint').textContent = sale
+      ? sale.canSell ? `Selected cat · worth ${sale.value} gold` : sale.reason
+      : 'Drag an owned cat here';
   }
-  $('#shop-panel').style.opacity = uiPaused() ? '.62' : '1';
+  const canContinueTactics = game.phase === 'tactics';
+  const doneButton = $('#done');
+  doneButton.hidden = game.phase === 'prep' && game.cats.length === 0;
+  doneButton.disabled = playing || (!canContinueTactics && (game.phase !== 'prep' || game.cats.length === 0));
+  $('#done-label').textContent = canContinueTactics
+    ? 'CONTINUE FIGHT'
+    : `START ROUND ${game.round}`;
+  $('#shop-panel').style.opacity = game.phase === 'prep' ? '1' : '.62';
+}
+
+function findUnitElement(id) {
+  return [...document.querySelectorAll('.unit')].find((unit) => unit.dataset.unitId === id);
+}
+
+function effectAt(className, row, col, text = '') {
+  const position = cellCenter(row, col);
+  const effect = document.createElement('i');
+  effect.className = className;
+  effect.style.left = `${position.xPercent}%`;
+  effect.style.top = `${position.yPercent}%`;
+  effect.textContent = text;
+  effectsEl.append(effect);
+  return effect;
+}
+
+function showHit(event, { heavy = false } = {}) {
+  if (event.miss || !event.to) return;
+  playHit({ heavy });
+  const target = findUnitElement(event.to);
+  const burst = effectAt('impact-burst', event.toRow, event.col);
+  // Dog bites and tennis shots hurt cats; cat attacks use the opposing damage tone.
+  const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
+  const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
+  if (target) {
+    target.classList.remove('hurt');
+    void target.offsetWidth;
+    target.classList.add('hurt');
+    const hpBar = target.querySelector('.hp-bar');
+    if (hpBar) {
+      hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+      hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+    }
+  }
+  window.setTimeout(() => burst.remove(), timing.impactMs);
+  window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
+  window.setTimeout(() => target?.classList.remove('hurt'), timing.impactMs);
+}
+
+async function animateShot(event, index) {
+  const isBurst = Boolean(event.burst);
+  const isHoming = event.style === 'homing' || event.style === 'medic';
+  const stagger = isBurst
+    ? (event.pelletIndex ?? 0) * timing.burstStaggerMs + index * 8
+    : index * timing.shotStaggerMs;
+  await wait(stagger);
+  const fromCol = event.fromCol ?? event.col;
+  const toCol = event.col;
+  const start = cellCenter(event.fromRow, fromCol);
+  const end = cellCenter(event.toRow, toCol);
+  const projectileStyle = event.style ? `${event.style}-projectile` : '';
+  const projectile = effectAt(
+    `projectile-effect ${isHoming ? 'homing-projectile' : ''} ${isBurst ? 'burst-projectile' : ''} ${projectileStyle}`.trim(),
+    event.fromRow,
+    fromCol,
+  );
+  const flight = projectile.animate(
+    isHoming
+      ? homingShotKeyframes(start, end)
+      : [
+        { left: `${start.xPercent}%`, top: `${start.yPercent}%`, transform: 'translate(-50%, -50%) scale(.7) rotate(0deg)' },
+        { left: `${end.xPercent}%`, top: `${end.yPercent}%`, transform: `translate(-50%, -50%) scale(${isBurst ? 0.95 : 1.15}) rotate(360deg)` },
+      ],
+    {
+      duration: isHoming
+        ? timing.homingMs
+        : isBurst
+          ? timing.burstProjectileMs
+          : timing.projectileMs,
+      // Linear keyframe timing — the path itself eases the seek.
+      easing: 'linear',
+      fill: 'forwards',
+    },
+  );
+  await flight.finished.catch(() => {});
+  projectile.remove();
+  if (event.miss || !event.to) {
+    const fizzle = effectAt('impact-burst miss-fizzle', event.toRow, event.col);
+    window.setTimeout(() => fizzle.remove(), timing.impactMs);
+    await wait(Math.floor(timing.impactMs * 0.55));
+    return;
+  }
+  showHit(event);
+  await wait(timing.impactMs + timing.hpPauseMs);
+}
+
+async function animateMelee(event, direction = 'down') {
+  const attacker = findUnitElement(event.from);
+  const className = direction === 'up' ? 'melee-lunge-up' : 'melee-lunge';
+  attacker?.classList.add(className);
+  await wait(Math.floor(timing.meleeMs / 2));
+  if (!event.miss && event.to) {
+    showHit(event, { heavy: true });
+    await wait(Math.ceil(timing.meleeMs / 2) + timing.hpPauseMs);
+  } else {
+    await wait(Math.ceil(timing.meleeMs / 2));
+  }
+  attacker?.classList.remove(className);
+}
+
+async function animateCatScratch(event) {
+  const attacker = findUnitElement(event.from);
+  const flurry = document.createElement('span');
+  flurry.className = BLUE_SCRATCH_FLURRY.effectClass;
+
+  for (const side of ['left', 'right']) {
+    const paw = document.createElement('i');
+    paw.className = `scratch-paw scratch-paw-${side}`;
+    flurry.append(paw);
+  }
+  for (let index = 0; index < BLUE_SCRATCH_FLURRY.swipes; index += 1) {
+    const claw = document.createElement('i');
+    claw.className = `scratch-claw scratch-claw-${index + 1}`;
+    flurry.append(claw);
+  }
+
+  attacker?.classList.add(BLUE_SCRATCH_FLURRY.attackerClass);
+  attacker?.append(flurry);
+  await wait(Math.round(BLUE_SCRATCH_FLURRY.hitAtMs / combatSpeed));
+  if (!event.miss && event.to) showHit(event, { heavy: true });
+  await wait(Math.round((BLUE_SCRATCH_FLURRY.durationMs - BLUE_SCRATCH_FLURRY.hitAtMs) / combatSpeed));
+  if (!event.miss && event.to) await wait(timing.hpPauseMs);
+  flurry.remove();
+  attacker?.classList.remove(BLUE_SCRATCH_FLURRY.attackerClass);
+}
+
+async function animateMove(event) {
+  const dog = findUnitElement(event.id);
+  if (!dog) return;
+  const movement = dog.animate([
+    { transform: 'translateY(0)' },
+    { transform: 'translateY(100%)' },
+  ], { duration: timing.movePauseMs, easing: 'steps(4)', fill: 'forwards' });
+  await movement.finished.catch(() => {});
+}
+
+async function animateDogJump(event) {
+  const dog = findUnitElement(event.id);
+  if (!dog) return;
+  dog.classList.add('dog-jumping');
+  const movement = dog.animate([
+    { transform: 'translateY(0) scale(1)' },
+    { transform: 'translateY(70%) scale(1.16) rotate(-8deg)', offset: 0.46 },
+    { transform: 'translateY(200%) scale(1) rotate(0deg)' },
+  ], { duration: Math.round(timing.movePauseMs * 1.45), easing: 'steps(6)', fill: 'forwards' });
+  await movement.finished.catch(() => {});
+  dog.classList.remove('dog-jumping');
+}
+
+async function animateHowl(event) {
+  const dog = findUnitElement(event.id);
+  const pulse = effectAt('howl-effect', event.row, event.col, `HOWL! +${event.bonus}`);
+  dog?.classList.add('dog-howling');
+  event.targets?.forEach((id) => findUnitElement(id)?.classList.add('pack-buffed'));
+  await wait(Math.round(timing.meleeMs * 1.25));
+  dog?.classList.remove('dog-howling');
+  event.targets?.forEach((id) => findUnitElement(id)?.classList.remove('pack-buffed'));
+  pulse.remove();
+}
+
+async function animateHeal(event) {
+  const target = findUnitElement(event.to);
+  const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
+  target?.classList.add('healed');
+  const hpBar = target?.querySelector('.hp-bar');
+  if (hpBar) {
+    hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+    hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+  }
+  await wait(Math.round(680 / combatSpeed));
+  heal.remove();
+  target?.classList.remove('healed');
+}
+
+async function animateSuperCat(event) {
+  const runner = document.createElement('div');
+  runner.className = 'super-effect';
+  runner.style.left = `${event.col * (100 / COLS)}%`;
+  const canvas = document.createElement('canvas');
+  drawCat(canvas, 3, 0, true);
+  runner.append(canvas);
+  effectsEl.append(runner);
+  await wait(Math.round(720 / combatSpeed));
+  runner.remove();
+}
+
+/** Small pill over the board that names whose half of the exchange is animating. */
+function setTurnTag(side) {
+  const tag = $('#turn-tag');
+  if (!tag) return;
+  if (!side) {
+    tag.hidden = true;
+    return;
+  }
+  tag.textContent = side === 'cats' ? '▸ CATS ACT' : '▸ DOGS ACT';
+  tag.className = `turn-tag ${side}`;
+  tag.hidden = false;
+}
+
+async function animateEvents(events) {
+  effectsEl.innerHTML = '';
+  const shots = events.filter((event) => event.type === 'shot');
+  const catMelee = events.filter((event) => event.type === 'cat-melee');
+  const melee = events.filter((event) => event.type === 'melee');
+  const dogShots = events.filter((event) => event.type === 'dog-shot');
+  const moves = events.filter((event) => event.type === 'move');
+  const jumps = events.filter((event) => event.type === 'dog-jump');
+  const howls = events.filter((event) => event.type === 'howl');
+  const heals = events.filter((event) => event.type === 'heal');
+  const superCats = events.filter((event) => event.type === 'super-cat');
+
+  if (shots.length || catMelee.length) setTurnTag('cats');
+  await Promise.all([
+    ...shots.map((event, index) => animateShot(event, index)),
+    ...catMelee.map(animateCatScratch),
+    ...heals.map(animateHeal),
+  ]);
+  if (melee.length || dogShots.length || moves.length || jumps.length || howls.length) setTurnTag('dogs');
+  await Promise.all([
+    ...melee.map((event) => animateMelee(event, 'down')),
+    ...dogShots.map((event, index) => animateShot(event, index)),
+    ...howls.map(animateHowl),
+  ]);
+  await Promise.all([...moves.map(animateMove), ...jumps.map(animateDogJump)]);
+  await Promise.all(superCats.map(animateSuperCat));
+  setTurnTag(null);
+  effectsEl.innerHTML = '';
+}
+
+function showResult() {
+  const won = game.phase === 'victory';
+  $('#result-kicker').textContent = won ? 'LEVEL 1 COMPLETE' : 'OUT OF LIVES';
+  $('#result-title').textContent = won ? 'Backyard Defended!' : 'The Dogs Broke Through';
+  $('#result-copy').textContent = won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
+  drawCat($('#result-cat'), won ? 3 : 1, won ? 0 : 1, won);
+  modalEl.hidden = false;
 }
 
 function renderProductionLegend() {
@@ -1601,7 +1371,7 @@ function renderProductionLegend() {
     const info = WORKER_INFO[entry.role];
     const row = document.createElement('div');
     row.className = 'legend-row production-legend-row';
-    row.title = `${info.blurb}. Produces every ${REALTIME.workerProduceMs / 1000} seconds, then naps until collected.`;
+    row.title = `${info.blurb}. Produces after each completed battle.`;
     const canvas = document.createElement('canvas');
     drawWorker(canvas, entry.role, 1);
     const name = document.createElement('b');
@@ -1613,7 +1383,7 @@ function renderProductionLegend() {
   });
 }
 
-/** Legend row per coat: sprite, name, five-word role, and the unlock wave when locked. */
+/** Legend row per coat: sprite, name, five-word role, and the unlock round when locked. */
 const COAT_ROLE_WORDS = {
   0: 'bursts down its own lane',
   1: 'blocks & bites · extra HP',
@@ -1621,18 +1391,18 @@ const COAT_ROLE_WORDS = {
   3: 'yarn tangles the next dog move',
   4: 'bomb + splash beside target',
   5: 'beam pierces 3 in its lane',
-  6: 'tap when ready · freeze a dog',
-  7: 'tap when ready · teleport an ally',
-  8: 'tap when ready · summon a decoy',
-  9: 'tap when ready · storm a column',
-  10: 'tap when ready · grant an encore',
+  6: 'active · freeze one dog',
+  7: 'active · teleport an ally',
+  8: 'active · summon a decoy',
+  9: 'active · storm one column',
+  10: 'active · grant ally encore',
 };
 
 function renderLegend() {
   const host = $('#coat-legend');
   if (!host) return;
   host.innerHTML = '';
-  const unlockedTier = shopTierForRound(Math.max(1, game.waveNumber || 1));
+  const unlockedTier = shopTierForRound(game.round);
   Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
     const coat = Number(coatKey);
     const locked = info.shopTier > unlockedTier;
@@ -1647,7 +1417,7 @@ function renderLegend() {
     if (info.shopTier > 1) {
       const chip = document.createElement('small');
       chip.className = 'unlock-chip';
-      chip.textContent = `W${info.shopTier * 2 - 1}`;
+      chip.textContent = `R${info.shopTier * 2 - 1}`;
       row.append(chip);
     }
     const role = document.createElement('span');
@@ -1657,53 +1427,28 @@ function renderLegend() {
   });
 }
 
-function renderSidePanels() {
-  hideUnitTooltip();
-  renderShop();
-  renderProduction();
-  renderDogPreview();
-  renderHud();
-  renderProductionLegend();
-  renderLegend();
-  updateCellTargetHighlights();
+function isGamePaused() {
+  return manualPaused || glossaryPaused;
 }
 
-// ---------------------------------------------------------------------------
-// Pause, result, glossary, settings, and shell wiring.
-// ---------------------------------------------------------------------------
-
 function syncPauseState() {
-  const paused = uiPaused();
+  const paused = isGamePaused();
   const pauseButton = $('#pause-toggle');
   pauseButton?.classList.toggle('is-paused', paused);
   pauseButton?.setAttribute('aria-pressed', String(paused));
   if ($('#pause-label')) $('#pause-label').textContent = paused ? '▶' : 'Ⅱ';
   if (paused && pausedAnimations.length === 0) {
-    pauseStartedAt = performance.now();
     pausedAnimations = document.getAnimations().filter((animation) => animation.playState === 'running');
     pausedAnimations.forEach((animation) => animation.pause());
   } else if (!paused) {
     pausedAnimations.forEach((animation) => animation.play());
     pausedAnimations = [];
-    if (pauseStartedAt != null) {
-      // Animation locks are wall-clock failsafes — a pause shouldn't expire them.
-      const pausedFor = performance.now() - pauseStartedAt;
-      animLocks.forEach((entry) => { entry.expiresAt += pausedFor; });
-      pauseStartedAt = null;
-    }
-    // Impact steps that came due mid-pause fire now, in order.
-    pausedAnimSteps.splice(0).forEach((step) => step());
+    resumeWaiters.splice(0).forEach((resolve) => resolve());
   }
-  renderSidePanels();
 }
 
-function showResult() {
-  const won = game.phase === 'victory';
-  $('#result-kicker').textContent = won ? 'LEVEL 1 COMPLETE' : 'OUT OF LIVES';
-  $('#result-title').textContent = won ? 'Backyard Defended!' : 'The Dogs Broke Through';
-  $('#result-copy').textContent = won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
-  drawCat($('#result-cat'), won ? 3 : 1, won ? 0 : 1, won);
-  modalEl.hidden = false;
+function waitForResume() {
+  return isGamePaused() ? new Promise((resolve) => resumeWaiters.push(resolve)) : Promise.resolve();
 }
 
 function glossaryCard({ kind, key, name, kicker, stats, description, note }) {
@@ -1742,11 +1487,11 @@ function renderGlossary() {
     Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
       const coat = Number(coatKey);
       const stats = catStatsFor(1, coat);
-      const wave = info.shopTier * 2 - 1;
+      const round = info.shopTier * 2 - 1;
       grid.append(glossaryCard({
         kind: 'battle', key: coat, name: info.name,
-        kicker: `BATTLE CAT · ${wave === 1 ? 'STARTER' : `UNLOCKS WAVE ${wave}`}`,
-        stats: `♥ ${stats.hp} · ↑ ${stats.attack} every ${REALTIME.catAttackMs / 1000}s`,
+        kicker: `BATTLE CAT · ${round === 1 ? 'STARTER' : `UNLOCKS ROUND ${round}`}`,
+        stats: `♥ ${stats.hp} · ↑ ${stats.attack}`,
         description: info.attackDetail,
         note: 'Match 3 of the same cat and level to evolve.',
       }));
@@ -1761,7 +1506,7 @@ function renderGlossary() {
         kind: 'production', key: role, name: info.name,
         kicker: `PRODUCTION CAT · ${info.station.toUpperCase()}`,
         stats: outputs,
-        description: `${info.blurb}. Produces every ${REALTIME.workerProduceMs / 1000} seconds, then naps until you collect.`,
+        description: `${info.blurb}. Produces after each completed battle.`,
         note: 'Lives in the House. Match 3 of the same role and level to evolve.',
       }));
     });
@@ -1775,7 +1520,7 @@ function renderGlossary() {
           : role === 'jumper' ? 'JUMP 1×' : `BITE ${stats.attack}`;
       grid.append(glossaryCard({
         kind: 'dogs', key: role, name: info.name,
-        kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS WAVE ${info.unlockRound}`}`,
+        kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS ROUND ${info.unlockRound}`}`,
         stats: `♥ ${stats.hp} · ${roleStat}${role === 'scruffy' ? '' : ` · BITE ${stats.attack}`}`,
         description: info.attackDetail,
         note: `${info.blurb} Higher tiers increase HP and attack without changing this role.`,
@@ -1802,6 +1547,81 @@ function closeGlossary() {
   $('#glossary-open')?.focus();
 }
 
+function render() {
+  hideUnitTooltip();
+  renderShop();
+  renderProduction();
+  renderDogPreview();
+  renderBoard();
+  renderHud();
+  renderTacticsPanel();
+  renderProductionLegend();
+  renderLegend();
+  playPendingUpgrade();
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function runCombatSection() {
+  const nextGame = resolveSection(game);
+  await animateEvents(nextGame.events);
+  game = nextGame;
+  render();
+  await wait(timing.hpPauseMs);
+}
+
+/** Drop-in banner naming the wave and what just walked through the gate. */
+function announceWave() {
+  const banner = $('#wave-banner');
+  if (!banner) return;
+  const fresh = game.dogs.filter((dog) => dog.row === 0);
+  const roleCounts = fresh.reduce((counts, dog) => {
+    counts[dog.role] = (counts[dog.role] ?? 0) + 1;
+    return counts;
+  }, {});
+  const parts = Object.entries(roleCounts).map(([role, count]) => {
+    const name = DOG_ROLE_INFO[role]?.name ?? 'Dog';
+    return `${count > 1 ? `${count}× ` : ''}${name.toUpperCase()}`;
+  });
+  banner.innerHTML = `WAVE ${game.round} · ${parts.join(' + ') || 'INCOMING'}`;
+  banner.hidden = false;
+  window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
+}
+
+async function playRound() {
+  if (playing || isGamePaused() || (game.phase !== 'prep' && game.phase !== 'tactics')) return;
+  if (game.phase === 'prep' && game.cats.length === 0) return;
+  const startingRound = game.phase === 'prep';
+  playing = true;
+  selected = null;
+  activeTargeting = null;
+  if (startingRound) {
+    game = startRound(game);
+    render();
+    announceWave();
+    await wait(Math.round(650 / combatSpeed));
+    await waitForResume();
+  } else {
+    game = continueCombat(game);
+    render();
+  }
+
+  await waitForResume();
+  if (game.phase === 'combat' && game.dogs.length > 0) await runCombatSection();
+  if (game.phase === 'combat') {
+    const needsAnotherExchange = game.dogs.length > 0
+      && (game.round >= MAX_ROUNDS || game.section < ACTIONS_PER_ROUND);
+    game = needsAnotherExchange ? openTacticsWindow(game) : finishRound(game);
+  }
+  playing = false;
+  render();
+  if (game.phase === 'victory' || game.phase === 'gameover') {
+    await wait(350);
+    showResult();
+  }
+}
+
+
 function syncSettingsUi() {
   if (soundToggleEl) soundToggleEl.checked = isSoundEnabled();
 }
@@ -1818,19 +1638,14 @@ function closeSettings() {
 
 function resetGame() {
   game = createGame();
-  dragState = null;
-  activeTargeting = null;
-  pendingUpgrade = null;
+  selected = null;
+  playing = false;
   manualPaused = false;
   glossaryPaused = false;
-  resultShown = false;
-  collectingStations.clear();
-  clearUnits();
-  syncSlowMo();
   if (glossaryModalEl) glossaryModalEl.hidden = true;
-  modalEl.hidden = true;
   syncPauseState();
-  renderSidePanels();
+  modalEl.hidden = true;
+  render();
 }
 
 function armAudioOnce() {
@@ -1844,12 +1659,10 @@ window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
 
-$('#refresh').addEventListener('click', () => {
-  game = refreshShop(game);
-  renderSidePanels();
-});
+$('#refresh').addEventListener('click', () => { game = refreshShop(game); selected = null; render(); });
+$('#done').addEventListener('click', playRound);
 
-// Two-tap restart: a single stray click must not wipe a seven-wave run.
+// Two-tap restart: a single stray click must not wipe a six-round run.
 const restartButton = $('#restart');
 let restartTimer = null;
 function disarmRestart() {
@@ -1879,13 +1692,14 @@ restartButton?.addEventListener('click', () => {
 $('#play-again').addEventListener('click', resetGame);
 $('#speed-toggle')?.addEventListener('click', () => {
   setCombatSpeed(combatSpeed === 1 ? 2 : 1);
-  game.message = combatSpeed === 2 ? 'Combat speed 2× — the whole yard moves faster.' : 'Combat speed 1×.';
+  game.message = combatSpeed === 2 ? 'Combat speed 2× — replays fly by.' : 'Combat speed 1×.';
   renderHud();
 });
 $('#pause-toggle')?.addEventListener('click', () => {
   manualPaused = !manualPaused;
-  game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
   syncPauseState();
+  game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
+  renderHud();
 });
 $('#glossary-open')?.addEventListener('click', openGlossary);
 $('#glossary-close')?.addEventListener('click', closeGlossary);
@@ -1905,59 +1719,12 @@ soundToggleEl?.addEventListener('change', () => {
 });
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  if (activeTargeting) cancelTargeting('Ability aiming cancelled.');
-  else if (glossaryModalEl && !glossaryModalEl.hidden) closeGlossary();
+  if (glossaryModalEl && !glossaryModalEl.hidden) closeGlossary();
   else if (settingsModalEl && !settingsModalEl.hidden) closeSettings();
 });
 
-// A real-time game must not fight in a hidden tab — auto-pause on blur.
-window.addEventListener('blur', () => {
-  blurPaused = true;
-  syncPauseState();
-});
-window.addEventListener('focus', () => {
-  blurPaused = false;
-  lastFrameTs = null;
-  syncPauseState();
-});
-document.addEventListener('visibilitychange', () => {
-  blurPaused = document.hidden;
-  if (!document.hidden) lastFrameTs = null;
-  syncPauseState();
-});
-
-// Dev-only QA hook: drives the clock where requestAnimationFrame is
-// unavailable (hidden automation panes). Stripped from production builds.
-if (import.meta.env.DEV) {
-  window.__cvd = {
-    get state() { return game; },
-    tick(ms) {
-      const advanced = advance(game, ms);
-      if (advanced !== game) {
-        game = advanced;
-        if (game.events.length) handleEvents(game.events);
-      }
-      syncUnits();
-      updateClockUi();
-      renderSidePanels();
-      maybeShowResult();
-    },
-    apply(mutate) {
-      const next = mutate(game);
-      if (next) game = next;
-      syncUnits();
-      renderSidePanels();
-    },
-    wake() {
-      blurPaused = false;
-      syncPauseState();
-    },
-  };
-}
 
 loadSoundEnabled();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
-buildBoardGrid();
-renderSidePanels();
-requestAnimationFrame(frame);
+render();
