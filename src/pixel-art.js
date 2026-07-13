@@ -58,17 +58,25 @@ export const DOG_TIER_MARKERS = {
 
 export const DOG_ROLE_MARKERS = {
   scruffy: ['plain-collar'],
+  frisbee: ['blue-frisbee', 'flight-goggles'],
   tennis: ['visor', 'tennis-ball'],
   howler: ['sound-cone', 'purple-bandana'],
+  lobber: ['bone-cannon', 'ammo-pack'],
   jumper: ['spring-boots', 'red-cape'],
+  medic: ['medic-cap', 'heart-pack'],
+  growler: ['megaphone', 'spiked-collar'],
 };
 
 // Dog silhouettes follow their battlefield role too.
 export const DOG_BODY_BUILDS = {
   scruffy: 'mutt',
+  frisbee: 'disc-retriever',
   tennis: 'athlete',
   howler: 'crooner',
+  lobber: 'artillery-dachshund',
   jumper: 'springer',
+  medic: 'saint-bernard-medic',
+  growler: 'corgi-intimidator',
 };
 
 export const WORKER_ART_MARKERS = {
@@ -546,9 +554,13 @@ const DOG_PALETTES = {
 // Same idea as CAT_GEOM: tier gear anchors per role silhouette.
 const DOG_GEOM = {
   scruffy: { helm: [9, 4, 15], collar: [9, 22, 15], plates: [[4, 16], [22, 16]], armor: [8, 14, 18, 13], crown: [8, 0] },
+  frisbee: { helm: [8, 3, 14], collar: [8, 16, 15], plates: [[4, 16], [21, 16]], armor: [8, 15, 17, 11], crown: [7, 0] },
   tennis: { helm: [10, 2, 13], collar: [10, 15, 13], plates: [[4, 14], [22, 12]], armor: [9, 12, 16, 11], crown: [10, 0] },
   howler: { helm: [13, 2, 10], collar: [10, 19, 14], plates: [[4, 19], [24, 18]], armor: [9, 18, 16, 9], crown: [7, 1] },
+  lobber: { helm: [3, 8, 12], collar: [5, 19, 12], plates: [[12, 18], [23, 17]], armor: [10, 16, 18, 10], crown: [2, 4] },
   jumper: { helm: [4, 7, 11], collar: [5, 16, 12], plates: [[12, 17], [24, 15]], armor: [17, 10, 12, 11], crown: [2, 3] },
+  medic: { helm: [7, 2, 15], collar: [8, 18, 16], plates: [[3, 17], [23, 17]], armor: [7, 16, 19, 11], crown: [7, 0] },
+  growler: { helm: [4, 7, 12], collar: [5, 19, 13], plates: [[3, 18], [19, 18]], armor: [5, 17, 18, 10], crown: [3, 4] },
 };
 
 const DOG_BODIES = {
@@ -572,6 +584,21 @@ const DOG_BODIES = {
     // Legs.
     px(ctx, OUTLINE, 8, 25, 7, 4); px(ctx, OUTLINE, 20, 25, 7, 4);
     px(ctx, dark, 9, 26, 5, 2); px(ctx, dark, 21, 26, 5, 2);
+  },
+  // Fetch Armstrong — low retriever launch stance with a bright blue disc in flight.
+  frisbee: (ctx, fur, light, dark) => {
+    // Long athletic body and tail held straight for balance.
+    px(ctx, OUTLINE, 7, 14, 19, 11); px(ctx, fur, 8, 15, 17, 9);
+    px(ctx, OUTLINE, 24, 11, 8, 4); px(ctx, fur, 25, 12, 6, 2);
+    // Head leaning into the throw, with wind goggles and swept ears.
+    px(ctx, OUTLINE, 5, 5, 15, 14); px(ctx, fur, 6, 6, 13, 12);
+    px(ctx, OUTLINE, 3, 7, 6, 9); px(ctx, dark, 4, 8, 4, 7);
+    px(ctx, '#4c769c', 6, 7, 13, 4); px(ctx, '#a9e8ff', 8, 8, 3, 2); px(ctx, '#a9e8ff', 14, 8, 3, 2);
+    px(ctx, light, 5, 13, 10, 5); px(ctx, OUTLINE, 4, 14, 3, 2); px(ctx, OUTLINE, 10, 16, 5, 1);
+    // Braced legs and the signature disc already leaving its paw.
+    px(ctx, OUTLINE, 8, 23, 6, 6); px(ctx, fur, 9, 24, 4, 4);
+    px(ctx, OUTLINE, 20, 22, 7, 7); px(ctx, fur, 21, 23, 5, 5);
+    px(ctx, '#183e60', 23, 5, 9, 5); px(ctx, '#53c7ef', 24, 6, 7, 3); px(ctx, '#d9f8ff', 26, 6, 3, 1);
   },
   // Bark McEnroe — lean ranged athlete up on long legs, visor and ball ready.
   tennis: (ctx, fur, light, dark) => {
@@ -618,6 +645,23 @@ const DOG_BODIES = {
     px(ctx, OUTLINE, 11, 25, 4, 3); px(ctx, OUTLINE, 18, 25, 4, 3);
     px(ctx, dark, 12, 26, 2, 1); px(ctx, dark, 19, 26, 2, 1);
   },
+  // Bone Jovi — long low artillery dachshund with a bone mortar on its back.
+  lobber: (ctx, fur, light, dark) => {
+    // Extra-long low body and short planted legs.
+    px(ctx, OUTLINE, 6, 15, 24, 11); px(ctx, fur, 7, 16, 22, 9);
+    px(ctx, OUTLINE, 8, 24, 5, 5); px(ctx, OUTLINE, 23, 24, 5, 5);
+    px(ctx, dark, 9, 25, 3, 3); px(ctx, dark, 24, 25, 3, 3);
+    // Compact dachshund head with long hanging ear.
+    px(ctx, OUTLINE, 2, 9, 13, 12); px(ctx, fur, 3, 10, 11, 10);
+    px(ctx, OUTLINE, 9, 7, 7, 12); px(ctx, dark, 10, 8, 5, 10);
+    px(ctx, light, 2, 15, 8, 4); px(ctx, OUTLINE, 1, 15, 3, 2);
+    px(ctx, '#eef0c2', 6, 12, 2, 2); px(ctx, OUTLINE, 7, 12, 1, 1);
+    // Backpack, angled mortar, and a bone loaded in the barrel.
+    px(ctx, OUTLINE, 17, 11, 11, 9); px(ctx, '#725449', 18, 12, 9, 7);
+    px(ctx, OUTLINE, 19, 4, 7, 11); px(ctx, '#4f6570', 20, 5, 5, 9);
+    px(ctx, '#f4e8c8', 18, 2, 9, 4); px(ctx, OUTLINE, 17, 2, 3, 3); px(ctx, OUTLINE, 25, 2, 3, 3);
+    px(ctx, '#f0c948', 27, 13, 4, 5);
+  },
   // Barkour Bandit — masked springer coiled to leap, cape streaming behind.
   jumper: (ctx, fur, light, dark) => {
     // Red cape streams off the shoulders mid-leap.
@@ -640,6 +684,41 @@ const DOG_BODIES = {
     px(ctx, '#f3cb45', 4, 27, 8, 3); px(ctx, OUTLINE, 4, 30, 8, 1);
     px(ctx, '#f3cb45', 18, 26, 9, 3); px(ctx, OUTLINE, 18, 29, 9, 1);
     px(ctx, '#aeb8b9', 6, 26, 2, 1); px(ctx, '#aeb8b9', 21, 25, 2, 1);
+  },
+  // Dr. Droolittle — broad Saint Bernard medic with cap, satchel, and heart bottle.
+  medic: (ctx, fur, light, dark) => {
+    // Large dependable body, white chest, and heavy paws.
+    px(ctx, OUTLINE, 6, 13, 21, 14); px(ctx, fur, 7, 14, 19, 12); px(ctx, light, 10, 16, 9, 10);
+    px(ctx, OUTLINE, 7, 24, 7, 5); px(ctx, OUTLINE, 21, 24, 7, 5);
+    px(ctx, dark, 8, 25, 5, 3); px(ctx, dark, 22, 25, 5, 3);
+    // Kind square face with drooping ears.
+    px(ctx, OUTLINE, 6, 4, 18, 15); px(ctx, fur, 7, 5, 16, 13);
+    px(ctx, OUTLINE, 3, 6, 7, 12); px(ctx, dark, 4, 7, 5, 10);
+    px(ctx, OUTLINE, 21, 6, 6, 12); px(ctx, dark, 22, 7, 4, 10);
+    px(ctx, light, 9, 11, 12, 7); px(ctx, OUTLINE, 13, 11, 4, 3); px(ctx, '#eef0c2', 10, 8, 2, 2); px(ctx, '#eef0c2', 19, 8, 2, 2);
+    // White medic cap with red cross.
+    px(ctx, '#f3f4e9', 8, 2, 14, 5); px(ctx, '#d84a45', 14, 2, 3, 5); px(ctx, '#d84a45', 12, 4, 7, 2);
+    // Green medical satchel and dangling heart tonic.
+    px(ctx, OUTLINE, 22, 14, 9, 10); px(ctx, '#4f9f62', 23, 15, 7, 8);
+    px(ctx, '#f3f4e9', 26, 16, 2, 5); px(ctx, '#f3f4e9', 24, 18, 6, 2);
+    px(ctx, '#e95f68', 2, 20, 5, 5); px(ctx, '#ffd1d4', 3, 21, 3, 2);
+  },
+  // Growl Gadot — tiny corgi planted behind an oversized megaphone.
+  growler: (ctx, fur, light, dark) => {
+    // Low corgi body, tiny legs, upright tail.
+    px(ctx, OUTLINE, 6, 16, 20, 10); px(ctx, fur, 7, 17, 18, 8);
+    px(ctx, OUTLINE, 22, 10, 5, 8); px(ctx, fur, 23, 11, 3, 6);
+    px(ctx, OUTLINE, 8, 24, 5, 5); px(ctx, OUTLINE, 20, 24, 5, 5);
+    px(ctx, dark, 9, 25, 3, 3); px(ctx, dark, 21, 25, 3, 3);
+    // Big triangular ears, fierce brows, white corgi blaze.
+    px(ctx, OUTLINE, 4, 5, 17, 15); px(ctx, fur, 5, 7, 15, 12);
+    px(ctx, OUTLINE, 4, 1, 6, 8); px(ctx, dark, 5, 3, 4, 5);
+    px(ctx, OUTLINE, 15, 1, 6, 8); px(ctx, dark, 16, 3, 4, 5);
+    px(ctx, light, 10, 6, 5, 12); px(ctx, OUTLINE, 7, 10, 4, 2); px(ctx, OUTLINE, 15, 10, 4, 2);
+    px(ctx, light, 7, 13, 11, 5); px(ctx, OUTLINE, 11, 13, 4, 3); px(ctx, OUTLINE, 9, 17, 8, 1);
+    // Spiked collar and comically large red megaphone.
+    px(ctx, '#7b2940', 6, 18, 15, 3); px(ctx, '#d9d0b8', 8, 20, 2, 2); px(ctx, '#d9d0b8', 13, 20, 2, 2); px(ctx, '#d9d0b8', 18, 20, 2, 2);
+    px(ctx, OUTLINE, 20, 8, 11, 10); px(ctx, '#d84a45', 21, 10, 9, 6); px(ctx, '#ff8576', 27, 8, 4, 10); px(ctx, OUTLINE, 19, 11, 4, 4);
   },
 };
 

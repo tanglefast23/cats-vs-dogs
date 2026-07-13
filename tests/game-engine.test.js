@@ -46,7 +46,7 @@ test('desktop board uses six columns, fourteen rows, four cat rows, and two acti
   assert.equal(CAT_ZONE_START, 10);
   assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
-  assert.equal(MAX_ROUNDS, 7);
+  assert.equal(MAX_ROUNDS, 10);
 });
 
 test('the next-wave preview is the exact wave released when combat starts', () => {
@@ -62,7 +62,7 @@ test('the next-wave preview is the exact wave released when combat starts', () =
   assert.deepEqual(started.nextWave, []);
 });
 
-test('SAP economy expands from three to four shop choices while resetting to ten gold', () => {
+test('SAP economy expands shop choices while resetting to ten gold', () => {
   let game = createGame(() => 0.5);
   assert.equal(MAX_SHOP_SIZE, 5);
   assert.equal(game.shop.length, 3);
@@ -74,7 +74,7 @@ test('SAP economy expands from three to four shop choices while resetting to ten
     game.dogs = [];
     game = finishRound(game);
     assert.equal(game.gold, 10, `round ${game.round} should start with fresh gold`);
-    const expectedSize = game.round >= 5 ? 4 : 3;
+    const expectedSize = game.round >= 9 ? 5 : game.round >= 5 ? 4 : 3;
     assert.equal(game.shop.length, expectedSize, `round ${game.round} should have ${expectedSize} shop choices`);
   }
 });
@@ -419,11 +419,18 @@ test('dog roles pay for their special ability with distinct health and bite curv
     const tennis = dogStatsFor(tier, DOG_ROLE.TENNIS);
     const howler = dogStatsFor(tier, DOG_ROLE.HOWLER);
     const jumper = dogStatsFor(tier, DOG_ROLE.JUMPER);
+    const frisbee = dogStatsFor(tier, DOG_ROLE.FRISBEE);
+    const lobber = dogStatsFor(tier, DOG_ROLE.LOBBER);
+    const medic = dogStatsFor(tier, DOG_ROLE.MEDIC);
+    const growler = dogStatsFor(tier, DOG_ROLE.GROWLER);
 
-    assert.ok(biter.hp > tennis.hp && biter.hp > howler.hp && biter.hp > jumper.hp);
+    assert.ok([tennis, howler, jumper, frisbee, lobber, medic, growler]
+      .every((specialist) => biter.hp > specialist.hp));
     assert.ok(biter.attack > tennis.attack && tennis.attack > howler.attack);
     assert.ok(jumper.attack < biter.attack);
     assert.ok(howler.howlBonus > howler.attack, `T${tier} Howler contributes through support, not biting`);
+    assert.ok(medic.healPower > medic.attack, `T${tier} Medic contributes through healing, not biting`);
+    assert.ok(growler.fearPower > growler.attack, `T${tier} Growler contributes through disruption, not biting`);
   }
 });
 
@@ -451,6 +458,37 @@ test('Bark McEnroe stops at range and throws a weaker tennis ball down its lane'
   assert.equal(game.dogs[0].row, 7);
   assert.equal(game.cats[0].hp, 2);
   assert.ok(game.events.some((event) => event.type === 'dog-shot' && event.style === 'tennis'));
+});
+
+test('Fetch Armstrong throws a frisbee into a neighboring lane from four squares away', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1 });
+  game = placeCat(game, 0, 10, 2);
+  game.cats[0].attack = 0;
+  game.dogs = [createDog(1, 6, 1, DOG_ROLE.FRISBEE)];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs[0].row, 6);
+  assert.equal(game.cats[0].hp, 2);
+  assert.ok(game.events.some((event) => event.type === 'dog-shot' && event.style === 'frisbee'));
+});
+
+test('Bone Jovi lobs a ranged bone bomb that splashes adjacent cats', () => {
+  let game = createGame(() => 0.5);
+  for (const col of [1, 2, 3]) {
+    game = addCatToBench(game, { level: 1 });
+    game = placeCat(game, 0, 10, col);
+  }
+  game.cats.forEach((cat) => { cat.attack = 0; });
+  game.dogs = [createDog(1, 6, 2, DOG_ROLE.LOBBER)];
+
+  game = resolveSection(game);
+
+  assert.deepEqual(game.cats.map((cat) => cat.hp), [3, 3, 3]);
+  const bombs = game.events.filter((event) => event.type === 'dog-shot' && event.style.startsWith('bone-bomb'));
+  assert.equal(bombs.length, 3);
+  assert.equal(bombs.filter((event) => event.style === 'bone-bomb-secondary').length, 2);
 });
 
 test('Howl Pacino spends its first action buffing nearby dogs for their next bite', () => {
@@ -493,14 +531,59 @@ test('Barkour Bandit clears one blocker but cannot jump a layered defence', () =
   assert.equal(layered.cats.find((cat) => cat.row === 10).hp, 2);
 });
 
+test('Dr. Droolittle spends one action healing the most injured nearby dog', () => {
+  let game = createGame(() => 0.5);
+  const medic = createDog(1, 5, 1, DOG_ROLE.MEDIC);
+  const patient = createDog(1, 6, 2, DOG_ROLE.SCRUFFY);
+  patient.hp = 1;
+  game.dogs = [medic, patient];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs.find((dog) => dog.id === patient.id).hp, 4);
+  assert.equal(game.dogs.find((dog) => dog.id === medic.id).row, 5, 'healing spends the medic action');
+  assert.ok(game.events.some((event) => event.type === 'dog-heal' && event.amount === 3));
+
+  game = resolveSection(game);
+  assert.equal(game.events.some((event) => event.type === 'dog-heal'), false, 'the medic heals once per battle');
+});
+
+test('Growl Gadot frightens a nearby cat and weakens its next attack', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1 });
+  game = placeCat(game, 0, 10, 2);
+  game.dogs = [createDog(1, 7, 2, DOG_ROLE.GROWLER)];
+
+  game = resolveSection(game);
+  assert.equal(game.dogs[0].hp, 2);
+  assert.equal(game.cats[0].nextAttackPenalty, 2);
+  assert.ok(game.events.some((event) => event.type === 'dog-fear' && event.amount === 2));
+
+  game = resolveSection(game);
+  const weakenedShot = game.events.find((event) => event.type === 'shot' && !event.miss);
+  assert.equal(weakenedShot.damage, 1, 'Purrcy splits the reduced two attack into one-damage pellets');
+  assert.equal(game.events.filter((event) => event.type === 'shot' && !event.miss).length, 2);
+  assert.equal(game.dogs.length, 0);
+});
+
 test('special dog roles unlock gradually and debut in their first eligible wave', () => {
   assert.deepEqual(availableDogRolesForRound(1), [DOG_ROLE.SCRUFFY]);
-  assert.deepEqual(availableDogRolesForRound(3), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS]);
-  assert.deepEqual(availableDogRolesForRound(4), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER]);
-  assert.deepEqual(availableDogRolesForRound(5), [DOG_ROLE.SCRUFFY, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER, DOG_ROLE.JUMPER]);
+  assert.deepEqual(availableDogRolesForRound(2), [DOG_ROLE.SCRUFFY, DOG_ROLE.FRISBEE]);
+  assert.deepEqual(availableDogRolesForRound(3), [DOG_ROLE.SCRUFFY, DOG_ROLE.FRISBEE, DOG_ROLE.TENNIS]);
+  assert.deepEqual(availableDogRolesForRound(4), [
+    DOG_ROLE.SCRUFFY, DOG_ROLE.FRISBEE, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER,
+  ]);
+  assert.deepEqual(availableDogRolesForRound(10), [
+    DOG_ROLE.SCRUFFY, DOG_ROLE.FRISBEE, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER,
+    DOG_ROLE.LOBBER, DOG_ROLE.JUMPER, DOG_ROLE.MEDIC, DOG_ROLE.GROWLER,
+  ]);
+  assert.ok(generateWave(2, () => 0).some((dog) => dog.role === DOG_ROLE.FRISBEE));
   assert.ok(generateWave(3, () => 0).some((dog) => dog.role === DOG_ROLE.TENNIS));
   assert.ok(generateWave(4, () => 0).some((dog) => dog.role === DOG_ROLE.HOWLER));
   assert.ok(generateWave(5, () => 0).some((dog) => dog.role === DOG_ROLE.JUMPER));
+  assert.ok(generateWave(6, () => 0).some((dog) => dog.role === DOG_ROLE.LOBBER));
+  assert.ok(generateWave(8, () => 0).some((dog) => dog.role === DOG_ROLE.MEDIC));
+  assert.ok(generateWave(10, () => 0).some((dog) => dog.role === DOG_ROLE.GROWLER));
 });
 
 test('a breach spends one life and Super Cat clears that column', () => {

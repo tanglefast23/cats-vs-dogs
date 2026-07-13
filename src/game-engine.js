@@ -8,7 +8,7 @@ export { WORKER_ROLE, WORKER_INFO } from './production-rules.js';
 export const ROWS = 14;
 export const COLS = 6;
 export const CAT_ZONE_START = 10;
-export const MAX_ROUNDS = 7;
+export const MAX_ROUNDS = 10;
 export const ACTIONS_PER_ROUND = 2;
 export const BENCH_SIZE = 6;
 export const MAX_SHOP_SIZE = 5;
@@ -173,15 +173,23 @@ export const DOG_STATS = {
 
 export const DOG_ROLE = Object.freeze({
   SCRUFFY: 'scruffy',
+  FRISBEE: 'frisbee',
   TENNIS: 'tennis',
   HOWLER: 'howler',
+  LOBBER: 'lobber',
   JUMPER: 'jumper',
+  MEDIC: 'medic',
+  GROWLER: 'growler',
 });
 
 const DOG_ROLE_STATS = Object.freeze({
   [DOG_ROLE.SCRUFFY]: Object.freeze({
     1: Object.freeze({ hp: 8, attack: 4 }), 2: Object.freeze({ hp: 13, attack: 6 }),
     3: Object.freeze({ hp: 19, attack: 8 }), 4: Object.freeze({ hp: 26, attack: 11 }),
+  }),
+  [DOG_ROLE.FRISBEE]: Object.freeze({
+    1: Object.freeze({ hp: 5, attack: 2 }), 2: Object.freeze({ hp: 8, attack: 3 }),
+    3: Object.freeze({ hp: 11, attack: 5 }), 4: Object.freeze({ hp: 15, attack: 7 }),
   }),
   [DOG_ROLE.TENNIS]: Object.freeze({
     1: Object.freeze({ hp: 5, attack: 3 }), 2: Object.freeze({ hp: 8, attack: 4 }),
@@ -191,13 +199,27 @@ const DOG_ROLE_STATS = Object.freeze({
     1: Object.freeze({ hp: 6, attack: 1 }), 2: Object.freeze({ hp: 10, attack: 2 }),
     3: Object.freeze({ hp: 14, attack: 3 }), 4: Object.freeze({ hp: 19, attack: 4 }),
   }),
+  [DOG_ROLE.LOBBER]: Object.freeze({
+    1: Object.freeze({ hp: 4, attack: 2 }), 2: Object.freeze({ hp: 7, attack: 3 }),
+    3: Object.freeze({ hp: 10, attack: 4 }), 4: Object.freeze({ hp: 13, attack: 6 }),
+  }),
   [DOG_ROLE.JUMPER]: Object.freeze({
     1: Object.freeze({ hp: 5, attack: 2 }), 2: Object.freeze({ hp: 8, attack: 3 }),
     3: Object.freeze({ hp: 11, attack: 4 }), 4: Object.freeze({ hp: 15, attack: 6 }),
   }),
+  [DOG_ROLE.MEDIC]: Object.freeze({
+    1: Object.freeze({ hp: 6, attack: 1 }), 2: Object.freeze({ hp: 9, attack: 2 }),
+    3: Object.freeze({ hp: 13, attack: 2 }), 4: Object.freeze({ hp: 17, attack: 3 }),
+  }),
+  [DOG_ROLE.GROWLER]: Object.freeze({
+    1: Object.freeze({ hp: 6, attack: 1 }), 2: Object.freeze({ hp: 9, attack: 2 }),
+    3: Object.freeze({ hp: 13, attack: 3 }), 4: Object.freeze({ hp: 18, attack: 4 }),
+  }),
 });
 
 const HOWL_BONUS = Object.freeze({ 1: 2, 2: 3, 3: 4, 4: 5 });
+const MEDIC_HEAL = Object.freeze({ 1: 3, 2: 5, 3: 7, 4: 10 });
+const FEAR_PENALTY = Object.freeze({ 1: 2, 2: 3, 3: 4, 4: 5 });
 
 export const DOG_ROLE_INFO = Object.freeze({
   [DOG_ROLE.SCRUFFY]: Object.freeze({
@@ -205,6 +227,12 @@ export const DOG_ROLE_INFO = Object.freeze({
     strength: 'Highest health and bite damage', weakness: 'No range, support, or bypass ability',
     blurb: 'The strongest direct front-line biter.',
     attackDetail: 'Steps toward the porch and delivers the strongest bite to the cat directly ahead.',
+  }),
+  [DOG_ROLE.FRISBEE]: Object.freeze({
+    name: 'Fetch Armstrong', unlockRound: 2, role: 'Cross-lane ranged specialist',
+    strength: 'Throws into its own or a neighboring lane from up to four squares away', weakness: 'Low health and weak close combat',
+    blurb: 'A fragile frisbee sniper that bends lane pressure.',
+    attackDetail: 'Throws a reduced-damage frisbee at the nearest cat two to four squares ahead in its own or a neighboring lane.',
   }),
   [DOG_ROLE.TENNIS]: Object.freeze({
     name: 'Bark McEnroe', unlockRound: 3, role: 'Ranged-pressure specialist',
@@ -218,11 +246,29 @@ export const DOG_ROLE_INFO = Object.freeze({
     blurb: 'A low-damage support dog that empowers its pack.',
     attackDetail: 'Its first useful action is a howl that grants nearby dogs bonus damage on their next attack. Alone, it is a poor fighter.',
   }),
+  [DOG_ROLE.LOBBER]: Object.freeze({
+    name: 'Bone Jovi', unlockRound: 6, role: 'Ranged splash specialist',
+    strength: 'Bone bombs damage cats beside the target', weakness: 'Lowest health and poor single-target damage',
+    blurb: 'A frail artillery dog that punishes clustered cats.',
+    attackDetail: 'Lobs a weak bone bomb two to five squares down its lane. The blast also damages cats beside the target in adjacent columns.',
+  }),
   [DOG_ROLE.JUMPER]: Object.freeze({
     name: 'Barkour Bandit', unlockRound: 5, role: 'Defence-bypass specialist',
     strength: 'Leaps over one isolated defender', weakness: 'Low health and a weak bite; layered cats stop it',
     blurb: 'A fragile bypass dog that punishes isolated defenders.',
     attackDetail: 'Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
+  }),
+  [DOG_ROLE.MEDIC]: Object.freeze({
+    name: 'Dr. Droolittle', unlockRound: 8, role: 'Pack-healing specialist',
+    strength: 'Restores a badly hurt nearby dog once per battle', weakness: 'Very low personal damage and gives up an attack to heal',
+    blurb: 'A support dog that patches up the pack.',
+    attackDetail: 'Once per battle, spends its action healing the most injured dog within one column and two rows. Bites weakly when nobody needs help.',
+  }),
+  [DOG_ROLE.GROWLER]: Object.freeze({
+    name: 'Growl Gadot', unlockRound: 10, role: 'Attack-disruption specialist',
+    strength: 'Weakens a nearby cat\'s next attack', weakness: 'Can frighten only once and has a very weak bite',
+    blurb: 'An intimidator that suppresses the strongest nearby cat.',
+    attackDetail: 'Once per battle, frightens the strongest cat up to four squares ahead in its own or a neighboring lane, reducing that cat\'s next attack.',
   }),
 });
 
@@ -278,7 +324,30 @@ export function dogStatsFor(tier = 1, role = DOG_ROLE.SCRUFFY) {
   return {
     ...stats,
     howlBonus: safeRole === DOG_ROLE.HOWLER ? HOWL_BONUS[safeTier] : 0,
+    healPower: safeRole === DOG_ROLE.MEDIC ? MEDIC_HEAL[safeTier] : 0,
+    fearPower: safeRole === DOG_ROLE.GROWLER ? FEAR_PENALTY[safeTier] : 0,
   };
+}
+
+function dogRoleStats(role, attack, stats) {
+  switch (role) {
+    case DOG_ROLE.FRISBEE:
+      return `Frisbee ${Math.max(1, Math.ceil(attack * 0.7))} · Bite ${attack}`;
+    case DOG_ROLE.TENNIS:
+      return `Ball ${Math.max(1, Math.ceil(attack * 0.6))} · Bite ${attack}`;
+    case DOG_ROLE.HOWLER:
+      return `Howl +${stats.howlBonus} · Bite ${attack}`;
+    case DOG_ROLE.LOBBER:
+      return `Bomb ${Math.max(1, Math.floor(attack * 0.6))} splash · Bite ${attack}`;
+    case DOG_ROLE.JUMPER:
+      return `Jump 1× · Bite ${attack}`;
+    case DOG_ROLE.MEDIC:
+      return `Heal ${stats.healPower} 1× · Bite ${attack}`;
+    case DOG_ROLE.GROWLER:
+      return `Frighten -${stats.fearPower} 1× · Bite ${attack}`;
+    default:
+      return `Bite ${attack}`;
+  }
 }
 
 export function dogTooltipInfo(dog) {
@@ -290,15 +359,10 @@ export function dogTooltipInfo(dog) {
   const hp = dog.hp ?? stats.hp;
   const maxHp = dog.maxHp ?? stats.hp;
   const attack = dog.attack ?? stats.attack;
-  const roleStats = role === DOG_ROLE.TENNIS
-    ? `Ball ${Math.max(1, Math.ceil(attack * 0.6))} · Bite ${attack}`
-    : role === DOG_ROLE.HOWLER
-      ? `Howl +${stats.howlBonus} · Bite ${attack}`
-      : role === DOG_ROLE.JUMPER ? `Jump 1× · Bite ${attack}` : `Bite ${attack}`;
   return {
     kind: 'dog',
     title: `T${tier} ${roleInfo.name}`,
-    stats: `Health ${hp}/${maxHp} · ${roleStats}`,
+    stats: `Health ${hp}/${maxHp} · ${dogRoleStats(role, attack, stats)}`,
     attack: roleInfo.attackDetail,
     note: `${roleInfo.role} · Strength: ${roleInfo.strength} · Weakness: ${roleInfo.weakness}. ${tierInfo.blurb}`,
   };
@@ -329,7 +393,8 @@ export function createDog(tier = 1, row = 0, col = 0, role = DOG_ROLE.SCRUFFY) {
   const stats = dogStatsFor(safeTier, safeRole);
   return {
     id: id('dog'), kind: 'scruffy-dog', role: safeRole, tier: safeTier, row, col,
-    hp: stats.hp, maxHp: stats.hp, attack: stats.attack, howlBonus: stats.howlBonus,
+    hp: stats.hp, maxHp: stats.hp, attack: stats.attack,
+    howlBonus: stats.howlBonus, healPower: stats.healPower, fearPower: stats.fearPower,
   };
 }
 
@@ -995,11 +1060,14 @@ export function generateWave(round, random = Math.random) {
     const replaced = dogs[dogs.length - 1];
     dogs[dogs.length - 1] = createDog(maxTier, 0, replaced.col, replaced.role);
   }
-  const debutRole = Object.values(DOG_ROLE)
-    .find((role) => DOG_ROLE_INFO[role].unlockRound === round && role !== DOG_ROLE.SCRUFFY);
-  if (debutRole && dogs.length && !dogs.some((dog) => dog.role === debutRole)) {
-    const replaced = dogs[0];
-    dogs[0] = createDog(replaced.tier, 0, replaced.col, debutRole);
+  const debutRoles = Object.values(DOG_ROLE)
+    .filter((role) => DOG_ROLE_INFO[role].unlockRound === round && role !== DOG_ROLE.SCRUFFY);
+  for (const debutRole of debutRoles) {
+    if (!dogs.length || dogs.some((dog) => dog.role === debutRole)) continue;
+    const ordinaryIndex = dogs.findIndex((dog) => !debutRoles.includes(dog.role));
+    const replaceIndex = ordinaryIndex >= 0 ? ordinaryIndex : dogs.length - 1;
+    const replaced = dogs[replaceIndex];
+    dogs[replaceIndex] = createDog(replaced.tier, 0, replaced.col, debutRole);
   }
   return dogs;
 }
@@ -1014,12 +1082,15 @@ export function startRound(game) {
     cat.activeUsed = false;
     cat.guard = 0;
     cat.nextAttackBonus = 0;
+    cat.nextAttackPenalty = 0;
   });
   const queuedWave = next.nextWave?.length ? next.nextWave : generateWave(next.round, game.random);
   next.dogs.push(...queuedWave.map((dog) => ({ ...dog })));
   next.dogs.forEach((dog) => {
     dog.howlUsed = false;
     dog.jumped = false;
+    dog.healUsed = false;
+    dog.fearUsed = false;
     dog.attackBoost = 0;
   });
   next.nextWave = [];
@@ -1192,10 +1263,11 @@ export function resolveSection(game) {
   // Cats always act. If nothing is in range they still shoot/swing (miss animations).
   // Purrcy = high column damage, Hissiletoe = medium homing, Clawdius = low front melee.
   for (const cat of next.cats) {
-    if (cat.nextAttackBonus) {
+    if (cat.nextAttackBonus || cat.nextAttackPenalty) {
       cat.attackBeforeActiveBonus = cat.attack;
-      cat.attack += cat.nextAttackBonus;
+      cat.attack = Math.max(1, cat.attack + (cat.nextAttackBonus ?? 0) - (cat.nextAttackPenalty ?? 0));
       cat.nextAttackBonus = 0;
+      cat.nextAttackPenalty = 0;
     }
     const ability = cat.ability ?? catStatsFor(cat.level, cat.coat).ability;
     if (ability === 'melee') {
@@ -1348,6 +1420,62 @@ export function resolveSection(game) {
         continue;
       }
     }
+    if (dog.role === DOG_ROLE.MEDIC && !dog.healUsed) {
+      const patient = next.dogs
+        .filter((other) => other.id !== dog.id
+          && other.hp > 0
+          && other.hp < other.maxHp
+          && Math.abs(other.col - dog.col) <= 1
+          && Math.abs(other.row - dog.row) <= 2)
+        .sort((left, right) => (right.maxHp - right.hp) - (left.maxHp - left.hp)
+          || Math.abs(left.row - dog.row) - Math.abs(right.row - dog.row))[0];
+      if (patient) {
+        const healPower = dog.healPower ?? dogStatsFor(dog.tier, dog.role).healPower;
+        const hpBefore = patient.hp;
+        patient.hp = Math.min(patient.maxHp, patient.hp + healPower);
+        dog.healUsed = true;
+        next.events.push({
+          type: 'dog-heal', id: dog.id, from: dog.id, to: patient.id,
+          row: patient.row, col: patient.col, fromRow: dog.row, fromCol: dog.col,
+          amount: patient.hp - hpBefore, hpBefore, hpAfter: patient.hp, maxHp: patient.maxHp,
+        });
+        continue;
+      }
+    }
+    if (dog.role === DOG_ROLE.GROWLER && !dog.fearUsed) {
+      const frightened = next.cats
+        .filter((cat) => cat.hp > 0
+          && Math.abs(cat.col - dog.col) <= 1
+          && cat.row - dog.row >= 1
+          && cat.row - dog.row <= 4)
+        .sort((left, right) => right.attack - left.attack
+          || (left.row - dog.row) - (right.row - dog.row))[0];
+      if (frightened) {
+        const fearPower = dog.fearPower ?? dogStatsFor(dog.tier, dog.role).fearPower;
+        frightened.nextAttackPenalty = Math.max(frightened.nextAttackPenalty ?? 0, fearPower);
+        dog.fearUsed = true;
+        next.events.push({
+          type: 'dog-fear', id: dog.id, from: dog.id, to: frightened.id,
+          row: frightened.row, col: frightened.col, fromRow: dog.row, fromCol: dog.col,
+          amount: fearPower,
+        });
+        continue;
+      }
+    }
+    if (dog.role === DOG_ROLE.FRISBEE) {
+      const rangedTarget = [...next.cats, ...next.decoys]
+        .filter((target) => target.hp > 0
+          && Math.abs(target.col - dog.col) <= 1
+          && target.row - dog.row >= 2
+          && target.row - dog.row <= 4)
+        .sort((left, right) => (left.row - dog.row) - (right.row - dog.row)
+          || Math.abs(left.col - dog.col) - Math.abs(right.col - dog.col))[0];
+      if (rangedTarget) {
+        const rangedDamage = Math.max(1, Math.ceil((dog.attack + (dog.attackBoost ?? 0)) * 0.7));
+        applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'frisbee', damage: rangedDamage });
+        continue;
+      }
+    }
     if (dog.role === DOG_ROLE.TENNIS) {
       const rangedTarget = [...next.cats, ...next.decoys]
         .filter((target) => target.hp > 0
@@ -1358,6 +1486,27 @@ export function resolveSection(game) {
       if (rangedTarget) {
         const rangedDamage = Math.max(1, Math.ceil((dog.attack + (dog.attackBoost ?? 0)) * 0.6));
         applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'tennis', damage: rangedDamage });
+        continue;
+      }
+    }
+    if (dog.role === DOG_ROLE.LOBBER) {
+      const rangedTarget = [...next.cats, ...next.decoys]
+        .filter((target) => target.hp > 0
+          && target.col === dog.col
+          && target.row - dog.row >= 2
+          && target.row - dog.row <= 5)
+        .sort((left, right) => left.row - right.row)[0];
+      if (rangedTarget) {
+        const bombDamage = Math.max(1, Math.floor((dog.attack + (dog.attackBoost ?? 0)) * 0.6));
+        applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'bone-bomb', damage: bombDamage });
+        const splashTargets = [...next.cats, ...next.decoys]
+          .filter((target) => target.id !== rangedTarget.id
+            && target.hp > 0
+            && target.row === rangedTarget.row
+            && Math.abs(target.col - rangedTarget.col) === 1);
+        splashTargets.forEach((target) => applyDogDamage(next, dog, target, 'dog-shot', {
+          style: 'bone-bomb-secondary', damage: bombDamage,
+        }));
         continue;
       }
     }

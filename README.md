@@ -25,7 +25,7 @@ under `src/` stays browser-pure (no Electron/Node imports).
   - **Bombay Boom** (R4) — weak single hit with strong adjacent-column splash
   - **Laserpaw** (R7) — fragile beam that pierces up to three dogs in one lane
   - **Frosty, Purrtal, Faux Paw, Thunderpaws, and Meowstro** (R4) — low normal stats traded for one specialized Tactics ability
-- Dog roles are equally specialized: **Chomps McGraw** bites hardest, **Bark McEnroe** attacks at range, **Howl Pacino** buffs the pack, and **Barkour Bandit** bypasses one isolated defender
+- Dog roles are equally specialized: **Chomps McGraw** bites hardest; **Fetch Armstrong**, **Bark McEnroe**, and **Bone Jovi** attack at range; **Howl Pacino** buffs the pack; **Barkour Bandit** bypasses a defender; **Dr. Droolittle** heals allies; and **Growl Gadot** weakens a cat's next attack
 - Dog tiers scale from **Yard Punk** through **Ironhide** and **Bonecrusher** to round-seven **Top Dog**
 - Cats only stack/merge with the **same color and level**
 - Shop pets can be **Saved** through refresh and into the next round

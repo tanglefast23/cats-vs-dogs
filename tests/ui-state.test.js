@@ -5,7 +5,7 @@ import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarker
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
-  WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS,
+  WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
 import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
@@ -416,9 +416,13 @@ test('unlockable fighters have distinct accessories and dog tier gear', () => {
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[9], ['storm-coat', 'lightning-rod']);
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[10], ['maestro-coat', 'conductor-baton']);
   assert.deepEqual(DOG_TIER_MARKERS[4], ['alpha-armor', 'crown']);
+  assert.deepEqual(DOG_ROLE_MARKERS.frisbee, ['blue-frisbee', 'flight-goggles']);
   assert.deepEqual(DOG_ROLE_MARKERS.tennis, ['visor', 'tennis-ball']);
   assert.deepEqual(DOG_ROLE_MARKERS.howler, ['sound-cone', 'purple-bandana']);
+  assert.deepEqual(DOG_ROLE_MARKERS.lobber, ['bone-cannon', 'ammo-pack']);
   assert.deepEqual(DOG_ROLE_MARKERS.jumper, ['spring-boots', 'red-cape']);
+  assert.deepEqual(DOG_ROLE_MARKERS.medic, ['medic-cap', 'heart-pack']);
+  assert.deepEqual(DOG_ROLE_MARKERS.growler, ['megaphone', 'spiked-collar']);
 });
 
 test('every fighter has a unique body build matched to its combat role', () => {
@@ -431,10 +435,24 @@ test('every fighter has a unique body build matched to its combat role', () => {
   assert.equal(CAT_BODY_BUILDS[7], 'hooded-phantom');
 
   const dogBuilds = Object.values(DOG_BODY_BUILDS);
-  assert.equal(dogBuilds.length, 4, 'all 4 dog roles need a body build');
+  assert.equal(dogBuilds.length, 8, 'all 8 dog roles need a body build');
   assert.equal(new Set(dogBuilds).size, dogBuilds.length, 'dog builds must all differ');
+  assert.equal(DOG_BODY_BUILDS.frisbee, 'disc-retriever');
   assert.equal(DOG_BODY_BUILDS.howler, 'crooner', 'the howler poses mid-howl');
+  assert.equal(DOG_BODY_BUILDS.lobber, 'artillery-dachshund');
   assert.equal(DOG_BODY_BUILDS.jumper, 'springer', 'the jumper reads coiled to leap');
+  assert.equal(DOG_BODY_BUILDS.medic, 'saint-bernard-medic');
+  assert.equal(DOG_BODY_BUILDS.growler, 'corgi-intimidator');
+});
+
+test('every dog role renders at every tier without missing sprite geometry', () => {
+  const ctx = { clearRect() {}, fillRect() {}, set fillStyle(value) { this.color = value; } };
+  const canvas = { width: 0, height: 0, getContext: () => ctx };
+  for (const role of Object.keys(DOG_BODY_BUILDS)) {
+    for (const tier of [1, 2, 3, 4]) {
+      assert.doesNotThrow(() => drawDog(canvas, tier, role), `${role} tier ${tier} should render`);
+    }
+  }
 });
 
 test('homing shot path uses a sine wave while ending on the target', () => {
