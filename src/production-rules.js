@@ -11,6 +11,7 @@ export const WORKER_INFO = Object.freeze({
     shortName: 'Biscuit',
     blurb: 'Makes healing food',
     station: 'cookfire',
+    productionRounds: 1,
     output: Object.freeze({
       1: Object.freeze({ kind: 'food', quantity: 1 }),
       2: Object.freeze({ kind: 'food', quantity: 2 }),
@@ -22,6 +23,7 @@ export const WORKER_INFO = Object.freeze({
     shortName: 'Cashmere',
     blurb: 'Makes collectible coins',
     station: 'market',
+    productionRounds: 1,
     output: Object.freeze({
       1: Object.freeze({ kind: 'coins', quantity: 2 }),
       2: Object.freeze({ kind: 'coins', quantity: 3 }),
@@ -33,6 +35,7 @@ export const WORKER_INFO = Object.freeze({
     shortName: 'Hammer',
     blurb: 'Forges attack weapons',
     station: 'weapon-forge',
+    productionRounds: 2,
     output: Object.freeze({
       1: Object.freeze({ kind: 'weapon', tier: 1, quantity: 1 }),
       2: Object.freeze({ kind: 'weapon', tier: 2, quantity: 1 }),
@@ -44,6 +47,7 @@ export const WORKER_INFO = Object.freeze({
     shortName: 'Pawladin',
     blurb: 'Builds blocking armour',
     station: 'armour-forge',
+    productionRounds: 2,
     output: Object.freeze({
       1: Object.freeze({ kind: 'armour', tier: 1, quantity: 1 }),
       2: Object.freeze({ kind: 'armour', tier: 2, quantity: 1 }),

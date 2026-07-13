@@ -33,113 +33,142 @@ export const CAT_COAT_INFO = {
     name: 'Purrcy Pew-Pew',
     shortName: 'Purrcy',
     ability: 'column-shot',
-    blurb: '3-shot column burst',
-    attackDetail: 'Each action, fires 3 rapid column shots that split its attack damage. Shots retarget the nearest dog ahead in its column.',
+    role: 'Lane damage specialist',
+    strength: 'Highest reliable single-target damage',
+    weakness: 'Fragile and cannot attack outside its column',
+    blurb: 'High damage · one column',
+    attackDetail: 'Each action, fires 3 rapid shots that split its high attack damage. Shots retarget the nearest dog ahead, but never leave Purrcy\'s column.',
     shopTier: 1,
+    unlockRound: 1,
   },
   1: {
     name: 'Clawdius',
     shortName: 'Clawdius',
     ability: 'melee',
-    blurb: 'Heavy melee · 2× HP',
-    attackDetail: 'Does not shoot. Only melee-attacks the dog directly in the tile in front. Double HP and very high damage.',
+    role: 'Defensive tank',
+    strength: 'By far the highest health',
+    weakness: 'Very low damage and only reaches the tile directly ahead',
+    blurb: 'Extreme HP · tiny melee',
+    attackDetail: 'Does not shoot. Clawdius has enormous health, but deals very low damage and can only hit the dog directly in the front tile.',
     shopTier: 1,
+    unlockRound: 1,
   },
   2: {
     name: 'Hissiletoe',
     shortName: 'Hissile',
     ability: 'homing',
-    blurb: 'Homing wave shot',
-    attackDetail: 'Each action, fires one weaker sine-wave shot that homes by nearest column first (own column, then adjacent, then farther). In a tied column distance, it picks the lowest dog; a full tie is random.',
+    role: 'Balanced homing generalist',
+    strength: 'Reliable medium damage that can reach any column',
+    weakness: 'Deals half or less of Purrcy\'s damage',
+    blurb: 'Medium stats · homing',
+    attackDetail: 'Each action, fires one medium-strength sine-wave shot that homes by nearest column first. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
     shopTier: 1,
+    unlockRound: 1,
   },
   3: {
     name: 'Knotty Kitty',
     shortName: 'Knotty',
     ability: 'tangle-homing',
-    blurb: 'Yarn stops next move',
-    attackDetail: 'Unlocked on round 3. Fires homing yarn at the nearest-column dog. A hit tangles that dog so its next unblocked move is skipped.',
+    role: 'Movement-control specialist',
+    strength: 'Each dog hit for the first time skips its next move',
+    weakness: 'Very low damage; a dog can only be tangled once',
+    blurb: 'One-time stop · low damage',
+    attackDetail: 'Fires weak homing yarn. The first hit on each dog tangles it so its next unblocked move is skipped; later hits on that dog only deal the low damage.',
     shopTier: 2,
+    unlockRound: 1,
   },
   4: {
     name: 'Bombay Boom',
     shortName: 'Bombay',
     ability: 'splash',
-    blurb: 'Adjacent splash bomb',
-    attackDetail: 'Unlocked on round 5. Bombs the nearest-column dog, then deals 1 splash damage to dogs beside it in adjacent columns.',
+    role: 'Crowd-damage specialist',
+    strength: 'Damages a target and dogs beside it in adjacent columns',
+    weakness: 'Fragile and has the lowest damage against one dog',
+    blurb: 'Wide splash · weak impact',
+    attackDetail: 'Unlocked on round 4. Fires a weak homing bomb that damages the target and dogs beside it in adjacent columns. Excellent into groups, poor against one dog.',
     shopTier: 3,
+    unlockRound: 4,
   },
   5: {
     name: 'Laserpaw',
     shortName: 'Laser',
     ability: 'piercing',
-    blurb: '3-target prism beam',
-    attackDetail: 'Unlocked on round 7. Fires a prism beam through up to three dogs ahead in its own column.',
+    role: 'Lane-clearing specialist',
+    strength: 'Full damage to as many as three dogs in one column',
+    weakness: 'Very fragile and completely useless outside its column',
+    blurb: 'Pierces 3 · glass cannon',
+    attackDetail: 'Unlocked on round 7. Fires a strong prism beam through up to three dogs ahead in its own column. It cannot touch other columns and has very low health.',
     shopTier: 4,
+    unlockRound: 7,
   },
   6: {
     name: 'Frosty Paws', shortName: 'Frosty', ability: 'homing', activeAbility: 'freeze',
-    blurb: 'Freezes one dog', attackDetail: 'Unlocked on round 5. Fires a weak homing spell and can freeze one dog during a Tactics Window.', shopTier: 3,
+    role: 'Freeze-control specialist', strength: 'Cancels one chosen dog action', weakness: 'Very low normal damage',
+    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog during a Tactics Window.', shopTier: 3, unlockRound: 4,
   },
   7: {
     name: 'Purrtal', shortName: 'Purrtal', ability: 'homing', activeAbility: 'teleport',
-    blurb: 'Teleports one ally', attackDetail: 'Unlocked on round 5. Can teleport one allied battlefield cat to any empty cat square once per battle.', shopTier: 3,
+    role: 'Positioning specialist', strength: 'Teleports one ally to any empty cat square', weakness: 'Low normal damage',
+    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square.', shopTier: 3, unlockRound: 4,
   },
   8: {
     name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
-    blurb: 'Summons a blocker', attackDetail: 'Unlocked on round 5. Can summon a temporary phantom blocker during a Tactics Window.', shopTier: 3,
+    role: 'Defensive-utility specialist', strength: 'Summons a blocker anywhere in cat territory', weakness: 'Fragile with low normal damage',
+    blurb: 'Free blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a temporary phantom blocker.', shopTier: 3, unlockRound: 4,
   },
   9: {
     name: 'Thunderpaws', shortName: 'Thunder', ability: 'homing', activeAbility: 'storm',
-    blurb: 'Strikes one column', attackDetail: 'Unlocked on round 5. Can strike every dog in one selected column with lightning.', shopTier: 3,
+    role: 'Burst-ability specialist', strength: 'Strikes every dog in one chosen column', weakness: 'Very fragile with the weakest normal attack',
+    blurb: 'Huge spell · tiny attack', attackDetail: 'Unlocked on round 4. Normal shots barely hurt, but once per battle Thunderpaws can strike every dog in one selected column.', shopTier: 3, unlockRound: 4,
   },
   10: {
     name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'encore',
-    blurb: 'Grants an extra attack', attackDetail: 'Unlocked on round 5. Can command one ally to make an immediate reduced-strength attack.', shopTier: 3,
+    role: 'Attack-support specialist', strength: 'Commands an ally to attack immediately', weakness: 'Very low personal damage',
+    blurb: 'Ally encore · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can command one ally to make an immediate reduced-strength attack.', shopTier: 3, unlockRound: 4,
   },
 };
 
-// Shared level shell; coat multipliers apply on top.
+// Default Purrcy stats are exported for older callers; every coat has its own curve below.
 export const CAT_STATS = {
-  1: { hp: 6, attack: 2 },
-  2: { hp: 9, attack: 3 },
-  3: { hp: 13, attack: 5 },
+  1: { hp: 4, attack: 4 },
+  2: { hp: 6, attack: 7 },
+  3: { hp: 9, attack: 11 },
 };
 
-// Grey/blue melee damage is intentionally high; white shot damage is intentionally low.
+// A unit pays for targeting or active utility with damage. Purrcy is the damage benchmark.
 const COAT_ATTACK = {
-  0: { 1: 2, 2: 3, 3: 5 },
-  1: { 1: 5, 2: 8, 3: 12 },
-  2: { 1: 1, 2: 2, 3: 3 },
-  3: { 1: 2, 2: 3, 3: 5 },
-  4: { 1: 3, 2: 5, 3: 7 },
+  0: { 1: 4, 2: 7, 3: 11 },
+  1: { 1: 1, 2: 2, 3: 3 },
+  2: { 1: 2, 2: 3, 3: 5 },
+  3: { 1: 1, 2: 1, 3: 2 },
+  4: { 1: 1, 2: 2, 3: 3 },
   5: { 1: 3, 2: 5, 3: 8 },
-  6: { 1: 2, 2: 3, 3: 5 },
-  7: { 1: 2, 2: 3, 3: 5 },
-  8: { 1: 2, 2: 3, 3: 5 },
-  9: { 1: 1, 2: 2, 3: 3 },
-  10: { 1: 1, 2: 2, 3: 4 },
+  6: { 1: 1, 2: 1, 3: 2 },
+  7: { 1: 1, 2: 2, 3: 3 },
+  8: { 1: 1, 2: 2, 3: 3 },
+  9: { 1: 1, 2: 1, 3: 2 },
+  10: { 1: 1, 2: 1, 3: 2 },
 };
 
 const COAT_HP = {
-  0: { 1: 6, 2: 9, 3: 13 },
-  1: { 1: 12, 2: 18, 3: 26 },
-  2: { 1: 6, 2: 9, 3: 13 },
-  3: { 1: 7, 2: 11, 3: 16 },
-  4: { 1: 5, 2: 8, 3: 12 },
-  5: { 1: 8, 2: 12, 3: 18 },
-  6: { 1: 6, 2: 9, 3: 13 },
-  7: { 1: 7, 2: 11, 3: 16 },
-  8: { 1: 6, 2: 9, 3: 13 },
-  9: { 1: 5, 2: 8, 3: 12 },
-  10: { 1: 6, 2: 10, 3: 15 },
+  0: { 1: 4, 2: 6, 3: 9 },
+  1: { 1: 18, 2: 27, 3: 40 },
+  2: { 1: 7, 2: 10, 3: 14 },
+  3: { 1: 5, 2: 7, 3: 10 },
+  4: { 1: 4, 2: 6, 3: 9 },
+  5: { 1: 4, 2: 6, 3: 9 },
+  6: { 1: 5, 2: 8, 3: 12 },
+  7: { 1: 6, 2: 9, 3: 13 },
+  8: { 1: 4, 2: 6, 3: 9 },
+  9: { 1: 4, 2: 6, 3: 9 },
+  10: { 1: 5, 2: 8, 3: 12 },
 };
 
 export const DOG_STATS = {
-  1: { hp: 7, attack: 3 },
-  2: { hp: 11, attack: 4 },
-  3: { hp: 16, attack: 6 },
-  4: { hp: 22, attack: 8 },
+  1: { hp: 8, attack: 4 },
+  2: { hp: 13, attack: 6 },
+  3: { hp: 19, attack: 8 },
+  4: { hp: 26, attack: 11 },
 };
 
 export const DOG_ROLE = Object.freeze({
@@ -149,30 +178,59 @@ export const DOG_ROLE = Object.freeze({
   JUMPER: 'jumper',
 });
 
-export const DOG_ROLE_INFO = Object.freeze({
+const DOG_ROLE_STATS = Object.freeze({
   [DOG_ROLE.SCRUFFY]: Object.freeze({
-    name: 'Chomps McGraw', unlockRound: 1, blurb: 'The dependable front-line biter.',
-    attackDetail: 'Steps toward the porch and bites the cat directly ahead.',
+    1: Object.freeze({ hp: 8, attack: 4 }), 2: Object.freeze({ hp: 13, attack: 6 }),
+    3: Object.freeze({ hp: 19, attack: 8 }), 4: Object.freeze({ hp: 26, attack: 11 }),
   }),
   [DOG_ROLE.TENNIS]: Object.freeze({
-    name: 'Bark McEnroe', unlockRound: 3, blurb: 'Ranged lane attacker with lower impact damage.',
-    attackDetail: 'Stops two or three squares away and throws a tennis ball at the nearest cat in its lane.',
+    1: Object.freeze({ hp: 5, attack: 3 }), 2: Object.freeze({ hp: 8, attack: 4 }),
+    3: Object.freeze({ hp: 12, attack: 6 }), 4: Object.freeze({ hp: 16, attack: 8 }),
   }),
   [DOG_ROLE.HOWLER]: Object.freeze({
-    name: 'Howl Pacino', unlockRound: 4, blurb: 'Support dog that empowers a nearby pack.',
-    attackDetail: 'Its first useful action is a howl that grants nearby dogs +2 damage on their next attack.',
+    1: Object.freeze({ hp: 6, attack: 1 }), 2: Object.freeze({ hp: 10, attack: 2 }),
+    3: Object.freeze({ hp: 14, attack: 3 }), 4: Object.freeze({ hp: 19, attack: 4 }),
   }),
   [DOG_ROLE.JUMPER]: Object.freeze({
-    name: 'Barkour Bandit', unlockRound: 5, blurb: 'Leaps over one isolated defender.',
+    1: Object.freeze({ hp: 5, attack: 2 }), 2: Object.freeze({ hp: 8, attack: 3 }),
+    3: Object.freeze({ hp: 11, attack: 4 }), 4: Object.freeze({ hp: 15, attack: 6 }),
+  }),
+});
+
+const HOWL_BONUS = Object.freeze({ 1: 2, 2: 3, 3: 4, 4: 5 });
+
+export const DOG_ROLE_INFO = Object.freeze({
+  [DOG_ROLE.SCRUFFY]: Object.freeze({
+    name: 'Chomps McGraw', unlockRound: 1, role: 'Bite-damage specialist',
+    strength: 'Highest health and bite damage', weakness: 'No range, support, or bypass ability',
+    blurb: 'The strongest direct front-line biter.',
+    attackDetail: 'Steps toward the porch and delivers the strongest bite to the cat directly ahead.',
+  }),
+  [DOG_ROLE.TENNIS]: Object.freeze({
+    name: 'Bark McEnroe', unlockRound: 3, role: 'Ranged-pressure specialist',
+    strength: 'Attacks from two or three squares away', weakness: 'Low health and reduced ball damage',
+    blurb: 'A fragile ranged lane attacker.',
+    attackDetail: 'Stops two or three squares away and throws a reduced-damage tennis ball at the nearest cat in its lane.',
+  }),
+  [DOG_ROLE.HOWLER]: Object.freeze({
+    name: 'Howl Pacino', unlockRound: 4, role: 'Pack-support specialist',
+    strength: 'Boosts nearby dogs\' next attack', weakness: 'By far the weakest personal bite',
+    blurb: 'A low-damage support dog that empowers its pack.',
+    attackDetail: 'Its first useful action is a howl that grants nearby dogs bonus damage on their next attack. Alone, it is a poor fighter.',
+  }),
+  [DOG_ROLE.JUMPER]: Object.freeze({
+    name: 'Barkour Bandit', unlockRound: 5, role: 'Defence-bypass specialist',
+    strength: 'Leaps over one isolated defender', weakness: 'Low health and a weak bite; layered cats stop it',
+    blurb: 'A fragile bypass dog that punishes isolated defenders.',
     attackDetail: 'Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
   }),
 });
 
 export const DOG_TIER_INFO = {
-  1: { name: 'Yard Punk', blurb: 'Baseline dog stats.' },
-  2: { name: 'Ironhide', blurb: 'Helmet gear adds HP and bite strength.' },
-  3: { name: 'Bonecrusher', blurb: 'Heavy plates add substantial HP and bite strength.' },
-  4: { name: 'Top Dog', blurb: 'Top Dog armor marks the strongest dog tier.' },
+  1: { name: 'Yard Punk', blurb: 'Entry-level stats for this role.' },
+  2: { name: 'Ironhide', blurb: 'Helmet gear improves this role without erasing its weakness.' },
+  3: { name: 'Bonecrusher', blurb: 'Heavy plates substantially scale this role\'s specialty.' },
+  4: { name: 'Top Dog', blurb: 'Top Dog gear marks the strongest version of this role.' },
 };
 
 let nextId = 1;
@@ -209,24 +267,40 @@ export function catTooltipInfo(cat) {
     title: `L${level} ${info.name}`,
     stats: `Health ${hp}/${maxHp} · ${attack * ACTIONS_PER_ROUND} damage/round if attacks hit`,
     attack: info.attackDetail,
-    note: info.blurb,
+    note: `${info.role} · Strength: ${info.strength} · Weakness: ${info.weakness}`,
+  };
+}
+
+export function dogStatsFor(tier = 1, role = DOG_ROLE.SCRUFFY) {
+  const safeTier = DOG_STATS[tier] ? tier : 1;
+  const safeRole = DOG_ROLE_INFO[role] ? role : DOG_ROLE.SCRUFFY;
+  const stats = DOG_ROLE_STATS[safeRole][safeTier];
+  return {
+    ...stats,
+    howlBonus: safeRole === DOG_ROLE.HOWLER ? HOWL_BONUS[safeTier] : 0,
   };
 }
 
 export function dogTooltipInfo(dog) {
   const tier = dog.tier ?? 1;
-  const stats = DOG_STATS[tier] ?? DOG_STATS[1];
+  const role = DOG_ROLE_INFO[dog.role] ? dog.role : DOG_ROLE.SCRUFFY;
+  const stats = dogStatsFor(tier, role);
   const tierInfo = DOG_TIER_INFO[tier] ?? DOG_TIER_INFO[1];
-  const roleInfo = DOG_ROLE_INFO[dog.role] ?? DOG_ROLE_INFO[DOG_ROLE.SCRUFFY];
+  const roleInfo = DOG_ROLE_INFO[role];
   const hp = dog.hp ?? stats.hp;
   const maxHp = dog.maxHp ?? stats.hp;
   const attack = dog.attack ?? stats.attack;
+  const roleStats = role === DOG_ROLE.TENNIS
+    ? `Ball ${Math.max(1, Math.ceil(attack * 0.6))} · Bite ${attack}`
+    : role === DOG_ROLE.HOWLER
+      ? `Howl +${stats.howlBonus} · Bite ${attack}`
+      : role === DOG_ROLE.JUMPER ? `Jump 1× · Bite ${attack}` : `Bite ${attack}`;
   return {
     kind: 'dog',
     title: `T${tier} ${roleInfo.name}`,
-    stats: `♥ ${hp}/${maxHp} · ↑ ${attack}`,
+    stats: `Health ${hp}/${maxHp} · ${roleStats}`,
     attack: roleInfo.attackDetail,
-    note: `${tierInfo.blurb} ${roleInfo.blurb}`,
+    note: `${roleInfo.role} · Strength: ${roleInfo.strength} · Weakness: ${roleInfo.weakness}. ${tierInfo.blurb}`,
   };
 }
 
@@ -251,9 +325,12 @@ export function createCat(level = 1, coat = 0) {
 
 export function createDog(tier = 1, row = 0, col = 0, role = DOG_ROLE.SCRUFFY) {
   const safeTier = DOG_STATS[tier] ? tier : 1;
-  const stats = DOG_STATS[safeTier];
   const safeRole = DOG_ROLE_INFO[role] ? role : DOG_ROLE.SCRUFFY;
-  return { id: id('dog'), kind: 'scruffy-dog', role: safeRole, tier: safeTier, row, col, hp: stats.hp, maxHp: stats.hp, attack: stats.attack };
+  const stats = dogStatsFor(safeTier, safeRole);
+  return {
+    id: id('dog'), kind: 'scruffy-dog', role: safeRole, tier: safeTier, row, col,
+    hp: stats.hp, maxHp: stats.hp, attack: stats.attack, howlBonus: stats.howlBonus,
+  };
 }
 
 export function createGame(random = Math.random) {
@@ -267,7 +344,7 @@ export function createGame(random = Math.random) {
     dogs: [],
     decoys: [],
     bench: [],
-    workers: Array(6).fill(null),
+    workers: Array(3).fill(null),
     inventory: Array(6).fill(null),
     shop: makeShop(random),
     nextWave: generateWave(1, random),
@@ -314,10 +391,10 @@ export function shopSizeForRound(round = 1) {
 }
 
 export function availableCatCoatsForRound(round = 1) {
-  const tier = shopTierForRound(round);
+  const safeRound = Math.max(1, Number(round) || 1);
   return Object.keys(CAT_COAT_INFO)
     .map(Number)
-    .filter((coat) => CAT_COAT_INFO[coat].shopTier <= tier);
+    .filter((coat) => CAT_COAT_INFO[coat].unlockRound <= safeRound);
 }
 
 export function availableShopEntriesForRound(round = 1) {
@@ -378,7 +455,7 @@ export function createWorker(role = WORKER_ROLE.COOK, level = 1) {
   const safeLevel = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
   return {
     id: id('worker'), kind: 'production-cat', role: safeRole,
-    level: safeLevel, copies: 1, pendingOutput: null,
+    level: safeLevel, copies: 1, pendingOutput: null, productionProgress: 0,
   };
 }
 
@@ -1113,7 +1190,7 @@ export function resolveSection(game) {
   next.section += 1;
 
   // Cats always act. If nothing is in range they still shoot/swing (miss animations).
-  // orange = column shot, white = weaker homing shot, grey = strong front melee only.
+  // Purrcy = high column damage, Hissiletoe = medium homing, Clawdius = low front melee.
   for (const cat of next.cats) {
     if (cat.nextAttackBonus) {
       cat.attackBeforeActiveBonus = cat.attack;
@@ -1146,7 +1223,10 @@ export function resolveSection(game) {
           col: target.col,
           style: 'tangle',
         });
-        if (target.hp > 0) target.tangled = true;
+        if (target.hp > 0 && !target.tangledOnce) {
+          target.tangled = true;
+          target.tangledOnce = true;
+        }
       } else {
         pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'tangle' });
       }
@@ -1167,7 +1247,7 @@ export function resolveSection(game) {
           fromCol: target.col,
           col: dog.col,
           style: 'splash-secondary',
-          damage: 1,
+          damage: cat.attack,
         }));
       } else {
         pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'splash' });
@@ -1258,11 +1338,12 @@ export function resolveSection(game) {
         && Math.abs(other.col - dog.col) <= 1
         && Math.abs(other.row - dog.row) <= 2);
       if (allies.length) {
-        allies.forEach((ally) => { ally.attackBoost = Math.max(ally.attackBoost ?? 0, 2); });
+        const bonus = dog.howlBonus ?? dogStatsFor(dog.tier, dog.role).howlBonus;
+        allies.forEach((ally) => { ally.attackBoost = Math.max(ally.attackBoost ?? 0, bonus); });
         dog.howlUsed = true;
         next.events.push({
           type: 'howl', id: dog.id, row: dog.row, col: dog.col,
-          targets: allies.map((ally) => ally.id), bonus: 2,
+          targets: allies.map((ally) => ally.id), bonus,
         });
         continue;
       }
@@ -1371,6 +1452,10 @@ export function finishRound(game) {
   next.decoys = [];
   next.workers.forEach((worker) => {
     if (!worker) return;
+    const productionRounds = WORKER_INFO[worker.role]?.productionRounds ?? 1;
+    worker.productionProgress = (worker.productionProgress ?? 0) + 1;
+    if (worker.productionProgress < productionRounds) return;
+    worker.productionProgress = 0;
     worker.pendingOutput = outputForWorker(worker.role, worker.level);
     next.events.push({
       type: 'production-ready', workerId: worker.id,

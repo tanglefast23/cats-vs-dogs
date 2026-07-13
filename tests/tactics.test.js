@@ -31,7 +31,7 @@ function placeCoat(game, coat, row, col) {
   return placeCat(game, game.bench.length - 1, row, col);
 }
 
-test('five active Tier 3 cats unlock on round five', () => {
+test('five active Tier 3 cats unlock on round four', () => {
   const activeCoats = [
     CAT_COAT.FROST,
     CAT_COAT.RIFT,
@@ -42,8 +42,8 @@ test('five active Tier 3 cats unlock on round five', () => {
   assert.deepEqual(activeCoats, [6, 7, 8, 9, 10]);
   assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].shopTier === 3), true);
   assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].activeAbility), true);
-  assert.equal(activeCoats.every((coat) => !availableCatCoatsForRound(4).includes(coat)), true);
-  assert.equal(activeCoats.every((coat) => availableCatCoatsForRound(5).includes(coat)), true);
+  assert.equal(activeCoats.every((coat) => !availableCatCoatsForRound(3).includes(coat)), true);
+  assert.equal(activeCoats.every((coat) => availableCatCoatsForRound(4).includes(coat)), true);
 });
 
 test('combat opens a tactics window between its two normal exchanges', () => {
@@ -172,7 +172,7 @@ test('Stormcaller damages every living dog in one selected column', () => {
   game.dogs = [createDog(3, 2, 4), createDog(3, 5, 4), createDog(3, 4, 2)];
   game.phase = 'tactics';
   game = useActiveAbility(game, game.cats[0].id, { col: 4 });
-  assert.deepEqual(game.dogs.map((dog) => dog.hp), [12, 12, 16]);
+  assert.deepEqual(game.dogs.map((dog) => dog.hp), [15, 15, 19]);
 });
 
 test('Encore Maestro grants one reduced-strength immediate allied attack', () => {
@@ -183,7 +183,7 @@ test('Encore Maestro grants one reduced-strength immediate allied attack', () =>
   game.dogs = [createDog(2, 3, 1)];
   game.phase = 'tactics';
   game = useActiveAbility(game, game.cats[0].id, { targetCatId: game.cats[1].id });
-  assert.equal(game.dogs[0].hp, 10);
+  assert.equal(game.dogs[0].hp, 12);
   assert.equal(game.events.some((event) => event.type === 'encore'), true);
 });
 

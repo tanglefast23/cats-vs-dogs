@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import {
   CAT_STATS,
   CAT_COAT,
+  CAT_COAT_INFO,
   DOG_ROLE,
   catStatsFor,
+  dogStatsFor,
   ROWS,
   COLS,
   CAT_ZONE_START,
@@ -88,16 +90,40 @@ test('rolling replaces the current shop choices while preserving saved slots', (
   assert.equal(game.shop[2].saved, true);
 });
 
-test('SAP-style cat tiers unlock on rounds one, three, five, and seven', () => {
+test('cat unlock rounds are independent from the odd-round stat tier curve', () => {
   assert.equal(shopTierForRound(1), 1);
   assert.equal(shopTierForRound(2), 1);
   assert.equal(shopTierForRound(3), 2);
   assert.equal(shopTierForRound(5), 3);
   assert.equal(shopTierForRound(7), 4);
-  assert.deepEqual(availableCatCoatsForRound(1), [0, 1, 2]);
+  assert.deepEqual(availableCatCoatsForRound(1), [0, 1, 2, 3]);
   assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, 3]);
+  assert.deepEqual(availableCatCoatsForRound(4), [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);
   assert.deepEqual(availableCatCoatsForRound(5), [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);
   assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test('every cat has one explicit strength and a real weakness at every level', () => {
+  for (const info of Object.values(CAT_COAT_INFO)) {
+    assert.ok(info.role);
+    assert.ok(info.strength);
+    assert.ok(info.weakness);
+  }
+
+  for (const level of [1, 2, 3]) {
+    const purrcy = catStatsFor(level, CAT_COAT.ORANGE);
+    const clawdius = catStatsFor(level, CAT_COAT.GREY);
+    const hissiletoe = catStatsFor(level, CAT_COAT.WHITE);
+    const bombay = catStatsFor(level, CAT_COAT.BLACK);
+    const nonTankStats = Object.keys(CAT_COAT_INFO)
+      .filter((coat) => Number(coat) !== CAT_COAT.GREY)
+      .map((coat) => catStatsFor(level, Number(coat)));
+
+    assert.ok(purrcy.attack >= hissiletoe.attack * 2, `L${level} straight damage pays for lane lock`);
+    assert.ok(hissiletoe.attack > bombay.attack, `L${level} balanced homing beats splash against one dog`);
+    assert.ok(clawdius.hp > Math.max(...nonTankStats.map((stats) => stats.hp)));
+    assert.ok(clawdius.attack < hissiletoe.attack, `L${level} tank damage stays below the generalist`);
+  }
 });
 
 test('SAP shop slots grow on rounds five and nine while fighter unlocks remain separate', () => {
@@ -116,7 +142,7 @@ test('SAP shop slots grow on rounds five and nine while fighter unlocks remain s
   assert.equal(roundSeven.length, 4);
   assert.equal(roundNine.length, 5);
   assert.deepEqual(availableCatCoatsForRound(3), [0, 1, 2, CAT_COAT.CALICO]);
-  assert.deepEqual(availableCatCoatsForRound(5), [
+  assert.deepEqual(availableCatCoatsForRound(4), [
     0, 1, 2, CAT_COAT.CALICO, CAT_COAT.BLACK,
     CAT_COAT.FROST, CAT_COAT.RIFT, CAT_COAT.MIRAGE, CAT_COAT.STORM, CAT_COAT.ENCORE,
   ]);
@@ -174,14 +200,14 @@ test('nine level-one cats acquired in groups ultimately combine into one level-t
   assert.deepEqual(game.bench.map((cat) => cat.level), [3]);
 });
 
-test('a base cat needs four readable hits to defeat a tier-one dog', () => {
+test('Purrcy defeats a tier-one Chomps in one two-action round', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1 });
   game = placeCat(game, 0, 12, 2);
   game.dogs = [createDog(1, 0, 2)];
 
-  for (let hit = 0; hit < 3; hit += 1) game = resolveSection(game);
-  assert.equal(game.dogs[0].hp, 1);
+  game = resolveSection(game);
+  assert.equal(game.dogs[0].hp, 4);
 
   game = resolveSection(game);
   assert.equal(game.dogs.length, 0);
@@ -200,14 +226,15 @@ test('orange cat splits one attack into rapid burst pellets', () => {
   game = resolveSection(game);
   const shots = game.events.filter((event) => event.type === 'shot');
 
-  assert.equal(shots.length, 2);
+  assert.equal(shots.length, 3);
   assert.equal(shots.every((shot) => shot.burst), true);
-  assert.equal(shots.reduce((sum, shot) => sum + shot.damage, 0), 2);
-  assert.equal(shots[0].damage, 1);
-  assert.equal(shots[0].hpBefore, 7);
+  assert.equal(shots.reduce((sum, shot) => sum + shot.damage, 0), 4);
+  assert.deepEqual(shots.map((shot) => shot.damage), [2, 1, 1]);
+  assert.equal(shots[0].hpBefore, 8);
   assert.equal(shots[0].hpAfter, 6);
   assert.equal(shots[1].hpAfter, 5);
-  assert.equal(game.dogs[0].hp, 5);
+  assert.equal(shots[2].hpAfter, 4);
+  assert.equal(game.dogs[0].hp, 4);
 });
 
 test('orange cat burst keeps hitting the nearest dog in its column', () => {
@@ -220,11 +247,11 @@ test('orange cat burst keeps hitting the nearest dog in its column', () => {
 
   const upperDog = game.dogs.find((dog) => dog.row === 2);
   const lowerDog = game.dogs.find((dog) => dog.row === 5);
-  assert.equal(upperDog.hp, 7);
-  assert.equal(lowerDog.hp, 5);
+  assert.equal(upperDog.hp, 8);
+  assert.equal(lowerDog.hp, 4);
 });
 
-test('level-two orange cat fires three equal burst pellets', () => {
+test('level-two Purrcy splits its seven damage across three pellets', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
@@ -233,8 +260,8 @@ test('level-two orange cat fires three equal burst pellets', () => {
   game = resolveSection(game);
   const shots = game.events.filter((event) => event.type === 'shot');
   assert.equal(shots.length, 3);
-  assert.deepEqual(shots.map((shot) => shot.damage), [1, 1, 1]);
-  assert.equal(game.dogs[0].hp, 4);
+  assert.deepEqual(shots.map((shot) => shot.damage), [3, 2, 2]);
+  assert.equal(game.dogs[0].hp, 1);
 });
 
 test('white cat prefers a same-column dog over a nearer dog in another column', () => {
@@ -250,11 +277,11 @@ test('white cat prefers a same-column dog over a nearer dog in another column', 
   const otherDog = game.dogs.find((dog) => dog.col === 3);
   const shot = game.events.find((event) => event.type === 'shot');
 
-  assert.equal(catStatsFor(1, CAT_COAT.WHITE).attack, 1);
+  assert.equal(catStatsFor(1, CAT_COAT.WHITE).attack, 2);
   assert.equal(ownColumnDog.hp, 6);
-  assert.equal(otherDog.hp, 7);
+  assert.equal(otherDog.hp, 8);
   assert.equal(shot.style, 'homing');
-  assert.equal(shot.damage, 1);
+  assert.equal(shot.damage, 2);
   assert.equal(shot.fromCol, 1);
   assert.equal(shot.col, 1);
 });
@@ -289,14 +316,14 @@ test('white cat uses next-nearest columns, then lowest row, then random on full 
   assert.equal(ownColumn.row, 9);
 });
 
-test('grey cat has double HP and a powerful melee attack on the dog in front', () => {
+test('Clawdius has extreme HP and tiny melee damage only in the front tile', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });
   game = placeCat(game, 0, 11, 2);
   game.dogs = [createDog(1, 10, 2), createDog(1, 4, 2)];
 
-  assert.equal(game.cats[0].maxHp, CAT_STATS[1].hp * 2);
-  assert.equal(game.cats[0].attack, 5);
+  assert.equal(game.cats[0].maxHp, 18);
+  assert.equal(game.cats[0].attack, 1);
 
   game = resolveSection(game);
 
@@ -304,10 +331,10 @@ test('grey cat has double HP and a powerful melee attack on the dog in front', (
   const rearDog = game.dogs.find((dog) => dog.col === 2 && dog.row !== 10);
   const catMelee = game.events.find((event) => event.type === 'cat-melee');
 
-  assert.equal(frontDog.hp, 2);
-  assert.equal(rearDog.hp, 7);
+  assert.equal(frontDog.hp, 7);
+  assert.equal(rearDog.hp, 8);
   assert.equal(rearDog.row, 5);
-  assert.equal(catMelee.damage, 5);
+  assert.equal(catMelee.damage, 1);
   assert.equal(game.events.some((event) => event.type === 'shot'), false);
 });
 
@@ -320,7 +347,7 @@ test('grey cat still swings when no dog is directly in front', () => {
   game = resolveSection(game);
 
   const swing = game.events.find((event) => event.type === 'cat-melee');
-  assert.equal(game.dogs[0].hp, 7);
+  assert.equal(game.dogs[0].hp, 8);
   assert.equal(swing.miss, true);
   assert.equal(swing.to, null);
   assert.equal(game.events.some((event) => event.type === 'shot'), false);
@@ -337,10 +364,15 @@ test('Calico Tangler marks a dog to skip its next unblocked move without healing
 
   assert.equal(game.cats[0].hp, 4);
   assert.equal(game.events.some((event) => event.type === 'heal'), false);
-  assert.equal(game.dogs[0].hp, 5);
+  assert.equal(game.dogs[0].hp, 7);
   assert.equal(game.dogs[0].row, 5);
   assert.equal(game.dogs[0].tangled, false);
+  assert.equal(game.dogs[0].tangledOnce, true);
   assert.equal(game.events.some((event) => event.type === 'tangle-skip'), true);
+
+  game = resolveSection(game);
+  assert.equal(game.dogs[0].hp, 6);
+  assert.equal(game.dogs[0].row, 6, 'the same dog cannot be locked by yarn forever');
 });
 
 test('Black Bombardier shot splashes dogs in adjacent columns', () => {
@@ -354,9 +386,9 @@ test('Black Bombardier shot splashes dogs in adjacent columns', () => {
 
   game = resolveSection(game);
 
-  assert.equal(game.dogs.find((dog) => dog.id === center.id).hp, 4);
-  assert.equal(game.dogs.find((dog) => dog.id === left.id).hp, 6);
-  assert.equal(game.dogs.find((dog) => dog.id === right.id).hp, 6);
+  assert.equal(game.dogs.find((dog) => dog.id === center.id).hp, 7);
+  assert.equal(game.dogs.find((dog) => dog.id === left.id).hp, 7);
+  assert.equal(game.dogs.find((dog) => dog.id === right.id).hp, 7);
 });
 
 test('Prism Sphinx beam pierces up to three dogs in its column', () => {
@@ -368,8 +400,8 @@ test('Prism Sphinx beam pierces up to three dogs in its column', () => {
   game = resolveSection(game);
 
   const sameColumn = game.dogs.filter((dog) => dog.col === 2);
-  assert.deepEqual(sameColumn.map((dog) => dog.hp), [4, 4, 4]);
-  assert.equal(game.dogs.find((dog) => dog.col === 4).hp, 7);
+  assert.deepEqual(sameColumn.map((dog) => dog.hp), [5, 5, 5]);
+  assert.equal(game.dogs.find((dog) => dog.col === 4).hp, 8);
 });
 
 test('dog tiers scale through tier four while retaining their strategic role', () => {
@@ -381,6 +413,20 @@ test('dog tiers scale through tier four while retaining their strategic role', (
   assert.match(dogTooltipInfo(alpha).title, /^T4 /);
 });
 
+test('dog roles pay for their special ability with distinct health and bite curves', () => {
+  for (const tier of [1, 2, 3, 4]) {
+    const biter = dogStatsFor(tier, DOG_ROLE.SCRUFFY);
+    const tennis = dogStatsFor(tier, DOG_ROLE.TENNIS);
+    const howler = dogStatsFor(tier, DOG_ROLE.HOWLER);
+    const jumper = dogStatsFor(tier, DOG_ROLE.JUMPER);
+
+    assert.ok(biter.hp > tennis.hp && biter.hp > howler.hp && biter.hp > jumper.hp);
+    assert.ok(biter.attack > tennis.attack && tennis.attack > howler.attack);
+    assert.ok(jumper.attack < biter.attack);
+    assert.ok(howler.howlBonus > howler.attack, `T${tier} Howler contributes through support, not biting`);
+  }
+});
+
 test('a dog attacks a blocking cat instead of moving through it', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1 });
@@ -390,7 +436,7 @@ test('a dog attacks a blocking cat instead of moving through it', () => {
   game = resolveSection(game);
 
   assert.equal(game.dogs[0].row, 9);
-  assert.equal(game.cats[0].hp, 3);
+  assert.equal(game.cats.length, 0);
 });
 
 test('Bark McEnroe stops at range and throws a weaker tennis ball down its lane', () => {
@@ -403,13 +449,13 @@ test('Bark McEnroe stops at range and throws a weaker tennis ball down its lane'
   game = resolveSection(game);
 
   assert.equal(game.dogs[0].row, 7);
-  assert.equal(game.cats[0].hp, 4);
+  assert.equal(game.cats[0].hp, 2);
   assert.ok(game.events.some((event) => event.type === 'dog-shot' && event.style === 'tennis'));
 });
 
 test('Howl Pacino spends its first action buffing nearby dogs for their next bite', () => {
   let game = createGame(() => 0.5);
-  game = addCatToBench(game, { level: 1 });
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });
   game = placeCat(game, 0, 10, 2);
   game.cats[0].attack = 0;
   game.dogs = [
@@ -419,7 +465,7 @@ test('Howl Pacino spends its first action buffing nearby dogs for their next bit
 
   game = resolveSection(game);
 
-  assert.equal(game.cats[0].hp, 1);
+  assert.equal(game.cats[0].hp, 12);
   assert.equal(game.dogs[0].row, 10);
   assert.ok(game.events.some((event) => event.type === 'howl'));
 });
@@ -432,7 +478,7 @@ test('Barkour Bandit clears one blocker but cannot jump a layered defence', () =
   openLanding.dogs = [createDog(1, 9, 1, DOG_ROLE.JUMPER)];
   openLanding = resolveSection(openLanding);
   assert.equal(openLanding.dogs[0].row, 11);
-  assert.equal(openLanding.cats[0].hp, 6);
+  assert.equal(openLanding.cats[0].hp, 4);
   assert.ok(openLanding.events.some((event) => event.type === 'dog-jump'));
 
   let layered = createGame(() => 0.5);
@@ -444,7 +490,7 @@ test('Barkour Bandit clears one blocker but cannot jump a layered defence', () =
   layered.dogs = [createDog(1, 9, 1, DOG_ROLE.JUMPER)];
   layered = resolveSection(layered);
   assert.equal(layered.dogs[0].row, 9);
-  assert.equal(layered.cats.find((cat) => cat.row === 10).hp, 3);
+  assert.equal(layered.cats.find((cat) => cat.row === 10).hp, 2);
 });
 
 test('special dog roles unlock gradually and debut in their first eligible wave', () => {
@@ -524,10 +570,7 @@ test('resolveSection grants victory when the final wave is fully cleared', () =>
   game.round = MAX_ROUNDS;
   game.phase = 'combat';
   game.dogs = [createDog(1, 11, 2)];
-  // L3 orange attack 5 as burst 2+2+1 kills 7-hp dog over enough sections if needed.
-  // One section of 5 damage leaves dog at 2; second section finishes.
-  game = resolveSection(game);
-  assert.notEqual(game.phase, 'victory');
+  // L3 Purrcy's 11 damage is intentionally enough to erase a tier-one dog in one action.
   game = resolveSection(game);
   assert.equal(game.dogs.length, 0);
   assert.equal(game.phase, 'victory');
@@ -628,7 +671,7 @@ test('same-color same-level cats can stack and evolve', () => {
   assert.equal(evolved.level, 2);
   assert.equal(evolved.coat, CAT_COAT.GREY);
   assert.equal(evolved.ability, 'melee');
-  assert.equal(evolved.maxHp, CAT_STATS[2].hp * 2);
+  assert.equal(evolved.maxHp, catStatsFor(2, CAT_COAT.GREY).hp);
 });
 
 test('auto-combine only merges matching coats, not mixed colors at the same level', () => {
@@ -651,7 +694,7 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
-  assert.equal(brawler.stats, 'Health 12/12 · 10 damage/round if attacks hit');
+  assert.equal(brawler.stats, 'Health 12/12 · 2 damage/round if attacks hit');
   assert.equal(armedBrawler.stats, 'Health 9/12 · 14 damage/round if attacks hit');
 });
 

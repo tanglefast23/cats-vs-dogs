@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -31,6 +31,19 @@ test('production collection feedback targets matching storage, empty storage, or
   assert.equal(productionCollectionDestination(inventory.map(() => ({ kind: 'blocked' })), { kind: 'food' }), null);
 });
 
+test('deployed cat equipment markers show weapon then armour with their tiers', () => {
+  assert.deepEqual(equippedItemMarkers({
+    equipment: {
+      weapon: { tier: 1, attack: 1 },
+      armour: { tier: 3, block: 4, uses: 2 },
+    },
+  }), [
+    { kind: 'weapon', tier: 1 },
+    { kind: 'armour', tier: 3 },
+  ]);
+  assert.deepEqual(equippedItemMarkers({ equipment: { weapon: null, armour: null } }), []);
+});
+
 test('Cat Cart summaries contain only badge, name, and cost', () => {
   assert.deepEqual(shopCardSummary({ category: 'fighter', sold: false }, { shopTier: 3, name: 'Laserpaw' }), {
     badge: 'T3', name: 'Laserpaw', cost: 3,
@@ -44,7 +57,7 @@ test('worker cats expose production hover details', () => {
   assert.deepEqual(workerTooltipInfo({ level: 1, role: 'armourer' }, WORKER_INFO.armourer), {
     kind: 'cat',
     title: 'L1 Pawladin',
-    stats: 'Produces 1 T1 armour after each battle',
+    stats: 'Produces 1 T1 armour every 2 battles',
     detailLabel: 'Production',
     attack: 'Place in the Production House. Three matching workers evolve to the next level.',
     note: 'Builds blocking armour',
@@ -371,6 +384,17 @@ test('Cat & Dog Glossary exposes the three requested roster tabs', () => {
     { id: 'production', label: 'Production Cats', active: true },
     { id: 'dogs', label: 'Dogs', active: false },
   ]);
+});
+
+test('battle cat glossary entries are ordered by unlock round', () => {
+  const entries = glossaryEntriesByUnlockRound({
+    5: { name: 'Laserpaw', unlockRound: 7 },
+    6: { name: 'Frosty Paws', unlockRound: 4 },
+    0: { name: 'Purrcy Pew-Pew', unlockRound: 1 },
+    4: { name: 'Bombay Boom', unlockRound: 4 },
+  });
+
+  assert.deepEqual(entries.map(([key]) => key), ['0', '4', '6', '5']);
 });
 
 test('production workers and items expose distinct readable art markers', () => {

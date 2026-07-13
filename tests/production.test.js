@@ -46,10 +46,13 @@ test('all four production worker roles are available immediately', () => {
 
 test('round-one shared shop pool contains unlocked fighters and every worker definition', () => {
   const entries = availableShopEntriesForRound(1);
-  assert.equal(entries.length, 7);
-  assert.equal(entries.filter((entry) => entry.category === 'fighter').length, 3);
+  const fighters = entries
+    .filter((entry) => entry.category === 'fighter')
+    .map((entry) => entry.coat);
+  assert.equal(entries.length, 8);
+  assert.deepEqual(fighters, [CAT_COAT.ORANGE, CAT_COAT.GREY, CAT_COAT.WHITE, CAT_COAT.CALICO]);
   assert.equal(entries.filter((entry) => entry.category === 'worker').length, 4);
-  assert.equal(new Set(entries.map((entry) => `${entry.category}:${entry.coat ?? entry.role}`)).size, 7);
+  assert.equal(new Set(entries.map((entry) => `${entry.category}:${entry.coat ?? entry.role}`)).size, 8);
 });
 
 test('ordinary shops can roll all workers while the opening shop guarantees two fighters', () => {
@@ -62,9 +65,9 @@ test('ordinary shops can roll all workers while the opening shop guarantees two 
   assert.equal(opening.filter((slot) => slot.category === 'fighter').length, 2);
 });
 
-test('new games start with six empty production slots and six empty inventory slots', () => {
+test('new games start with three empty production slots and six empty inventory slots', () => {
   const game = createGame(() => 0.5);
-  assert.deepEqual(game.workers, Array(6).fill(null));
+  assert.deepEqual(game.workers, Array(3).fill(null));
   assert.deepEqual(game.inventory, Array(6).fill(null));
 });
 
@@ -94,7 +97,7 @@ test('shop fighter can merge directly while the target equipment survives', () =
   assert.equal(game.gold, 7);
   assert.equal(game.bench[0].copies, 2);
   assert.equal(game.bench[0].equipment.weapon.tier, 3);
-  assert.equal(game.bench[0].attack, 5);
+  assert.equal(game.bench[0].attack, 7);
 });
 
 test('worker purchase charges only after a valid production-slot drop', () => {
@@ -109,11 +112,11 @@ test('worker purchase charges only after a valid production-slot drop', () => {
   assert.equal(game.gold, 10);
   assert.equal(game.shop[0].sold, false);
 
-  game = purchaseShopWorker(game, 0, 4);
+  game = purchaseShopWorker(game, 0, 2);
   assert.equal(game.gold, 7);
   assert.equal(game.shop[0].sold, true);
-  assert.equal(game.workers[4].role, WORKER_ROLE.COOK);
-  assert.equal(game.workers[4].level, 1);
+  assert.equal(game.workers[2].role, WORKER_ROLE.COOK);
+  assert.equal(game.workers[2].level, 1);
 });
 
 test('workers move only during prep and merge three matching copies into the target', () => {
@@ -131,12 +134,12 @@ test('workers move only during prep and merge three matching copies into the tar
   assert.equal(game.workers[0].copies, 1);
   assert.equal(game.workers[2], null);
 
-  game = moveWorker(game, 0, 5);
+  game = moveWorker(game, 0, 2);
   assert.equal(game.workers[0], null);
-  assert.equal(game.workers[5].level, 2);
+  assert.equal(game.workers[2].level, 2);
 });
 
-test('completed battles replace pending output using each worker level', () => {
+test('food and coins produce each battle while weapons and armour take two battles', () => {
   let game = createGame(() => 0.5);
   game.workers[0] = createWorker(WORKER_ROLE.COOK, 1);
   game.workers[1] = createWorker(WORKER_ROLE.TRADER, 2);
@@ -149,7 +152,25 @@ test('completed battles replace pending output using each worker level', () => {
 
   assert.deepEqual(game.workers[0].pendingOutput, { kind: 'food', quantity: 1 });
   assert.deepEqual(game.workers[1].pendingOutput, { kind: 'coins', quantity: 3 });
+  assert.equal(game.workers[2].pendingOutput, null);
+
+  game.phase = 'combat';
+  game.dogs = [];
+  game = finishRound(game);
+
   assert.deepEqual(game.workers[2].pendingOutput, { kind: 'weapon', tier: 3, quantity: 1 });
+
+  let armourGame = createGame(() => 0.5);
+  armourGame.workers[0] = createWorker(WORKER_ROLE.ARMOURER, 2);
+  armourGame.phase = 'combat';
+  armourGame.dogs = [];
+  armourGame = finishRound(armourGame);
+  assert.equal(armourGame.workers[0].pendingOutput, null);
+
+  armourGame.phase = 'combat';
+  armourGame.dogs = [];
+  armourGame = finishRound(armourGame);
+  assert.deepEqual(armourGame.workers[0].pendingOutput, { kind: 'armour', tier: 2, quantity: 1 });
 });
 
 test('collection stacks identical items with no quantity limit and uses six distinct slots', () => {
@@ -188,34 +209,35 @@ test('weapons replace permanently', () => {
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = addInventoryStack(game, { kind: 'weapon', tier: 1, quantity: 1 });
   game = equipInventoryItem(game, 0, 'bench', game.bench[0].id);
-  assert.equal(game.bench[0].attack, 3);
+  assert.equal(game.bench[0].attack, 5);
   assert.equal(game.bench[0].equipment.weapon.tier, 1);
 
   game = addInventoryStack(game, { kind: 'weapon', tier: 3, quantity: 1 });
   const weaponIndex = game.inventory.findIndex((stack) => stack?.kind === 'weapon');
   game = equipInventoryItem(game, weaponIndex, 'bench', game.bench[0].id);
-  assert.equal(game.bench[0].attack, 5);
+  assert.equal(game.bench[0].attack, 7);
   assert.equal(game.bench[0].equipment.weapon.tier, 3);
 });
 
 test('armour blocks damage for finite hits, always allows one damage, then breaks', () => {
   let game = createGame(() => 0.5);
-  game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });
   game = placeCat(game, 0, 10, 2);
+  game.cats[0].attack = 0;
   game = addInventoryStack(game, { kind: 'armour', tier: 1, quantity: 1 });
   game = equipInventoryItem(game, 0, 'cat', game.cats[0].id);
   game.dogs = [createDog(1, 9, 2)];
 
   game = resolveSection(game);
-  assert.equal(game.cats[0].hp, 5);
+  assert.equal(game.cats[0].hp, 16);
   assert.equal(game.cats[0].equipment.armour.uses, 2);
 
   game = resolveSection(game);
-  assert.equal(game.cats[0].hp, 4);
+  assert.equal(game.cats[0].hp, 14);
   assert.equal(game.cats[0].equipment.armour.uses, 1);
 
   game = resolveSection(game);
-  assert.equal(game.cats[0].hp, 3);
+  assert.equal(game.cats[0].hp, 12);
   assert.equal(game.cats[0].equipment.armour, null);
 });
 
@@ -255,8 +277,8 @@ test('food heals two in a tactics window and is not consumed on full health', ()
   assert.equal(full, game);
   assert.equal(game.inventory[0].quantity, 2);
 
-  game.cats[0].hp = 3;
+  game.cats[0].hp = 2;
   game = useFood(game, 0, game.cats[0].id);
-  assert.equal(game.cats[0].hp, 5);
+  assert.equal(game.cats[0].hp, 4);
   assert.equal(game.inventory[0].quantity, 1);
 });

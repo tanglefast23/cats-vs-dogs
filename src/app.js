@@ -1,16 +1,16 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_ROUNDS, ACTIONS_PER_ROUND,
-  CAT_COAT_INFO, DOG_STATS, DOG_ROLE_INFO, catStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
+  CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility,
-  shopTierForRound, purchaseShopFighterToBench, purchaseShopFighterToBoard,
+  purchaseShopFighterToBench, purchaseShopFighterToBoard,
   purchaseShopFighterOnto, purchaseShopWorker, moveWorker, mergeWorkerOnto,
   collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone, productionLegendRows, glossaryTabs, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { CAT_MOVE_LIMIT_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
@@ -286,6 +286,23 @@ function catMarkup(cat) {
   unit.className = 'unit';
   unit.dataset.unitId = cat.id;
   unit.append(unitCanvas('cat', cat));
+  const equipment = equippedItemMarkers(cat);
+  if (equipment.length) {
+    unit.classList.add('has-equipment');
+    const markers = document.createElement('span');
+    markers.className = 'equipment-markers';
+    markers.setAttribute('aria-hidden', 'true');
+    equipment.forEach((item) => {
+      const marker = document.createElement('span');
+      marker.className = `equipment-marker equipment-${item.kind}`;
+      marker.append(unitCanvas('item', item));
+      const tier = document.createElement('b');
+      tier.textContent = String(item.tier);
+      marker.append(tier);
+      markers.append(marker);
+    });
+    unit.append(markers);
+  }
   const copies = cat.copies ?? 1;
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">L${cat.level}</span>
@@ -614,7 +631,7 @@ function applyDropAction(action, source) {
   } else if (action.type === 'use-food') {
     game = useFood(game, source.inventoryIndex, action.targetId);
   } else if (action.type === 'equip') {
-    game = equipInventoryItem(game, source.inventoryIndex, action.targetId, false);
+    game = equipInventoryItem(game, source.inventoryIndex, 'cat', action.targetId, false);
   } else if (action.type === 'place') {
     const benchIndex = game.bench.findIndex((cat) => cat.id === source.id);
     game = placeCat(game, benchIndex, action.row, action.col);
@@ -632,6 +649,12 @@ function applyDropAction(action, source) {
 }
 
 function showDropWeight(action, descriptor) {
+  if (action.type === 'equip') {
+    const cell = upgradeAnchor('cat', action.targetId);
+    cell?.classList.add('cat-landed');
+    window.setTimeout(() => cell?.classList.remove('cat-landed'), 520);
+    return;
+  }
   if (descriptor?.kind === 'cell') {
     const cell = document.querySelector(`.cell[data-row="${descriptor.row}"][data-col="${descriptor.col}"]`);
     cell?.classList.add('cat-landed');
@@ -717,6 +740,8 @@ async function finishDrag(event, cancelled = false) {
   if (changed) {
     game.message = action.type === 'sell'
       ? game.message
+      : action.type === 'equip'
+        ? `T${state.source.tier ?? 1} ${state.source.itemKind} equipped!`
       : action.type === 'merge'
       ? pendingUpgrade?.kind === 'level-up'
         ? `${pendingUpgrade.label} New gear unlocked!`
@@ -833,7 +858,9 @@ function productionStation(worker, index) {
     station.addEventListener('click', () => collectProductionOutput(index, station, outputHost));
   } else {
     station.disabled = true;
-    station.title = `${info.name} produces after the next battle`;
+    const productionRounds = info.productionRounds ?? 1;
+    const remaining = Math.max(1, productionRounds - (worker.productionProgress ?? 0));
+    station.title = `${info.name} produces after ${remaining === 1 ? 'the next battle' : `${remaining} more battles`}`;
   }
   return station;
 }
@@ -861,8 +888,6 @@ function renderProduction() {
   productionEl.innerHTML = '';
   [0, 1, 2].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
   [0, 1, 2].forEach((index) => productionEl.append(productionWorkerSlot(index)));
-  [3, 4, 5].forEach((index) => productionEl.append(productionWorkerSlot(index)));
-  [3, 4, 5].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
 
   inventoryEl.innerHTML = '';
   game.inventory.forEach((item, index) => {
@@ -898,7 +923,7 @@ function renderDogPreview() {
   dogPreviewEl.innerHTML = '';
   const queuedDogs = dogPreviewQueue(game.nextWave);
   const firstVisibleSlot = 3; // The Scout Report sign occupies the first grid row.
-  for (let index = 0; index < 30; index += 1) {
+  for (let index = 0; index < 36; index += 1) {
     const cell = document.createElement('div');
     cell.className = 'dog-preview-cell';
     const dog = queuedDogs[index - firstVisibleSlot];
@@ -995,8 +1020,11 @@ function renderBoard() {
       const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
       const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
       const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
+      const equipmentLabel = cat
+        ? equippedItemMarkers(cat).map((item) => `tier ${item.tier} ${item.kind}`).join(' and ')
+        : '';
       cell.setAttribute('aria-label', cat
-        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP, row ${row + 1} column ${col + 1}`
+        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP${equipmentLabel ? `, equipped with ${equipmentLabel}` : ''}, row ${row + 1} column ${col + 1}`
         : dog
           ? `${dogTooltipInfo(dog).title}, ${dog.hp} of ${dog.maxHp} HP, row ${row + 1} column ${col + 1}`
           : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
@@ -1109,6 +1137,7 @@ function renderHud() {
   const selectedUnit = selected ? ownedCat(selected.type, selected.id) : null;
   const sale = selectedUnit ? catSaleQuote(game, selected.type, selected.id) : null;
   const adoptionBox = $('#adoption-box');
+  if (adoptionBox) adoptionBox.hidden = game.phase !== 'prep';
   adoptionBox?.classList.toggle('has-selected-cat', Boolean(selectedUnit));
   if (!document.body.classList.contains('cat-sell-dragging')) {
     $('#adoption-box-value').textContent = `+${sale?.value ?? 1}`;
@@ -1363,6 +1392,13 @@ function showResult() {
   modalEl.hidden = false;
 }
 
+function productionTimingDescription(info) {
+  const rounds = info.productionRounds ?? 1;
+  return rounds === 1
+    ? 'Produces after each completed battle.'
+    : `Produces every ${rounds} completed battles.`;
+}
+
 function renderProductionLegend() {
   const host = $('#production-legend');
   if (!host) return;
@@ -1371,7 +1407,7 @@ function renderProductionLegend() {
     const info = WORKER_INFO[entry.role];
     const row = document.createElement('div');
     row.className = 'legend-row production-legend-row';
-    row.title = `${info.blurb}. Produces after each completed battle.`;
+    row.title = `${info.blurb}. ${productionTimingDescription(info)}`;
     const canvas = document.createElement('canvas');
     drawWorker(canvas, entry.role, 1);
     const name = document.createElement('b');
@@ -1385,27 +1421,26 @@ function renderProductionLegend() {
 
 /** Legend row per coat: sprite, name, five-word role, and the unlock round when locked. */
 const COAT_ROLE_WORDS = {
-  0: 'bursts down its own lane',
-  1: 'blocks & bites · extra HP',
-  2: 'homing shot, nearest lane',
-  3: 'yarn tangles the next dog move',
-  4: 'bomb + splash beside target',
-  5: 'beam pierces 3 in its lane',
-  6: 'active · freeze one dog',
-  7: 'active · teleport an ally',
-  8: 'active · summon a decoy',
-  9: 'active · storm one column',
-  10: 'active · grant ally encore',
+  0: 'highest damage · one lane only',
+  1: 'extreme HP · tiny front melee',
+  2: 'balanced stats · homing shot',
+  3: 'one-time tangle · low damage',
+  4: 'wide splash · weak single hit',
+  5: 'pierces 3 · fragile & lane-locked',
+  6: 'hard freeze · weak normal attack',
+  7: 'best mobility · low attack',
+  8: 'free blocker · fragile caster',
+  9: 'huge spell · weakest normal attack',
+  10: 'ally encore · tiny personal attack',
 };
 
 function renderLegend() {
   const host = $('#coat-legend');
   if (!host) return;
   host.innerHTML = '';
-  const unlockedTier = shopTierForRound(game.round);
   Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
     const coat = Number(coatKey);
-    const locked = info.shopTier > unlockedTier;
+    const locked = info.unlockRound > game.round;
     const row = document.createElement('div');
     row.className = `legend-row ${locked ? 'locked' : ''}`;
     row.title = info.attackDetail;
@@ -1414,10 +1449,10 @@ function renderLegend() {
     const name = document.createElement('b');
     name.textContent = info.shortName.toUpperCase();
     row.append(canvas, name);
-    if (info.shopTier > 1) {
+    if (info.unlockRound > 1) {
       const chip = document.createElement('small');
       chip.className = 'unlock-chip';
-      chip.textContent = `R${info.shopTier * 2 - 1}`;
+      chip.textContent = `R${info.unlockRound}`;
       row.append(chip);
     }
     const role = document.createElement('span');
@@ -1484,16 +1519,16 @@ function renderGlossary() {
   });
   grid.innerHTML = '';
   if (glossaryTab === 'battle') {
-    Object.entries(CAT_COAT_INFO).forEach(([coatKey, info]) => {
+    glossaryEntriesByUnlockRound(CAT_COAT_INFO).forEach(([coatKey, info]) => {
       const coat = Number(coatKey);
       const stats = catStatsFor(1, coat);
-      const round = info.shopTier * 2 - 1;
+      const round = info.unlockRound;
       grid.append(glossaryCard({
         kind: 'battle', key: coat, name: info.name,
         kicker: `BATTLE CAT · ${round === 1 ? 'STARTER' : `UNLOCKS ROUND ${round}`}`,
         stats: `♥ ${stats.hp} · ↑ ${stats.attack}`,
         description: info.attackDetail,
-        note: 'Match 3 of the same cat and level to evolve.',
+        note: `Strength: ${info.strength}. Weakness: ${info.weakness}.`,
       }));
     });
   } else if (glossaryTab === 'production') {
@@ -1506,24 +1541,24 @@ function renderGlossary() {
         kind: 'production', key: role, name: info.name,
         kicker: `PRODUCTION CAT · ${info.station.toUpperCase()}`,
         stats: outputs,
-        description: `${info.blurb}. Produces after each completed battle.`,
+        description: `${info.blurb}. ${productionTimingDescription(info)}`,
         note: 'Lives in the House. Match 3 of the same role and level to evolve.',
       }));
     });
   } else {
     Object.entries(DOG_ROLE_INFO).forEach(([role, info]) => {
-      const stats = DOG_STATS[1];
+      const stats = dogStatsFor(1, role);
       const roleStat = role === 'tennis'
         ? `BALL ${Math.ceil(stats.attack * 0.6)}`
         : role === 'howler'
-          ? 'HOWL +2'
+          ? `HOWL +${stats.howlBonus}`
           : role === 'jumper' ? 'JUMP 1×' : `BITE ${stats.attack}`;
       grid.append(glossaryCard({
         kind: 'dogs', key: role, name: info.name,
         kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS ROUND ${info.unlockRound}`}`,
         stats: `♥ ${stats.hp} · ${roleStat}${role === 'scruffy' ? '' : ` · BITE ${stats.attack}`}`,
         description: info.attackDetail,
-        note: `${info.blurb} Higher tiers increase HP and attack without changing this role.`,
+        note: `Strength: ${info.strength}. Weakness: ${info.weakness}.`,
       }));
     });
   }

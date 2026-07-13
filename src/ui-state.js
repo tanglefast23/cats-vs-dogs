@@ -10,6 +10,14 @@ export function hpTone(hp, maxHp) {
   return 'low';
 }
 
+/** Equipment badges shown on a deployed cat, ordered weapon then armour. */
+export function equippedItemMarkers(cat = {}) {
+  return ['weapon', 'armour'].flatMap((kind) => {
+    const item = cat.equipment?.[kind];
+    return item ? [{ kind, tier: item.tier ?? 1 }] : [];
+  });
+}
+
 const PRODUCTION_ROLE_COPY = Object.freeze({
   cook: 'cooks healing food',
   trader: 'earns bonus coins',
@@ -33,6 +41,14 @@ const GLOSSARY_TABS = Object.freeze([
 
 export function glossaryTabs(activeId = 'battle') {
   return GLOSSARY_TABS.map((tab) => ({ ...tab, active: tab.id === activeId }));
+}
+
+/** Order glossary roster entries by unlock round, then preserve their numeric roster order. */
+export function glossaryEntriesByUnlockRound(infoByKey = {}) {
+  return Object.entries(infoByKey).sort(([leftKey, left], [rightKey, right]) => (
+    (left.unlockRound ?? 1) - (right.unlockRound ?? 1)
+    || Number(leftKey) - Number(rightKey)
+  ));
 }
 
 /** Queue dogs by arrival, then by their battlefield column for simultaneous arrivals. */
@@ -72,15 +88,19 @@ export function workerTooltipInfo(worker, info) {
   const level = worker.level ?? 1;
   const output = info.output[level] ?? info.output[1];
   const tier = output.tier ? ` T${output.tier}` : '';
+  const productionRounds = info.productionRounds ?? 1;
+  const timing = productionRounds === 1 ? 'after each battle' : `every ${productionRounds} battles`;
   return {
     kind: 'cat',
     title: `L${level} ${info.name}`,
-    stats: `Produces ${output.quantity}${tier} ${output.kind} after each battle`,
+    stats: `Produces ${output.quantity}${tier} ${output.kind} ${timing}`,
     detailLabel: 'Production',
     attack: 'Place in the Production House. Three matching workers evolve to the next level.',
     note: worker.pendingOutput
       ? 'Collect the ready output before the next production cycle replaces it.'
-      : info.blurb,
+      : productionRounds > 1 && worker.productionProgress
+        ? `${worker.productionProgress} of ${productionRounds} battles completed.`
+        : info.blurb,
   };
 }
 
