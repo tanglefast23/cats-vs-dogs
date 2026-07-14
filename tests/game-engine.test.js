@@ -486,13 +486,16 @@ test('dog roles pay for their special ability with distinct health and bite curv
     const jumper = dogStatsFor(tier, DOG_ROLE.JUMPER);
     const frisbee = dogStatsFor(tier, DOG_ROLE.FRISBEE);
     const lobber = dogStatsFor(tier, DOG_ROLE.LOBBER);
+    const skittish = dogStatsFor(tier, DOG_ROLE.SKITTISH);
     const medic = dogStatsFor(tier, DOG_ROLE.MEDIC);
     const growler = dogStatsFor(tier, DOG_ROLE.GROWLER);
 
-    assert.ok([tennis, howler, jumper, frisbee, lobber, medic, growler]
+    assert.ok([tennis, howler, jumper, frisbee, lobber, skittish, medic, growler]
       .every((specialist) => biter.hp > specialist.hp));
     assert.ok(biter.attack > tennis.attack && tennis.attack > howler.attack);
     assert.ok(jumper.attack < biter.attack);
+    assert.ok(skittish.hp < lobber.hp && skittish.attack <= howler.attack,
+      `T${tier} Sir Flinches pays for Panic Shuffle with the frailest stat line`);
     assert.ok(howler.howlBonus > howler.attack, `T${tier} Howler contributes through support, not biting`);
     assert.ok(medic.healPower > medic.attack, `T${tier} Medic contributes through healing, not biting`);
     assert.ok(growler.fearPower > growler.attack, `T${tier} Growler contributes through disruption, not biting`);
@@ -525,6 +528,85 @@ test('Barkour Bandit advances three squares while other dogs move two', () => {
   assert.equal(game.dogs.find((dog) => dog.role === DOG_ROLE.SCRUFFY).row, 2);
   assert.equal(game.dogs.find((dog) => dog.role === DOG_ROLE.JUMPER).row, 3);
   assert.match(dogTooltipInfo(game.dogs.find((dog) => dog.role === DOG_ROLE.JUMPER)).attack, /3 squares/);
+});
+
+test('Barkour Bandit Light Gear adds one damage to every damaging hit', () => {
+  let game = createGame(() => 0.5);
+  const cat = createCat(1, CAT_COAT.GREY);
+  cat.row = 10;
+  cat.col = 2;
+  cat.attack = 1;
+  const barkour = createDog(2, 9, 2, DOG_ROLE.JUMPER);
+  game.cats = [cat];
+  game.dogs = [barkour];
+
+  game = resolveSection(game);
+
+  const hit = game.events.find((event) => event.type === 'cat-melee' && event.to === barkour.id);
+  assert.equal(hit.damage, 2);
+  assert.equal(hit.lightGearDamage, 1);
+  assert.match(dogTooltipInfo(barkour).note, /Light Gear/);
+});
+
+test('Sir Flinches-a-Lot panic-steps after surviving a hit so later column pellets miss', () => {
+  let game = createGame(() => 0);
+  const cat = createCat(1, CAT_COAT.ORANGE);
+  cat.row = 12;
+  cat.col = 2;
+  const skittish = createDog(2, 5, 2, DOG_ROLE.SKITTISH);
+  skittish.frozenActions = 1;
+  game.cats = [cat];
+  game.dogs = [skittish];
+
+  game = resolveSection(game);
+
+  const survivor = game.dogs.find((dog) => dog.id === skittish.id);
+  assert.equal(survivor.hp, 4, 'only the first two-damage pellet connects');
+  assert.equal(survivor.col, 1);
+  assert.equal(game.events.filter((event) => event.type === 'shot' && !event.miss).length, 1);
+  assert.equal(game.events.filter((event) => event.type === 'shot' && event.miss).length, 2);
+  assert.deepEqual(
+    game.events.find((event) => event.type === 'panic-sidestep').path,
+    [{ row: 5, col: 2 }, { row: 5, col: 1 }],
+  );
+});
+
+test('Panic Shuffle may join one dog but treats a square with two dogs as blocked', () => {
+  let game = createGame(() => 0);
+  const cat = createCat(1, CAT_COAT.ORANGE);
+  cat.row = 12;
+  cat.col = 2;
+  const skittish = createDog(2, 5, 2, DOG_ROLE.SKITTISH);
+  const leftBlockers = [
+    createDog(1, 5, 1, DOG_ROLE.SCRUFFY),
+    createDog(1, 5, 1, DOG_ROLE.SCRUFFY),
+  ];
+  const rightDog = createDog(1, 5, 3, DOG_ROLE.SCRUFFY);
+  [skittish, ...leftBlockers, rightDog].forEach((dog) => { dog.frozenActions = 1; });
+  game.cats = [cat];
+  game.dogs = [skittish, ...leftBlockers, rightDog];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs.find((dog) => dog.id === skittish.id).col, 3);
+  assert.equal(game.dogs.filter((dog) => dog.row === 5 && dog.col === 3).length, 2);
+});
+
+test('Panic Shuffle stays put when both neighboring squares already hold two dogs', () => {
+  let game = createGame(() => 0);
+  const cat = createCat(1, CAT_COAT.ORANGE);
+  cat.row = 12;
+  cat.col = 2;
+  const skittish = createDog(2, 5, 2, DOG_ROLE.SKITTISH);
+  const blockers = [1, 1, 3, 3].map((col) => createDog(1, 5, col, DOG_ROLE.SCRUFFY));
+  [skittish, ...blockers].forEach((dog) => { dog.frozenActions = 1; });
+  game.cats = [cat];
+  game.dogs = [skittish, ...blockers];
+
+  game = resolveSection(game);
+
+  assert.equal(game.dogs.find((dog) => dog.id === skittish.id).col, 2);
+  assert.equal(game.events.some((event) => event.type === 'panic-sidestep'), false);
 });
 
 test('a dog uses its advance to reach and attack a cat in the same action', () => {
@@ -763,13 +845,14 @@ test('special dog roles unlock gradually and debut in their first eligible wave'
   ]);
   assert.deepEqual(availableDogRolesForRound(10), [
     DOG_ROLE.SCRUFFY, DOG_ROLE.FRISBEE, DOG_ROLE.TENNIS, DOG_ROLE.HOWLER,
-    DOG_ROLE.LOBBER, DOG_ROLE.JUMPER, DOG_ROLE.MEDIC, DOG_ROLE.GROWLER,
+    DOG_ROLE.LOBBER, DOG_ROLE.JUMPER, DOG_ROLE.SKITTISH, DOG_ROLE.MEDIC, DOG_ROLE.GROWLER,
   ]);
   assert.ok(generateWave(2, () => 0).some((dog) => dog.role === DOG_ROLE.FRISBEE));
   assert.ok(generateWave(3, () => 0).some((dog) => dog.role === DOG_ROLE.TENNIS));
   assert.ok(generateWave(4, () => 0).some((dog) => dog.role === DOG_ROLE.HOWLER));
   assert.ok(generateWave(5, () => 0).some((dog) => dog.role === DOG_ROLE.JUMPER));
   assert.ok(generateWave(6, () => 0).some((dog) => dog.role === DOG_ROLE.LOBBER));
+  assert.ok(generateWave(7, () => 0).some((dog) => dog.role === DOG_ROLE.SKITTISH));
   assert.ok(generateWave(8, () => 0).some((dog) => dog.role === DOG_ROLE.MEDIC));
   assert.ok(generateWave(10, () => 0).some((dog) => dog.role === DOG_ROLE.GROWLER));
 });

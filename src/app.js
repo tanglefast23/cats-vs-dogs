@@ -1165,6 +1165,9 @@ async function playStormAbility(nextGame) {
   renderTacticsPanel();
   try {
     await animateStorm(nextGame.events);
+    for (const event of nextGame.events.filter((item) => item.type === 'panic-sidestep')) {
+      await animateMove(event);
+    }
   } finally {
     playing = false;
     render();
@@ -1459,7 +1462,11 @@ async function animateMove(event) {
       { row: event.toRow ?? event.row, col: event.col },
     ];
   const stepsMoved = Math.max(1, path.length - 1);
-  const origin = path[0];
+  const renderedCell = dog.closest('.cell');
+  const origin = {
+    row: Number(renderedCell?.dataset.row ?? path[0].row),
+    col: Number(renderedCell?.dataset.col ?? path[0].col),
+  };
   const stackOffset = dog.classList.contains('dog-stack-back')
     ? -10
     : dog.classList.contains('dog-stack-front') ? 8 : 0;
@@ -1617,6 +1624,7 @@ async function animateEvents(events) {
   const melee = events.filter((event) => event.type === 'melee');
   const dogShots = events.filter((event) => event.type === 'dog-shot');
   const moves = events.filter((event) => event.type === 'move');
+  const panicMoves = events.filter((event) => event.type === 'panic-sidestep');
   const jumps = events.filter((event) => event.type === 'dog-jump');
   const howls = events.filter((event) => event.type === 'howl');
   const heals = events.filter((event) => event.type === 'heal');
@@ -1624,12 +1632,13 @@ async function animateEvents(events) {
   const fears = events.filter((event) => event.type === 'dog-fear');
   const superCats = events.filter((event) => event.type === 'super-cat');
 
-  if (shots.length || catMelee.length) setTurnTag('cats');
+  if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
   await Promise.all([
     ...shots.map((event, index) => animateShot(event, index)),
     ...catMelee.map(animateCatScratch),
     ...heals.map(animateHeal),
   ]);
+  for (const event of panicMoves) await animateMove(event);
   if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length) setTurnTag('dogs');
   await Promise.all([
     ...dogShots.map((event, index) => animateShot(event, index)),
@@ -1808,19 +1817,21 @@ function renderGlossary() {
     });
   } else {
     Object.entries(DOG_ROLE_INFO).forEach(([role, info]) => {
-      const stats = dogStatsFor(1, role);
+      const displayTier = info.minimumTier ?? 1;
+      const stats = dogStatsFor(displayTier, role);
       const roleStat = {
         frisbee: `DISC ${Math.ceil(stats.attack * 0.7)}`,
         tennis: `BALL ${Math.ceil(stats.attack * 0.6)}`,
         howler: `HOWL +${stats.howlBonus}`,
         lobber: `BOMB ${Math.max(1, Math.floor(stats.attack * 0.6))} SPLASH`,
         jumper: 'MOVE 3 · JUMP 1×',
+        skittish: 'PANIC STEP',
         medic: `HEAL ${stats.healPower}`,
         growler: `FRIGHTEN -${stats.fearPower}`,
       }[role] ?? `BITE ${stats.attack}`;
       grid.append(glossaryCard({
         kind: 'dogs', key: role, name: info.name,
-        kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS ROUND ${info.unlockRound}`}`,
+        kicker: `DOG ROLE · ${info.unlockRound === 1 ? 'STARTER' : `UNLOCKS ROUND ${info.unlockRound}`}${displayTier > 1 ? ` · T${displayTier}+` : ''}`,
         stats: `♥ ${stats.hp} · ${roleStat}${role === 'scruffy' ? '' : ` · BITE ${stats.attack}`}`,
         description: info.attackDetail,
         note: `Strength: ${info.strength}. Weakness: ${info.weakness}.`,

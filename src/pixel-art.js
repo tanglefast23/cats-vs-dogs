@@ -63,6 +63,7 @@ export const DOG_ROLE_MARKERS = {
   howler: ['sound-cone', 'purple-bandana'],
   lobber: ['bone-cannon', 'ammo-pack'],
   jumper: ['spring-boots', 'red-cape'],
+  skittish: ['shaking-knees', 'security-blanket'],
   medic: ['medic-cap', 'heart-pack'],
   growler: ['megaphone', 'spiked-collar'],
 };
@@ -75,6 +76,7 @@ export const DOG_BODY_BUILDS = {
   howler: 'crooner',
   lobber: 'artillery-dachshund',
   jumper: 'springer',
+  skittish: 'trembling-chihuahua',
   medic: 'saint-bernard-medic',
   growler: 'corgi-intimidator',
 };
@@ -559,6 +561,7 @@ const DOG_GEOM = {
   howler: { helm: [13, 2, 10], collar: [10, 19, 14], plates: [[4, 19], [24, 18]], armor: [9, 18, 16, 9], crown: [7, 1] },
   lobber: { helm: [3, 8, 12], collar: [5, 19, 12], plates: [[12, 18], [23, 17]], armor: [10, 16, 18, 10], crown: [2, 4] },
   jumper: { helm: [4, 7, 11], collar: [5, 16, 12], plates: [[12, 17], [24, 15]], armor: [17, 10, 12, 11], crown: [2, 3] },
+  skittish: { helm: [10, 3, 12], collar: [10, 17, 12], plates: [[5, 18], [21, 18]], armor: [8, 16, 17, 11], crown: [8, 0] },
   medic: { helm: [7, 2, 15], collar: [8, 18, 16], plates: [[3, 17], [23, 17]], armor: [7, 16, 19, 11], crown: [7, 0] },
   growler: { helm: [4, 7, 12], collar: [5, 19, 13], plates: [[3, 18], [19, 18]], armor: [5, 17, 18, 10], crown: [3, 4] },
 };
@@ -684,6 +687,28 @@ const DOG_BODIES = {
     px(ctx, '#f3cb45', 4, 27, 8, 3); px(ctx, OUTLINE, 4, 30, 8, 1);
     px(ctx, '#f3cb45', 18, 26, 9, 3); px(ctx, OUTLINE, 18, 29, 9, 1);
     px(ctx, '#aeb8b9', 6, 26, 2, 1); px(ctx, '#aeb8b9', 21, 25, 2, 1);
+  },
+  // Sir Flinches-a-Lot — tiny trembling chihuahua clutching a security blanket.
+  skittish: (ctx, fur, light, dark) => {
+    // Oversized ears and a small round head with alarmed eyes.
+    px(ctx, OUTLINE, 8, 5, 16, 14); px(ctx, fur, 9, 6, 14, 12);
+    px(ctx, OUTLINE, 5, 0, 8, 10); px(ctx, dark, 7, 2, 5, 7);
+    px(ctx, OUTLINE, 20, 0, 8, 10); px(ctx, dark, 21, 2, 5, 7);
+    px(ctx, OUTLINE, 11, 9, 4, 5); px(ctx, '#eef0c2', 12, 10, 2, 2); px(ctx, OUTLINE, 13, 11, 1, 1);
+    px(ctx, OUTLINE, 18, 9, 4, 5); px(ctx, '#eef0c2', 19, 10, 2, 2); px(ctx, OUTLINE, 19, 11, 1, 1);
+    px(ctx, light, 12, 14, 9, 4); px(ctx, OUTLINE, 15, 14, 3, 2); px(ctx, OUTLINE, 14, 17, 5, 1);
+    // Sweat drops and shake marks sell the panic even at thumbnail size.
+    px(ctx, '#8fd3e8', 26, 8, 2, 3); px(ctx, '#8fd3e8', 28, 12, 1, 2);
+    px(ctx, '#f3cb45', 3, 15, 2, 1); px(ctx, '#f3cb45', 1, 18, 3, 1);
+    // Little body mostly hidden beneath a purple security blanket.
+    px(ctx, OUTLINE, 8, 18, 17, 9); px(ctx, fur, 9, 19, 15, 7);
+    px(ctx, OUTLINE, 5, 18, 23, 10); px(ctx, '#8066a8', 6, 19, 21, 8);
+    px(ctx, '#bba4de', 7, 20, 18, 2); px(ctx, '#5c477f', 9, 24, 16, 2);
+    px(ctx, '#f1d164', 7, 26, 2, 2); px(ctx, '#f1d164', 12, 26, 2, 2); px(ctx, '#f1d164', 17, 26, 2, 2); px(ctx, '#f1d164', 22, 26, 2, 2);
+    // Knock-kneed feet, with one lifted as if it is already sidestepping.
+    px(ctx, OUTLINE, 9, 27, 5, 4); px(ctx, dark, 10, 28, 3, 2);
+    px(ctx, OUTLINE, 20, 26, 5, 4); px(ctx, dark, 21, 27, 3, 2);
+    px(ctx, '#f3cb45', 6, 29, 2, 1); px(ctx, '#f3cb45', 26, 28, 3, 1);
   },
   // Dr. Droolittle — broad Saint Bernard medic with cap, satchel, and heart bottle.
   medic: (ctx, fur, light, dark) => {

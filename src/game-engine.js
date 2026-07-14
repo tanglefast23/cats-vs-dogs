@@ -185,6 +185,7 @@ export const DOG_ROLE = Object.freeze({
   HOWLER: 'howler',
   LOBBER: 'lobber',
   JUMPER: 'jumper',
+  SKITTISH: 'skittish',
   MEDIC: 'medic',
   GROWLER: 'growler',
 });
@@ -217,6 +218,10 @@ const DOG_ROLE_STATS = Object.freeze({
   [DOG_ROLE.JUMPER]: Object.freeze({
     1: Object.freeze({ hp: 5, attack: 2 }), 2: Object.freeze({ hp: 8, attack: 3 }),
     3: Object.freeze({ hp: 11, attack: 4 }), 4: Object.freeze({ hp: 15, attack: 6 }),
+  }),
+  [DOG_ROLE.SKITTISH]: Object.freeze({
+    1: Object.freeze({ hp: 3, attack: 1 }), 2: Object.freeze({ hp: 6, attack: 1 }),
+    3: Object.freeze({ hp: 9, attack: 2 }), 4: Object.freeze({ hp: 12, attack: 3 }),
   }),
   [DOG_ROLE.MEDIC]: Object.freeze({
     1: Object.freeze({ hp: 6, attack: 1 }), 2: Object.freeze({ hp: 9, attack: 2 }),
@@ -264,10 +269,16 @@ export const DOG_ROLE_INFO = Object.freeze({
     attackDetail: 'Lobs a weak bone bomb two to five squares down its lane. The blast also damages cats beside the target in adjacent columns.',
   }),
   [DOG_ROLE.JUMPER]: Object.freeze({
-    name: 'Barkour Bandit', unlockRound: 5, role: 'Defence-bypass specialist',
-    strength: 'Moves three squares and leaps over one isolated defender', weakness: 'Low health and a weak bite; layered cats stop it',
-    blurb: 'A fragile three-square sprinter that punishes isolated defenders.',
-    attackDetail: 'Moves one square faster than other dogs. Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
+    name: 'Barkour Bandit', unlockRound: 5, minimumTier: 2, role: 'Speed-bypass specialist',
+    strength: 'Barkour Vault moves three squares and leaps over one isolated defender', weakness: 'Light Gear makes every damaging hit deal +1 damage; its bite is weak',
+    blurb: 'A fragile three-square sprinter that trades protection for speed.',
+    attackDetail: 'Barkour Vault: moves one square faster than other dogs and, once per battle, jumps over the cat directly ahead if the landing square is empty. Light Gear makes every damaging hit deal +1 damage.',
+  }),
+  [DOG_ROLE.SKITTISH]: Object.freeze({
+    name: 'Sir Flinches-a-Lot', unlockRound: 7, minimumTier: 2, role: 'Panic-dodge specialist',
+    strength: 'Panic Shuffle sidesteps after every surviving hit, breaking column focus', weakness: 'Lowest health and bite damage; edges, defenders, and full two-dog squares trap it',
+    blurb: 'A nervous dodger that is much better at escaping trouble than fighting it.',
+    attackDetail: 'Panic Shuffle: after surviving a damaging hit, immediately moves one square left or right if possible, preferring the side farther from its attacker. A square is dog-blocked only when it already holds two dogs.',
   }),
   [DOG_ROLE.MEDIC]: Object.freeze({
     name: 'Dr. Droolittle', unlockRound: 8, role: 'Pack-healing specialist',
@@ -352,6 +363,8 @@ function dogRoleStats(role, attack, stats) {
       return `Bomb ${Math.max(1, Math.floor(attack * 0.6))} splash · Bite ${attack}`;
     case DOG_ROLE.JUMPER:
       return `Speed ${FAST_DOG_MOVE_DISTANCE} · Jump 1× · Bite ${attack}`;
+    case DOG_ROLE.SKITTISH:
+      return `Panic step · Bite ${attack}`;
     case DOG_ROLE.MEDIC:
       return `Heal ${stats.healPower} 1× · Bite ${attack}`;
     case DOG_ROLE.GROWLER:
@@ -947,7 +960,7 @@ function resolveEncore(next, caster, target, random) {
     const dog = closestDogByColumnPriority(target, next.dogs, random);
     if (dog) targets = [dog];
   }
-  targets.forEach((dog) => pushDamageEvent(next.events, 'shot', target, dog, {
+  targets.forEach((dog) => pushDamageEvent(next, 'shot', target, dog, {
     damage, style: 'encore', fromCol: target.col, col: dog.col,
   }));
   next.events.push({ type: 'encore', from: caster.id, to: target.id, damage, hitCount: targets.length });
@@ -1000,7 +1013,7 @@ export function useActiveAbility(game, casterId, target = {}) {
     if (Number.isInteger(target.col) && target.col >= 0 && target.col < COLS && next.dogs.some((dog) => dog.col === target.col && dog.hp > 0)) {
       const damage = [0, 2, 4, 6][caster.level] ?? 2;
       next.dogs.filter((dog) => dog.col === target.col && dog.hp > 0)
-        .forEach((dog) => pushDamageEvent(next.events, 'spell', caster, dog, { damage, style: 'lightning' }));
+        .forEach((dog) => pushDamageEvent(next, 'spell', caster, dog, { damage, style: 'lightning' }));
       next.dogs = next.dogs.filter((dog) => dog.hp > 0);
       used = true;
     }
@@ -1353,8 +1366,35 @@ export function splitDamage(total, parts = 3) {
   return chunks;
 }
 
-function pushDamageEvent(events, type, from, to, extra = {}) {
+function panicSidestep(next, dog, attacker) {
+  if (dog.role !== DOG_ROLE.SKITTISH || dog.hp <= 0) return;
+  const fromCol = dog.col;
+  const candidates = [-1, 1]
+    .map((offset) => fromCol + offset)
+    .filter((col) => col >= 0 && col < COLS)
+    .filter((col) => dogCountAt(next.dogs, dog.row, col, dog.id) < DOG_CELL_CAPACITY)
+    .filter((col) => !next.cats.some((cat) => cat.hp > 0 && cat.row === dog.row && cat.col === col))
+    .filter((col) => !next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === dog.row && decoy.col === col));
+  if (!candidates.length) return;
+
+  const greatestDistance = Math.max(...candidates.map((col) => Math.abs(col - attacker.col)));
+  const safest = candidates.filter((col) => Math.abs(col - attacker.col) === greatestDistance);
+  const random = typeof next.random === 'function' ? next.random : Math.random;
+  const toCol = safest[Math.min(safest.length - 1, Math.floor(random() * safest.length))];
+  dog.col = toCol;
+  next.events.push({
+    type: 'panic-sidestep', ability: 'panic-shuffle', id: dog.id,
+    fromRow: dog.row, fromCol, toRow: dog.row, row: dog.row, col: toCol,
+    path: [{ row: dog.row, col: fromCol }, { row: dog.row, col: toCol }],
+  });
+}
+
+function pushDamageEvent(next, type, from, to, extra = {}) {
   let damage = typeof extra.damage === 'number' ? extra.damage : from.attack;
+  if (damage > 0 && to.role === DOG_ROLE.JUMPER) {
+    damage += 1;
+    extra = { ...extra, lightGearDamage: 1 };
+  }
   if (to.shatterDamage) {
     damage += to.shatterDamage;
     extra = { ...extra, shatterDamage: to.shatterDamage };
@@ -1363,7 +1403,7 @@ function pushDamageEvent(events, type, from, to, extra = {}) {
   if (damage <= 0) return;
   const hpBefore = to.hp;
   to.hp = Math.max(0, to.hp - damage);
-  events.push({
+  next.events.push({
     type,
     from: from.id,
     to: to.id,
@@ -1380,6 +1420,7 @@ function pushDamageEvent(events, type, from, to, extra = {}) {
     damage,
     miss: false,
   });
+  panicSidestep(next, to, from);
 }
 
 function pushMissEvent(events, type, from, extra = {}) {
@@ -1599,7 +1640,7 @@ export function resolveSection(game) {
     if (ability === 'melee') {
       const target = dogInMeleeFront(cat, next.dogs);
       if (target) {
-        pushDamageEvent(next.events, 'cat-melee', cat, target, {
+        pushDamageEvent(next, 'cat-melee', cat, target, {
           col: cat.col,
           style: 'melee',
         });
@@ -1616,7 +1657,7 @@ export function resolveSection(game) {
     if (ability === 'tangle-homing') {
       const target = closestDogByColumnPriority(cat, next.dogs, game.random);
       if (target) {
-        pushDamageEvent(next.events, 'shot', cat, target, {
+        pushDamageEvent(next, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
           style: 'tangle',
@@ -1634,15 +1675,17 @@ export function resolveSection(game) {
     if (ability === 'splash') {
       const target = closestDogByColumnPriority(cat, next.dogs, game.random);
       if (target) {
-        pushDamageEvent(next.events, 'shot', cat, target, {
+        const impactRow = target.row;
+        const impactCol = target.col;
+        pushDamageEvent(next, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
           style: 'splash',
         });
         const splashTargets = livingDogs(next.dogs)
-          .filter((dog) => dog.row === target.row && Math.abs(dog.col - target.col) === 1);
-        splashTargets.forEach((dog) => pushDamageEvent(next.events, 'shot', cat, dog, {
-          fromCol: target.col,
+          .filter((dog) => dog.row === impactRow && Math.abs(dog.col - impactCol) === 1);
+        splashTargets.forEach((dog) => pushDamageEvent(next, 'shot', cat, dog, {
+          fromCol: impactCol,
           col: dog.col,
           style: 'splash-secondary',
           damage: cat.attack,
@@ -1659,7 +1702,7 @@ export function resolveSection(game) {
         .sort((a, b) => b.row - a.row)
         .slice(0, 3);
       if (targets.length) {
-        targets.forEach((target, index) => pushDamageEvent(next.events, 'shot', cat, target, {
+        targets.forEach((target, index) => pushDamageEvent(next, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
           style: 'piercing',
@@ -1674,7 +1717,7 @@ export function resolveSection(game) {
     if (ability === 'homing') {
       const target = closestHomingDog(cat, next.dogs, game.random);
       if (target) {
-        pushDamageEvent(next.events, 'shot', cat, target, {
+        pushDamageEvent(next, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
           style: 'homing',
@@ -1705,7 +1748,7 @@ export function resolveSection(game) {
         damage: amount,
       };
       if (target) {
-        pushDamageEvent(next.events, 'shot', cat, target, shared);
+        pushDamageEvent(next, 'shot', cat, target, shared);
       } else {
         pushMissEvent(next.events, 'shot', cat, {
           ...shared,

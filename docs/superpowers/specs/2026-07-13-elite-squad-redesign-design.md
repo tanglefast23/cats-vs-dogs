@@ -78,7 +78,8 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 - **Do the cap first, then judge.** The flat-6 cap cuts firepower from ~20 cats down to 6, which by itself lets dogs march much deeper before dying. Much of the "no doom" feeling should fix itself. Implement the cap, playtest a few rounds, *then* decide whether pacing still needs work — so we don't stack two big difficulty changes at once and overshoot into "too hard, no time to react."
 - **If it's still too easy after the cap:** prefer **shrinking the vertical approach** over speeding dogs up.
   - Trim the empty approach so dogs cross ~5–6 rows to reach the front line instead of ~10, and shrink the cat zone to ~2–3 rows (6 cats don't need 4 rows of depth).
-  - *Not* "dogs move 3 rows/turn": faster dogs lurch in less-readable jumps and compress the scary near-zone into fewer turns, which **eats the reaction windows** the player wants to keep. Shrinking the board keeps dogs creeping one square at a time (readable, tense) while cutting the long "free shooting gallery."
+  - *Not* "every dog moves 3 rows/turn": normal dogs advance 2 squares, while T2+ Barkour Bandit is the readable 3-square speed specialist. Its Light Gear makes every damaging hit deal +1 damage, paying for that speed without slowing the rest of the pack.
+  - T2+ Sir Flinches-a-Lot uses Panic Shuffle after surviving a hit: it sidesteps left or right when possible, and only a square already holding two dogs counts as dog-blocked.
 - **Reserve lever (only if shrinking + cap still isn't enough):** cap how far cats can shoot, so dogs get a "safe" far zone and dread builds as they enter range. Bigger change — hold it back.
 
 ---

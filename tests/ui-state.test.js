@@ -542,6 +542,7 @@ test('unlockable fighters have distinct accessories and dog tier gear', () => {
   assert.deepEqual(DOG_ROLE_MARKERS.howler, ['sound-cone', 'purple-bandana']);
   assert.deepEqual(DOG_ROLE_MARKERS.lobber, ['bone-cannon', 'ammo-pack']);
   assert.deepEqual(DOG_ROLE_MARKERS.jumper, ['spring-boots', 'red-cape']);
+  assert.deepEqual(DOG_ROLE_MARKERS.skittish, ['shaking-knees', 'security-blanket']);
   assert.deepEqual(DOG_ROLE_MARKERS.medic, ['medic-cap', 'heart-pack']);
   assert.deepEqual(DOG_ROLE_MARKERS.growler, ['megaphone', 'spiked-collar']);
 });
@@ -556,12 +557,13 @@ test('every fighter has a unique body build matched to its combat role', () => {
   assert.equal(CAT_BODY_BUILDS[7], 'hooded-phantom');
 
   const dogBuilds = Object.values(DOG_BODY_BUILDS);
-  assert.equal(dogBuilds.length, 8, 'all 8 dog roles need a body build');
+  assert.equal(dogBuilds.length, 9, 'all 9 dog roles need a body build');
   assert.equal(new Set(dogBuilds).size, dogBuilds.length, 'dog builds must all differ');
   assert.equal(DOG_BODY_BUILDS.frisbee, 'disc-retriever');
   assert.equal(DOG_BODY_BUILDS.howler, 'crooner', 'the howler poses mid-howl');
   assert.equal(DOG_BODY_BUILDS.lobber, 'artillery-dachshund');
   assert.equal(DOG_BODY_BUILDS.jumper, 'springer', 'the jumper reads coiled to leap');
+  assert.equal(DOG_BODY_BUILDS.skittish, 'trembling-chihuahua');
   assert.equal(DOG_BODY_BUILDS.medic, 'saint-bernard-medic');
   assert.equal(DOG_BODY_BUILDS.growler, 'corgi-intimidator');
 });
