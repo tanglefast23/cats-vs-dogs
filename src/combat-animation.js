@@ -13,6 +13,9 @@ export const COMBAT_TIMING = Object.freeze({
   hpPauseMs: 300,
   meleeMs: 430,
   movePauseMs: 260,
+  stormChargeMs: 380,
+  stormFlashLeadMs: 130,
+  stormAftermathMs: 620,
 });
 
 /** Scaled copy of COMBAT_TIMING for the speed toggle; the tuned table itself never changes. */
@@ -27,6 +30,16 @@ export function cellCenter(row, col) {
   return {
     xPercent: ((col + 0.5) / COLS) * 100,
     yPercent: ((row + 0.5) / ROWS) * 100,
+  };
+}
+
+/** Percentage geometry for an effect that must cover exactly one battlefield column. */
+export function stormColumnPosition(col, cols = COLS) {
+  const widthPercent = 100 / cols;
+  return {
+    leftPercent: col * widthPercent,
+    centerPercent: (col + 0.5) * widthPercent,
+    widthPercent,
   };
 }
 

@@ -1,3 +1,5 @@
+import { catMoveLimit } from './movement-rules.js';
+
 export const DRAG_FEEDBACK = Object.freeze({
   thresholdPx: 7,
   liftMs: 150,
@@ -7,8 +9,7 @@ export const DRAG_FEEDBACK = Object.freeze({
   returnMs: 260,
 });
 
-export const CAT_MOVE_LIMIT_MESSAGE = 'A cat can only move one adjacent square.';
-export const FIELD_CAP_MESSAGE = 'Elite Squad full (6/6). Merge, bench, or sell a cat before deploying another.';
+export const FIELD_CAP_MESSAGE = 'Elite Squad full (6/6). Merge, workbench, or sell a cat before deploying another.';
 
 // Placement feedback retains 40% of the original landing force (a 60% cut).
 export const DROP_IMPACT = Object.freeze({
@@ -23,7 +24,7 @@ export const DROP_IMPACT = Object.freeze({
 const invalid = (reason = null) => ({ type: 'invalid', ...(reason ? { reason } : {}) });
 
 function sameCatKind(source, occupied) {
-  if (!occupied || source.id === occupied.id) return false;
+  if (!occupied || occupied.unitType === 'worker' || source.id === occupied.id) return false;
   const sameLevel = Number(source.level) === Number(occupied.level);
   const sourceCoat = source.coat == null ? null : Number(source.coat);
   const targetCoat = occupied.coat == null ? null : Number(occupied.coat);
@@ -31,9 +32,18 @@ function sameCatKind(source, occupied) {
   return sameLevel && sameCoat;
 }
 
+function sameWorkerKind(source, occupied) {
+  return Boolean(
+    occupied && occupied.unitType === 'worker' && source.id !== occupied.id
+    && occupied.role === source.role
+    && Number(occupied.level) === Number(source.level)
+    && Number(occupied.level) < 3,
+  );
+}
+
 export function getDropAction({
   source, target, catZoneStart, rows, cols, phase = 'prep', paused = false,
-  fieldCount = 0, fieldCap = Number.POSITIVE_INFINITY, tacticsMoveUsed = false,
+  fieldCount = 0, fieldCap = Number.POSITIVE_INFINITY,
 }) {
   if (!source || !target) return invalid();
 
@@ -59,11 +69,7 @@ export function getDropAction({
 
   if (target.kind === 'worker-slot') {
     const occupied = target.occupied;
-    const compatible = occupied
-      && occupied.id !== source.id
-      && occupied.role === source.role
-      && Number(occupied.level) === Number(source.level)
-      && Number(occupied.level) < 3;
+    const compatible = sameWorkerKind(source, occupied);
     if (source.type === 'shop-worker') {
       return !occupied || compatible
         ? { type: 'purchase-worker', index: target.index, ...(compatible ? { targetId: occupied.id } : {}) }
@@ -73,6 +79,11 @@ export function getDropAction({
       if (compatible) return { type: 'merge-worker', index: target.index, targetId: occupied.id };
       return !occupied ? { type: 'move-worker', index: target.index } : invalid();
     }
+    if (source.type === 'bench-worker') {
+      return !occupied || compatible
+        ? { type: 'place-worker', index: target.index, ...(compatible ? { targetId: occupied.id } : {}) }
+        : invalid();
+    }
     return invalid();
   }
 
@@ -80,35 +91,49 @@ export function getDropAction({
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
-    if (phase === 'tactics') {
-      // Mid-combat: only the one reposition — no deploys, no merges.
-      if (source.type !== 'cat' || tacticsMoveUsed || target.occupied) return invalid();
-      const distance = Math.abs(target.row - source.row) + Math.abs(target.col - source.col);
-      return distance === 1
-        ? { type: 'tactics-move', row: target.row, col: target.col }
-        : invalid('move-distance');
-    }
+    if (phase !== 'prep') return invalid('phase');
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
       return source.type === 'shop-fighter'
         ? { type: 'purchase-merge', targetType: 'cat', targetId: target.occupied.id }
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
     }
+    if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid('prep-moved');
+    const moveOrigin = source.prepOrigin
+      ?? (source.type === 'cat' && Number.isInteger(source.row) && Number.isInteger(source.col)
+        ? { row: source.row, col: source.col }
+        : null);
+    if ((source.type === 'cat' || source.type === 'bench') && moveOrigin) {
+      const distance = Math.abs(target.row - moveOrigin.row) + Math.abs(target.col - moveOrigin.col);
+      if (distance > catMoveLimit(source)) return invalid('move-distance');
+    }
     if ((source.type === 'shop-fighter' || source.type === 'bench') && fieldCount >= fieldCap) {
       return invalid('field-cap');
     }
     if (source.type === 'shop-fighter') return { type: 'purchase-place', row: target.row, col: target.col };
-    if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid();
-    if ((source.type === 'cat' || source.type === 'bench') && source.prepOrigin) {
-      const distance = Math.abs(target.row - source.prepOrigin.row) + Math.abs(target.col - source.prepOrigin.col);
-      if (distance > 1) return invalid('move-distance');
-    }
     return source.type === 'bench'
       ? { type: 'place', row: target.row, col: target.col }
       : { type: 'move', row: target.row, col: target.col };
   }
 
   if (target.kind === 'bench') {
+    if (source.type === 'shop-worker') {
+      const compatible = sameWorkerKind(source, target.occupied);
+      return !target.occupied || compatible
+        ? { type: 'purchase-worker-bench', index: target.index, ...(compatible ? { targetId: target.occupied.id } : {}) }
+        : invalid();
+    }
+    if (source.type === 'worker') {
+      const compatible = sameWorkerKind(source, target.occupied);
+      return !target.occupied || compatible
+        ? { type: 'return-worker', index: target.index, ...(compatible ? { targetId: target.occupied.id } : {}) }
+        : invalid();
+    }
+    if (source.type === 'bench-worker') {
+      return sameWorkerKind(source, target.occupied)
+        ? { type: 'merge-bench-worker', index: target.index, targetId: target.occupied.id }
+        : invalid();
+    }
     if (source.type !== 'shop-fighter' && source.type !== 'cat') return invalid();
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();

@@ -1,19 +1,21 @@
 import {
-  ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
+  ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, PRODUCTION_CAPACITY, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
-  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
+  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility,
   purchaseShopFighterToBench, purchaseShopFighterToBoard,
-  purchaseShopFighterOnto, purchaseShopWorker, moveWorker, mergeWorkerOnto,
+  purchaseShopFighterOnto, purchaseShopWorker, purchaseShopWorkerToBench,
+  moveWorker, mergeWorkerOnto, moveBenchWorkerToHouse, returnWorkerToBench, mergeBenchWorkerOnto,
   collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
 import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
-import { combatTiming, cellCenter, homingShotKeyframes } from './combat-animation.js';
+import { combatTiming, cellCenter, homingShotKeyframes, stormColumnPosition } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
-import { CAT_MOVE_LIMIT_MESSAGE, FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 
@@ -64,6 +66,7 @@ const shopEl = $('#shop');
 const productionEl = $('#production-grid');
 const dogPreviewEl = $('#dog-preview-grid');
 const inventoryEl = $('#inventory');
+const workbenchEl = $('#workbench');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
@@ -85,7 +88,22 @@ let tooltipTimer = null;
 let tooltipPointer = { x: 0, y: 0 };
 let moveLimitTooltipTimer = null;
 
-function showMoveLimitTooltip(clientX, clientY) {
+function hideMoveLimitTooltip() {
+  window.clearTimeout(moveLimitTooltipTimer);
+  moveLimitTooltipTimer = null;
+  const tip = document.querySelector('.move-limit-tooltip');
+  if (!tip) return;
+  tip.hidden = true;
+  tip.classList.remove('is-visible');
+}
+
+function movementRestrictionMessage(action, cat) {
+  if (action.reason === 'prep-moved') return CAT_PLANNING_MOVE_SPENT_MESSAGE;
+  if (action.reason === 'move-distance') return catMoveLimitMessage(cat);
+  return null;
+}
+
+function showMoveLimitTooltip(clientX, clientY, message) {
   let tip = document.querySelector('.move-limit-tooltip');
   if (!tip) {
     tip = document.createElement('div');
@@ -94,7 +112,7 @@ function showMoveLimitTooltip(clientX, clientY) {
     document.body.append(tip);
   }
   window.clearTimeout(moveLimitTooltipTimer);
-  tip.textContent = CAT_MOVE_LIMIT_MESSAGE;
+  tip.textContent = message;
   tip.hidden = false;
   tip.classList.remove('is-visible');
   void tip.offsetWidth;
@@ -106,6 +124,7 @@ function showMoveLimitTooltip(clientX, clientY) {
   moveLimitTooltipTimer = window.setTimeout(() => {
     tip.hidden = true;
     tip.classList.remove('is-visible');
+    moveLimitTooltipTimer = null;
   }, 2800);
 }
 
@@ -217,7 +236,7 @@ function showShopPurchaseDenied(button, reason) {
 
   game.message = reason === 'gold'
     ? `Not enough gold — this cat costs 3 and you have ${game.gold}.`
-    : 'The bench is full — place a cat in the yard before adopting another.';
+    : 'The Cat Workbench is full — deploy or merge a cat before adopting another.';
   $('#message').textContent = game.message;
 
   window.setTimeout(() => {
@@ -254,8 +273,8 @@ function renderShop() {
         return;
       }
       game.message = isWorker
-        ? `Drag ${info.name} into the Production Yard.`
-        : `Drag ${info.name} onto the battlefield or a matching fighter.`;
+        ? `Drag ${info.name} into either House slot or onto the Cat Workbench.`
+        : `Drag ${info.name} onto the battlefield or the Cat Workbench.`;
       $('#message').textContent = game.message;
     });
     bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
@@ -311,15 +330,33 @@ function catMarkup(cat) {
   return unit;
 }
 
-function dogMarkup(dog) {
+function dogMarkup(dog, stackIndex = 0, stackSize = 1) {
   const unit = document.createElement('div');
-  unit.className = 'unit';
+  unit.className = 'unit dog-unit';
   unit.dataset.unitId = dog.id;
+  if (stackSize > 1) {
+    unit.classList.add('dog-stacked', stackIndex === 0 ? 'dog-stack-back' : 'dog-stack-front');
+    unit.dataset.stackIndex = String(stackIndex);
+  }
   unit.append(unitCanvas('dog', dog));
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">T${dog.tier}</span>
     <span class="hp-wrap"><span class="hp-bar hp-${hpTone(dog.hp, dog.maxHp)}" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
   return unit;
+}
+
+function dogStackTooltipInfo(dogs) {
+  if (dogs.length <= 1) return dogTooltipInfo(dogs[0]);
+  const [backDog, frontDog] = dogs;
+  const back = dogTooltipInfo(backDog);
+  const front = dogTooltipInfo(frontDog);
+  return {
+    kind: 'dog',
+    title: '2 DOGS STACKED',
+    stats: `${back.title} ${backDog.hp}/${backDog.maxHp} HP · ${front.title} ${frontDog.hp}/${frontDog.maxHp} HP`,
+    attack: 'Both dogs act separately. The slightly raised dog is behind the front dog.',
+    note: 'This square is full; a third dog must stop behind it.',
+  };
 }
 
 function catFromState(state, type, id) {
@@ -415,6 +452,7 @@ function dragSource(type, cat) {
   if (type === 'shop-worker') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, role: cat.role };
   if (type === 'shop-fighter') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, coat: normalizeCoat(cat.coat) };
   if (type === 'worker') return { type, id: cat.id, workerIndex: cat.workerIndex, level: cat.level, role: cat.role };
+  if (type === 'bench-worker') return { type, id: cat.id, benchIndex: cat.benchIndex, level: cat.level, role: cat.role };
   if (type === 'item') return { type, inventoryIndex: cat.inventoryIndex, itemKind: cat.kind, tier: cat.tier ?? 1 };
   const sale = catSaleQuote(game, type, cat.id);
   return {
@@ -444,7 +482,7 @@ function targetFromElement(element) {
       element: workerSlot,
       descriptor: {
         kind: 'worker-slot', index,
-        occupied: occupied ? { id: occupied.id, level: occupied.level, role: occupied.role } : null,
+        occupied: occupied ? { id: occupied.id, unitType: 'worker', level: occupied.level, role: occupied.role } : null,
       },
     };
   }
@@ -472,7 +510,14 @@ function targetFromElement(element) {
       element: bench,
       descriptor: {
         kind: 'bench', index,
-        occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
+        occupied: occupied ? {
+          id: occupied.id,
+          unitType: occupied.kind === 'production-cat' ? 'worker' : 'fighter',
+          level: occupied.level,
+          ...(occupied.kind === 'production-cat'
+            ? { role: occupied.role }
+            : { coat: normalizeCoat(occupied.coat) }),
+        } : null,
       },
     };
   }
@@ -490,14 +535,25 @@ function dropAction(source, descriptor) {
     paused: false,
     fieldCount: game.cats.length,
     fieldCap: MAX_FIELD_CATS,
-    tacticsMoveUsed: game.tacticsMoveUsed,
   });
 }
 
 function clearDragHighlights() {
-  document.querySelectorAll('.drag-valid, .drag-over, .drag-invalid-hover, .drag-origin')
-    .forEach((element) => element.classList.remove('drag-valid', 'drag-over', 'drag-invalid-hover', 'drag-origin'));
+  document.querySelectorAll('.drag-valid, .drag-over, .drag-invalid-hover, .drag-origin, .move-path-valid, .move-path-invalid')
+    .forEach((element) => element.classList.remove(
+      'drag-valid', 'drag-over', 'drag-invalid-hover', 'drag-origin', 'move-path-valid', 'move-path-invalid',
+    ));
   dragHoverElement = null;
+}
+
+function showMovementPath(source, descriptor) {
+  document.querySelectorAll('.move-path-valid, .move-path-invalid').forEach((element) => {
+    element.classList.remove('move-path-valid', 'move-path-invalid');
+  });
+  catMovementPath(source, descriptor).forEach(({ row, col, withinLimit }) => {
+    const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+    cell?.classList.add(withinLimit ? 'move-path-valid' : 'move-path-invalid');
+  });
 }
 
 function makeDragGhost(cat, sourceRect, source) {
@@ -505,7 +561,7 @@ function makeDragGhost(cat, sourceRect, source) {
   ghost.className = 'drag-ghost';
   ghost.style.width = `${Math.max(64, sourceRect.width)}px`;
   ghost.style.height = `${Math.max(64, sourceRect.height)}px`;
-  const visualType = source.type === 'worker' || source.type === 'shop-worker'
+  const visualType = source.type === 'worker' || source.type === 'shop-worker' || source.type === 'bench-worker'
     ? 'worker'
     : source.type === 'item' ? 'item' : 'cat';
   ghost.append(unitCanvas(visualType, cat));
@@ -530,7 +586,7 @@ function positionDragVisual(x, y) {
 }
 
 function showValidDropTargets(source) {
-  document.querySelectorAll('.cell, .worker-slot, .adoption-box').forEach((element) => {
+  document.querySelectorAll('.cell, .worker-slot, .bench-slot, .adoption-box').forEach((element) => {
     const { descriptor } = targetFromElement(element);
     if (dropAction(source, descriptor).type !== 'invalid') element.classList.add('drag-valid');
   });
@@ -565,21 +621,27 @@ function updateDragHover(clientX, clientY) {
   const hit = document.elementFromPoint(clientX, clientY);
   const target = targetFromElement(hit);
   const action = dropAction(dragState.source, target.descriptor);
-  if (dragHoverElement !== target.element) {
+  const hoverChanged = dragHoverElement !== target.element;
+  if (hoverChanged) {
     dragHoverElement?.classList.remove('drag-over', 'drag-invalid-hover');
     dragHoverElement = target.element;
   }
+  showMovementPath(dragState.source, target.descriptor);
   dragState.ghost.classList.toggle('can-drop', action.type !== 'invalid');
   dragState.ghost.classList.toggle('cannot-drop', action.type === 'invalid');
   if (target.element) target.element.classList.add(action.type === 'invalid' ? 'drag-invalid-hover' : 'drag-over');
+  const movementMessage = movementRestrictionMessage(action, dragState.source);
+  if (movementMessage) {
+    if (hoverChanged) showMoveLimitTooltip(clientX, clientY, movementMessage);
+  } else hideMoveLimitTooltip();
 }
 
 function bindPetDrag(anchor, type, cat) {
+  const phaseAllowsDrag = game.phase === 'prep'
+    || (type === 'item' && game.phase === 'tactics');
+  if (!phaseAllowsDrag) return;
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
-    const phaseAllowsDrag = game.phase === 'prep'
-      || (type === 'item' && game.phase === 'tactics')
-      || (type === 'cat' && game.phase === 'tactics' && !game.tacticsMoveUsed);
     if (event.button !== 0 || !phaseAllowsDrag || playing || dragState) return;
     const rect = anchor.getBoundingClientRect();
     dragState = {
@@ -631,10 +693,18 @@ function applyDropAction(action, source) {
     if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
   } else if (action.type === 'purchase-worker') {
     game = purchaseShopWorker(game, source.shopIndex, action.index);
+  } else if (action.type === 'purchase-worker-bench') {
+    game = purchaseShopWorkerToBench(game, source.shopIndex, action.index);
   } else if (action.type === 'move-worker') {
     game = moveWorker(game, source.workerIndex, action.index);
   } else if (action.type === 'merge-worker') {
     game = mergeWorkerOnto(game, source.workerIndex, action.index);
+  } else if (action.type === 'place-worker') {
+    game = moveBenchWorkerToHouse(game, source.benchIndex, action.index);
+  } else if (action.type === 'return-worker') {
+    game = returnWorkerToBench(game, source.workerIndex, action.index);
+  } else if (action.type === 'merge-bench-worker') {
+    game = mergeBenchWorkerOnto(game, source.benchIndex, action.index);
   } else if (action.type === 'use-food') {
     game = useFood(game, source.inventoryIndex, action.targetId);
   } else if (action.type === 'equip') {
@@ -644,8 +714,6 @@ function applyDropAction(action, source) {
     game = placeCat(game, benchIndex, action.row, action.col);
   } else if (action.type === 'move') {
     game = moveCat(game, source.id, action.row, action.col);
-  } else if (action.type === 'tactics-move') {
-    game = moveCatInTactics(game, source.id, action.row, action.col);
   } else if (action.type === 'merge') {
     game = mergeUnitOnto(game, source.type, source.id, action.targetType, action.targetId);
     if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
@@ -709,6 +777,7 @@ function cleanupDragVisual(state) {
   document.body.classList.remove('pet-dragging');
   document.body.classList.remove('cat-sell-dragging');
   $('#adoption-box')?.classList.remove('sale-blocked');
+  hideMoveLimitTooltip();
   clearDragHighlights();
 }
 
@@ -733,24 +802,29 @@ async function finishDrag(event, cancelled = false) {
   window.setTimeout(() => { suppressNextPetClick = false; }, 0);
 
   if (!valid) {
-    const moveDistanceExceeded = action.reason === 'move-distance';
+    const movementMessage = movementRestrictionMessage(action, state.source);
     const fieldCapReached = action.reason === 'field-cap';
+    const productionCat = state.source.type === 'shop-worker'
+      || state.source.type === 'worker' || state.source.type === 'bench-worker';
     game.message = fieldCapReached
       ? FIELD_CAP_MESSAGE
-      : moveDistanceExceeded
-      ? CAT_MOVE_LIMIT_MESSAGE
+      : movementMessage
+      ? movementMessage
+      : productionCat
+      ? 'Production cats can only use the two House slots or matching cats on the Cat Workbench.'
       : target.descriptor?.kind === 'sell' && state.source.sellReason
       ? state.source.sellReason
       : 'That is not a valid drop. Cats can only use the lower yard and merge with the same color + level.';
     render();
-    if (moveDistanceExceeded) showMoveLimitTooltip(event.clientX, event.clientY);
+    if (movementMessage) showMoveLimitTooltip(event.clientX, event.clientY, movementMessage);
     return;
   }
 
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
-    game.message = action.type === 'sell' || action.type === 'tactics-move'
+    const workerAction = action.type.includes('worker');
+    game.message = action.type === 'sell' || workerAction
       ? game.message
       : action.type === 'equip'
         ? `T${state.source.tier ?? 1} ${state.source.itemKind} equipped!`
@@ -759,7 +833,9 @@ async function finishDrag(event, cancelled = false) {
         ? `${pendingUpgrade.label} New gear unlocked!`
         : 'Matching cats stacked — one step closer to evolving!'
       : action.type === 'return'
-        ? 'Cat returned safely to the bench.'
+        ? 'Cat reserved safely on the Cat Workbench.'
+        : action.type === 'purchase-bench'
+        ? 'Cat reserved on the Cat Workbench.'
         : 'Cat deployed!';
     playCatDrop();
   }
@@ -819,7 +895,7 @@ function collectProductionOutput(index, station, outputHost) {
   const before = game;
   game = collectWorkerOutput(game, index);
   if (game === before || !destination) {
-    game.message = 'Inventory is full — use or merge an item first.';
+    game.message = 'House Storage is full — use or merge an item first.';
     station.classList.add('collection-blocked');
     window.setTimeout(() => station.classList.remove('collection-blocked'), 380);
     renderHud();
@@ -846,6 +922,8 @@ function productionStation(worker, index) {
   station.type = 'button';
   station.className = `production-cell station-cell ${worker ? 'active' : 'empty'}`;
   station.dataset.stationIndex = String(index);
+  station.style.gridColumn = String(index + 2);
+  station.style.gridRow = '1';
   if (!worker) {
     station.innerHTML = '<span class="empty-plus">·</span><small>STATION</small>';
     station.disabled = true;
@@ -883,6 +961,8 @@ function productionWorkerSlot(index) {
   slot.type = 'button';
   slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'}`;
   slot.dataset.workerIndex = String(index);
+  slot.style.gridColumn = String(index + 2);
+  slot.style.gridRow = '2';
   if (!worker) {
     slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
     return slot;
@@ -897,9 +977,11 @@ function productionWorkerSlot(index) {
 
 function renderProduction() {
   if (!productionEl || !inventoryEl) return;
-  productionEl.innerHTML = '';
-  [0, 1, 2].forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
-  [0, 1, 2].forEach((index) => productionEl.append(productionWorkerSlot(index)));
+  productionEl.querySelectorAll(':scope > .production-cell').forEach((cell) => cell.remove());
+  Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
+    .forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
+  Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
+    .forEach((index) => productionEl.append(productionWorkerSlot(index)));
 
   inventoryEl.innerHTML = '';
   game.inventory.forEach((item, index) => {
@@ -908,7 +990,7 @@ function renderProduction() {
     slot.className = `inventory-slot ${item ? 'filled' : 'empty'}`;
     slot.dataset.inventoryIndex = String(index);
     if (!item) {
-      slot.innerHTML = '<span class="empty-plus">·</span>';
+      slot.innerHTML = '<span class="empty-plus">+</span>';
       slot.disabled = true;
     } else {
       slot.append(unitCanvas('item', item));
@@ -928,6 +1010,57 @@ function renderProduction() {
     }
     inventoryEl.append(slot);
   });
+}
+
+function renderWorkbench() {
+  if (!workbenchEl) return;
+  workbenchEl.innerHTML = '';
+  for (let index = 0; index < BENCH_SIZE; index += 1) {
+    const cat = game.bench[index];
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = `bench-slot ${cat ? 'filled' : 'empty'}`;
+    slot.dataset.benchIndex = String(index);
+    if (!cat) {
+      slot.innerHTML = '<span class="empty-plus">+</span><small>RESERVE</small>';
+      workbenchEl.append(slot);
+      continue;
+    }
+
+    slot.dataset.unitId = cat.id;
+    if (cat.kind === 'production-cat') {
+      const info = WORKER_INFO[cat.role];
+      slot.classList.add('worker-reserve');
+      slot.append(unitCanvas('worker', cat));
+      slot.insertAdjacentHTML('beforeend', `<b class="reserve-level">L${cat.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: cat.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
+      bindPetDrag(slot, 'bench-worker', { ...cat, benchIndex: index });
+      bindTooltip(slot, () => workerTooltipInfo(cat, info));
+      slot.addEventListener('click', () => {
+        if (suppressNextPetClick) return;
+        game.message = `${info.name} is reserved. Drag into either Production House slot, or stack it with a matching production cat here.`;
+        $('#message').textContent = game.message;
+      });
+    } else {
+      slot.classList.add('fighter-reserve');
+      if (selectedMatches('bench', cat.id)) slot.classList.add('selected');
+      slot.append(catMarkup(cat));
+      bindPetDrag(slot, 'bench', cat);
+      bindTooltip(slot, () => catTooltipInfo(cat));
+      slot.addEventListener('click', () => {
+        if (suppressNextPetClick) return;
+        if (selected && selected.id !== cat.id && tryMerge('bench', cat.id)) {
+          render();
+          return;
+        }
+        if (selectedMatches('bench', cat.id)) {
+          selected = null;
+          game.message = 'Cat deselected.';
+        } else selectCat('bench', cat);
+        render();
+      });
+    }
+    workbenchEl.append(slot);
+  }
 }
 
 function renderDogPreview() {
@@ -971,7 +1104,7 @@ function renderTacticsPanel() {
     const copy = ACTIVE_COPY[cat.activeAbility] ?? ['CAST', 'Choose a target.'];
     const button = document.createElement('button');
     button.className = `active-ability ${cat.activeUsed ? 'used' : ''} ${activeTargeting?.casterId === cat.id ? 'targeting' : ''}`;
-    button.disabled = cat.activeUsed;
+    button.disabled = cat.activeUsed || playing;
     button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
     button.title = copy[1];
     button.addEventListener('click', () => {
@@ -984,13 +1117,11 @@ function renderTacticsPanel() {
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
   $('#tactics-help').textContent = activeTargeting
     ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
-    : game.tacticsMoveUsed
-      ? 'Combat move spent. Drag food or equipment onto a cat, or cast one available ability.'
-      : 'Drag food or equipment, cast an ability, or move 1 cat 1 square (once per battle).';
+    : 'Drag food or equipment onto a cat, or cast one available ability. Cats only move during setup.';
 }
 
 function tryActiveTarget(row, col, cat, dog) {
-  if (game.phase !== 'tactics' || !activeTargeting) return false;
+  if (playing || game.phase !== 'tactics' || !activeTargeting) return false;
   const targeting = activeTargeting;
   let payload = null;
   if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
@@ -1012,14 +1143,32 @@ function tryActiveTarget(row, col, cat, dog) {
     return true;
   }
   const before = game;
-  game = useActiveAbility(game, targeting.casterId, payload);
-  if (game !== before) {
+  const nextGame = useActiveAbility(game, targeting.casterId, payload);
+  if (nextGame !== before) {
     activeTargeting = null;
+    if (targeting.mode === 'storm') {
+      void playStormAbility(nextGame);
+      return true;
+    }
+    game = nextGame;
     $('#board')?.classList.add('ability-cast');
     window.setTimeout(() => $('#board')?.classList.remove('ability-cast'), 420);
   }
   render();
   return true;
+}
+
+async function playStormAbility(nextGame) {
+  playing = true;
+  game = nextGame;
+  renderHud();
+  renderTacticsPanel();
+  try {
+    await animateStorm(nextGame.events);
+  } finally {
+    playing = false;
+    render();
+  }
 }
 
 function renderBoard() {
@@ -1031,7 +1180,8 @@ function renderBoard() {
       cell.dataset.row = row;
       cell.dataset.col = col;
       const cat = game.cats.find((unit) => unit.row === row && unit.col === col);
-      const dog = game.dogs.find((unit) => unit.row === row && unit.col === col);
+      const dogs = game.dogs.filter((unit) => unit.row === row && unit.col === col);
+      const dog = dogs.at(-1) ?? null;
       const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
       const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
       const equipmentLabel = cat
@@ -1039,8 +1189,8 @@ function renderBoard() {
         : '';
       cell.setAttribute('aria-label', cat
         ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP${equipmentLabel ? `, equipped with ${equipmentLabel}` : ''}, row ${row + 1} column ${col + 1}`
-        : dog
-          ? `${dogTooltipInfo(dog).title}, ${dog.hp} of ${dog.maxHp} HP, row ${row + 1} column ${col + 1}`
+        : dogs.length
+          ? `${dogs.map((unit) => `${dogTooltipInfo(unit).title}, ${unit.hp} of ${unit.maxHp} HP`).join('; ')}${dogs.length > 1 ? ', stacked together' : ''}, row ${row + 1} column ${col + 1}`
           : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
       if (cat) {
         cell.append(catMarkup(cat));
@@ -1048,10 +1198,11 @@ function renderBoard() {
         cell.classList.add('has-unit');
         bindPetDrag(cell, 'cat', cat);
         bindTooltip(cell, () => catTooltipInfo(cat));
-      } else if (dog) {
-        cell.append(dogMarkup(dog));
-        cell.classList.add('has-unit');
-        bindTooltip(cell, () => dogTooltipInfo(dog));
+      } else if (dogs.length) {
+        dogs.forEach((unit, index) => cell.append(dogMarkup(unit, index, dogs.length)));
+        cell.classList.add('has-unit', 'has-dog');
+        if (dogs.length > 1) cell.classList.add('has-dog-stack');
+        bindTooltip(cell, () => dogStackTooltipInfo(dogs));
       } else if (decoy) {
         const visual = unitCanvas('cat', { level: 1, coat: 8 });
         visual.classList.add('decoy-unit');
@@ -1124,9 +1275,10 @@ function renderBoard() {
             } else {
               selected = null;
             }
-            if (attemptedAction.reason === 'move-distance') {
-              game.message = CAT_MOVE_LIMIT_MESSAGE;
-              window.setTimeout(() => showMoveLimitTooltip(event.clientX, event.clientY), 0);
+            const movementMessage = movementRestrictionMessage(attemptedAction, movingCat);
+            if (movementMessage) {
+              game.message = movementMessage;
+              window.setTimeout(() => showMoveLimitTooltip(event.clientX, event.clientY, movementMessage), 0);
             }
           }
         }
@@ -1142,7 +1294,7 @@ function renderHud() {
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
   $('#squad-count').textContent = `${game.cats.length}/${MAX_FIELD_CATS}`;
-  $('#inventory-count').textContent = `${game.inventory.filter(Boolean).length}/${game.inventory.length}`;
+  $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
   const speedChip = $('#speed-toggle');
   if (speedChip) {
@@ -1187,9 +1339,9 @@ function effectAt(className, row, col, text = '') {
   return effect;
 }
 
-function showHit(event, { heavy = false } = {}) {
+function showHit(event, { heavy = false, sound = true } = {}) {
   if (event.miss || !event.to) return;
-  playHit({ heavy });
+  if (sound) playHit({ heavy });
   const target = findUnitElement(event.to);
   const burst = effectAt('impact-burst', event.toRow, event.col);
   // Dog bites and tennis shots hurt cats; cat attacks use the opposing damage tone.
@@ -1300,21 +1452,39 @@ async function animateCatScratch(event) {
 async function animateMove(event) {
   const dog = findUnitElement(event.id);
   if (!dog) return;
-  const movement = dog.animate([
-    { transform: 'translateY(0)' },
-    { transform: 'translateY(100%)' },
-  ], { duration: timing.movePauseMs, easing: 'steps(4)', fill: 'forwards' });
+  const path = event.path?.length > 1
+    ? event.path
+    : [
+      { row: event.fromRow ?? event.row - 1, col: event.fromCol ?? event.col },
+      { row: event.toRow ?? event.row, col: event.col },
+    ];
+  const stepsMoved = Math.max(1, path.length - 1);
+  const origin = path[0];
+  const stackOffset = dog.classList.contains('dog-stack-back')
+    ? -10
+    : dog.classList.contains('dog-stack-front') ? 8 : 0;
+  const stackScale = dog.classList.contains('dog-stacked') ? 0.92 : 1;
+  const movement = dog.animate(path.map((point, index) => ({
+    transform: `translate(${(point.col - origin.col) * 100}%, calc(${(point.row - origin.row) * 100}% + ${stackOffset}%)) scale(${stackScale})`,
+    offset: index / stepsMoved,
+  })), {
+    duration: Math.round(timing.movePauseMs * (0.65 + stepsMoved * 0.35)),
+    easing: `steps(${Math.max(4, stepsMoved * 4)})`,
+    fill: 'forwards',
+  });
   await movement.finished.catch(() => {});
 }
 
 async function animateDogJump(event) {
   const dog = findUnitElement(event.id);
   if (!dog) return;
+  const rowsMoved = Math.max(2, (event.toRow ?? event.row) - (event.fromRow ?? event.row - 2));
+  const colsMoved = event.col - (event.fromCol ?? event.col);
   dog.classList.add('dog-jumping');
   const movement = dog.animate([
     { transform: 'translateY(0) scale(1)' },
-    { transform: 'translateY(70%) scale(1.16) rotate(-8deg)', offset: 0.46 },
-    { transform: 'translateY(200%) scale(1) rotate(0deg)' },
+    { transform: `translate(${colsMoved * 35}%, ${rowsMoved * 35}%) scale(1.16) rotate(-8deg)`, offset: 0.46 },
+    { transform: `translate(${colsMoved * 100}%, ${rowsMoved * 100}%) scale(1) rotate(0deg)` },
   ], { duration: Math.round(timing.movePauseMs * 1.45), easing: 'steps(6)', fill: 'forwards' });
   await movement.finished.catch(() => {});
   dog.classList.remove('dog-jumping');
@@ -1369,6 +1539,64 @@ async function animateSuperCat(event) {
   runner.remove();
 }
 
+async function animateStorm(events) {
+  const strikes = events.filter((event) => event.type === 'spell' && event.style === 'lightning');
+  if (!strikes.length) return;
+
+  const board = $('#board');
+  const caster = findUnitElement(strikes[0].from);
+  const { leftPercent, widthPercent } = stormColumnPosition(strikes[0].col);
+  const flashMs = Math.max(220, timing.stormFlashLeadMs + timing.impactMs);
+  const skyFlash = document.createElement('div');
+  skyFlash.className = 'storm-sky-flash';
+  skyFlash.style.setProperty('--storm-flash-ms', `${flashMs}ms`);
+  const strike = document.createElement('div');
+  strike.className = 'storm-strike';
+  strike.style.left = `${leftPercent}%`;
+  strike.style.width = `${widthPercent}%`;
+  strike.style.setProperty('--storm-charge-ms', `${timing.stormChargeMs}ms`);
+  strike.style.setProperty('--storm-flash-ms', `${flashMs}ms`);
+  strike.innerHTML = `
+    <span class="storm-column-charge"></span>
+    <span class="storm-cloud"></span>
+    <span class="storm-bolt storm-bolt-main"></span>
+    <span class="storm-bolt storm-bolt-fork storm-bolt-fork-left"></span>
+    <span class="storm-bolt storm-bolt-fork storm-bolt-fork-right"></span>
+    <span class="storm-ground-flare"></span>
+  `;
+  effectsEl.append(skyFlash, strike);
+
+  const targetMarkers = strikes.map((event) => {
+    const marker = effectAt('storm-target-marker', event.toRow, event.col);
+    marker.style.setProperty('--storm-flash-ms', `${flashMs}ms`);
+    marker.innerHTML = '<b></b><b></b><b></b><b></b>';
+    return marker;
+  });
+
+  board?.style.setProperty('--storm-flash-ms', `${flashMs}ms`);
+  board?.classList.add('storm-active');
+  caster?.classList.add('storm-casting');
+  setTurnTag('storm');
+
+  try {
+    await wait(timing.stormChargeMs);
+    strike.classList.add('is-striking');
+    skyFlash.classList.add('is-striking');
+    board?.classList.add('storm-recoil');
+    targetMarkers.forEach((marker) => marker.classList.add('is-striking'));
+    await wait(timing.stormFlashLeadMs);
+    playHit({ heavy: true });
+    strikes.forEach((event) => showHit(event, { heavy: true, sound: false }));
+    await wait(timing.stormAftermathMs);
+  } finally {
+    board?.classList.remove('storm-active', 'storm-recoil');
+    board?.style.removeProperty('--storm-flash-ms');
+    caster?.classList.remove('storm-casting');
+    setTurnTag(null);
+    effectsEl.innerHTML = '';
+  }
+}
+
 /** Small pill over the board that names whose half of the exchange is animating. */
 function setTurnTag(side) {
   const tag = $('#turn-tag');
@@ -1377,7 +1605,7 @@ function setTurnTag(side) {
     tag.hidden = true;
     return;
   }
-  tag.textContent = side === 'cats' ? '▸ CATS ACT' : '▸ DOGS ACT';
+  tag.textContent = side === 'cats' ? '▸ CATS ACT' : side === 'storm' ? '⚡ THUNDERPAWS' : '▸ DOGS ACT';
   tag.className = `turn-tag ${side}`;
   tag.hidden = false;
 }
@@ -1404,13 +1632,13 @@ async function animateEvents(events) {
   ]);
   if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length) setTurnTag('dogs');
   await Promise.all([
-    ...melee.map((event) => animateMelee(event, 'down')),
     ...dogShots.map((event, index) => animateShot(event, index)),
     ...howls.map(animateHowl),
     ...dogHeals.map(animateHeal),
     ...fears.map(animateFear),
   ]);
   await Promise.all([...moves.map(animateMove), ...jumps.map(animateDogJump)]);
+  await Promise.all(melee.map((event) => animateMelee(event, 'down')));
   await Promise.all(superCats.map(animateSuperCat));
   setTurnTag(null);
   effectsEl.innerHTML = '';
@@ -1586,7 +1814,7 @@ function renderGlossary() {
         tennis: `BALL ${Math.ceil(stats.attack * 0.6)}`,
         howler: `HOWL +${stats.howlBonus}`,
         lobber: `BOMB ${Math.max(1, Math.floor(stats.attack * 0.6))} SPLASH`,
-        jumper: 'JUMP 1×',
+        jumper: 'MOVE 3 · JUMP 1×',
         medic: `HEAL ${stats.healPower}`,
         growler: `FRIGHTEN -${stats.fearPower}`,
       }[role] ?? `BITE ${stats.attack}`;
@@ -1623,6 +1851,7 @@ function render() {
   hideUnitTooltip();
   renderShop();
   renderProduction();
+  renderWorkbench();
   renderDogPreview();
   renderBoard();
   renderHud();

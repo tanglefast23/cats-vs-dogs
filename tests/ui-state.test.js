@@ -7,8 +7,9 @@ import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, combatTiming, homingShotKeyframes } from '../src/combat-animation.js';
-import { CAT_MOVE_LIMIT_MESSAGE, FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { COMBAT_TIMING, combatTiming, homingShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
+import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
@@ -130,6 +131,16 @@ test('combat timing leaves enough time to read travel, impact, and HP loss', () 
   assert.ok(COMBAT_TIMING.hpPauseMs >= 250);
 });
 
+test('Thunderpaws charges, flashes, and spans exactly one selected board column', () => {
+  assert.ok(COMBAT_TIMING.stormChargeMs >= 300);
+  assert.ok(COMBAT_TIMING.stormAftermathMs >= 500);
+  assert.deepEqual(stormColumnPosition(4), {
+    leftPercent: 400 / 6,
+    centerPercent: 450 / 6,
+    widthPercent: 100 / 6,
+  });
+});
+
 test('2x combat speed halves every timing without touching the tuned constants', () => {
   assert.deepEqual(combatTiming(1), { ...COMBAT_TIMING });
   const fast = combatTiming(2);
@@ -182,7 +193,7 @@ test('a full squad blocks new deployments while still allowing moves and merges'
     fieldCap: 6,
   };
 
-  assert.equal(FIELD_CAP_MESSAGE, 'Elite Squad full (6/6). Merge, bench, or sell a cat before deploying another.');
+  assert.equal(FIELD_CAP_MESSAGE, 'Elite Squad full (6/6). Merge, workbench, or sell a cat before deploying another.');
   assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'bench', id: 'cat-1', level: 1 },
@@ -202,28 +213,74 @@ test('a full squad blocks new deployments while still allowing moves and merges'
   }), { type: 'merge', targetType: 'cat', targetId: 'cat-2' });
 });
 
-test('drag highlights give every cat the same one-square between-round limit', () => {
-  // Phase-neutral copy: the same limit message now also appears for tactics repositions.
-  assert.equal(CAT_MOVE_LIMIT_MESSAGE, 'A cat can only move one adjacent square.');
+test('drag highlights match the setup move limit for each cat build', () => {
+  assert.equal(catMoveLimitMessage({ ability: 'melee' }), 'This cat can only move 1 square.');
+  assert.equal(catMoveLimitMessage({ ability: 'homing' }), 'This cat can only move 2 squares.');
   const target = { kind: 'cell', row: 10, col: 3, occupied: false };
   const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
-  assert.equal(getDropAction({
+  assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'cat', id: 1, ability: 'melee', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }).type, 'invalid');
+  }), { type: 'invalid', reason: 'move-distance' });
   assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }), { type: 'invalid', reason: 'move-distance' });
-  assert.equal(getDropAction({
+  }), { type: 'move', row: 10, col: 3 });
+  assert.deepEqual(getDropAction({
     ...common,
-    target: { kind: 'cell', row: 10, col: 2, occupied: false },
+    target: { kind: 'cell', row: 10, col: 4, occupied: false },
     source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
-  }).type, 'move');
+  }), { type: 'invalid', reason: 'move-distance' });
+  assert.deepEqual(getDropAction({
+    ...common,
+    target: { kind: 'cell', row: 10, col: 4, occupied: { id: 9, level: 1 } },
+    source: { type: 'cat', id: 2, level: 1, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+  }), { type: 'merge', targetType: 'cat', targetId: 9 });
   assert.equal(getDropAction({
     ...common,
     source: { type: 'cat', id: 3, ability: 'homing', prepOrigin: { row: 10, col: 2 }, prepMoved: true },
   }).type, 'invalid');
+});
+
+test('movement path marks allowed steps green and excess steps red', () => {
+  assert.deepEqual(
+    catMovementPath(
+      { type: 'cat', ability: 'homing', row: 10, col: 1 },
+      { kind: 'cell', row: 10, col: 4 },
+    ),
+    [
+      { row: 10, col: 1, withinLimit: true },
+      { row: 10, col: 2, withinLimit: true },
+      { row: 10, col: 3, withinLimit: true },
+      { row: 10, col: 4, withinLimit: false },
+    ],
+  );
+});
+
+test('a cat that already moved marks every hovered path square invalid', () => {
+  assert.equal(CAT_PLANNING_MOVE_SPENT_MESSAGE, '1 move per planning phase.');
+  const source = {
+    type: 'cat', id: 3, level: 1, ability: 'homing', row: 10, col: 2,
+    prepOrigin: { row: 10, col: 1 }, prepMoved: true,
+  };
+  const target = { kind: 'cell', row: 10, col: 4, occupied: false };
+  const common = { source, target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
+
+  assert.deepEqual(getDropAction(common), { type: 'invalid', reason: 'prep-moved' });
+  assert.deepEqual(
+    catMovementPath(source, target),
+    [
+      { row: 10, col: 2, withinLimit: false },
+      { row: 10, col: 3, withinLimit: false },
+      { row: 10, col: 4, withinLimit: false },
+    ],
+  );
+  const mergeTarget = { ...target, occupied: { id: 9, level: 1 } };
+  assert.deepEqual(
+    getDropAction({ ...common, target: mergeTarget }),
+    { type: 'merge', targetType: 'cat', targetId: 9 },
+  );
+  assert.deepEqual(catMovementPath(source, mergeTarget), []);
 });
 
 test('dropping onto a matching cat produces a merge action', () => {
@@ -278,15 +335,22 @@ test('shop fighters buy only when dragged to a legal battlefield or bench destin
   }), { type: 'purchase-merge', targetType: 'cat', targetId: 'cat-2' });
 });
 
-test('shop workers and owned workers route only to production slots', () => {
+test('production cats route between the two-slot House and the universal workbench, never the field', () => {
   const shopWorker = { type: 'shop-worker', shopIndex: 1, id: 'shop-2', level: 1, role: 'cook' };
   assert.deepEqual(getDropAction({
     source: shopWorker,
-    target: { kind: 'worker-slot', index: 4, occupied: null },
+    target: { kind: 'worker-slot', index: 1, occupied: null },
     catZoneStart: 10,
     rows: 14,
     cols: 6,
-  }), { type: 'purchase-worker', index: 4 });
+  }), { type: 'purchase-worker', index: 1 });
+  assert.deepEqual(getDropAction({
+    source: shopWorker,
+    target: { kind: 'bench', index: 0, occupied: null },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'purchase-worker-bench', index: 0 });
   assert.deepEqual(getDropAction({
     source: shopWorker,
     target: { kind: 'cell', row: 12, col: 2, occupied: null },
@@ -298,11 +362,18 @@ test('shop workers and owned workers route only to production slots', () => {
   const owned = { type: 'worker', workerIndex: 0, id: 'worker-1', level: 1, role: 'cook' };
   assert.deepEqual(getDropAction({
     source: owned,
-    target: { kind: 'worker-slot', index: 5, occupied: null },
+    target: { kind: 'worker-slot', index: 1, occupied: null },
     catZoneStart: 10,
     rows: 14,
     cols: 6,
-  }), { type: 'move-worker', index: 5 });
+  }), { type: 'move-worker', index: 1 });
+  assert.deepEqual(getDropAction({
+    source: owned,
+    target: { kind: 'bench', index: 0, occupied: null },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'return-worker', index: 0 });
   assert.deepEqual(getDropAction({
     source: owned,
     target: { kind: 'cell', row: 12, col: 2, occupied: null },
@@ -310,6 +381,25 @@ test('shop workers and owned workers route only to production slots', () => {
     rows: 14,
     cols: 6,
   }), { type: 'invalid' });
+
+  const reserved = { type: 'bench-worker', benchIndex: 0, id: 'worker-2', level: 1, role: 'cook' };
+  assert.deepEqual(getDropAction({
+    source: reserved,
+    target: { kind: 'worker-slot', index: 0, occupied: null },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'place-worker', index: 0 });
+  assert.deepEqual(getDropAction({
+    source: reserved,
+    target: {
+      kind: 'bench', index: 1,
+      occupied: { id: 'worker-3', unitType: 'worker', level: 1, role: 'cook' },
+    },
+    catZoneStart: 10,
+    rows: 14,
+    cols: 6,
+  }), { type: 'merge-bench-worker', index: 1, targetId: 'worker-3' });
 });
 
 test('food and equipment target cats only during a tactics window', () => {

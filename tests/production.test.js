@@ -4,12 +4,19 @@ import assert from 'node:assert/strict';
 import {
   WORKER_ROLE,
   WORKER_INFO,
+  PRODUCTION_CAPACITY,
+  BENCH_SIZE,
+  STORAGE_CAPACITY,
   availableShopEntriesForRound,
   createGame,
   makeShop,
   purchaseShopWorker,
+  purchaseShopWorkerToBench,
   moveWorker,
   mergeWorkerOnto,
+  moveBenchWorkerToHouse,
+  returnWorkerToBench,
+  mergeBenchWorkerOnto,
   createWorker,
   finishRound,
   collectWorkerOutput,
@@ -65,10 +72,14 @@ test('ordinary shops can roll all workers while the opening shop guarantees two 
   assert.equal(opening.filter((slot) => slot.category === 'fighter').length, 2);
 });
 
-test('new games start with three empty production slots and six empty inventory slots', () => {
+test('new games start with two active house slots, a three-cat workbench, and two full-size storage squares', () => {
   const game = createGame(() => 0.5);
-  assert.deepEqual(game.workers, Array(3).fill(null));
-  assert.deepEqual(game.inventory, Array(6).fill(null));
+  assert.equal(PRODUCTION_CAPACITY, 2);
+  assert.equal(BENCH_SIZE, 3);
+  assert.equal(STORAGE_CAPACITY, 2);
+  assert.deepEqual(game.workers, Array(PRODUCTION_CAPACITY).fill(null));
+  assert.deepEqual(game.bench, []);
+  assert.deepEqual(game.inventory, Array(STORAGE_CAPACITY).fill(null));
 });
 
 test('fighter purchase charges only after a valid bench or battlefield drop', () => {
@@ -80,7 +91,7 @@ test('fighter purchase charges only after a valid bench or battlefield drop', ()
   assert.equal(game.shop[0].sold, true);
 
   game = createGame(() => 0);
-  game = purchaseShopFighterToBench(game, 0, 3);
+  game = purchaseShopFighterToBench(game, 0, 2);
   assert.equal(game.gold, 7);
   assert.equal(game.bench.length, 1);
   assert.equal(game.shop[0].sold, true);
@@ -112,38 +123,63 @@ test('worker purchase charges only after a valid production-slot drop', () => {
   assert.equal(game.gold, 10);
   assert.equal(game.shop[0].sold, false);
 
-  game = purchaseShopWorker(game, 0, 2);
+  game = purchaseShopWorker(game, 0, 1);
   assert.equal(game.gold, 7);
   assert.equal(game.shop[0].sold, true);
-  assert.equal(game.workers[2].role, WORKER_ROLE.COOK);
-  assert.equal(game.workers[2].level, 1);
+  assert.equal(game.workers[1].role, WORKER_ROLE.COOK);
+  assert.equal(game.workers[1].level, 1);
 });
 
-test('workers move only during prep and merge three matching copies into the target', () => {
+test('production cats can reserve, merge, and move between the workbench and either house slot', () => {
+  let game = createGame(() => 0.5);
+  game.shop = [{
+    id: 'shop-worker', kind: 'production-cat', category: 'worker',
+    role: WORKER_ROLE.COOK, level: 1, sold: false, saved: false,
+  }];
+
+  game = purchaseShopWorkerToBench(game, 0, 0);
+  assert.equal(game.gold, 7);
+  assert.equal(game.bench.length, 1);
+  assert.equal(game.bench[0].role, WORKER_ROLE.COOK);
+
+  game = moveBenchWorkerToHouse(game, 0, 1);
+  assert.equal(game.bench.length, 0);
+  assert.equal(game.workers[1].role, WORKER_ROLE.COOK);
+
+  game = returnWorkerToBench(game, 1, 0);
+  assert.equal(game.workers[1], null);
+  assert.equal(game.bench[0].role, WORKER_ROLE.COOK);
+
+  game.bench.push(createWorker(WORKER_ROLE.COOK));
+  game = mergeBenchWorkerOnto(game, 1, 0);
+  assert.equal(game.bench.length, 1);
+  assert.equal(game.bench[0].copies, 2);
+});
+
+test('workers move only during prep and can finish a house merge from the workbench', () => {
   let game = createGame(() => 0.5);
   game.workers[0] = createWorker(WORKER_ROLE.COOK);
   game.workers[1] = createWorker(WORKER_ROLE.COOK);
-  game.workers[2] = createWorker(WORKER_ROLE.COOK);
+  game.bench.push(createWorker(WORKER_ROLE.COOK));
 
   game = mergeWorkerOnto(game, 1, 0);
   assert.equal(game.workers[0].copies, 2);
   assert.equal(game.workers[1], null);
 
-  game = mergeWorkerOnto(game, 2, 0);
+  game = moveBenchWorkerToHouse(game, 0, 0);
   assert.equal(game.workers[0].level, 2);
   assert.equal(game.workers[0].copies, 1);
-  assert.equal(game.workers[2], null);
+  assert.equal(game.bench.length, 0);
 
-  game = moveWorker(game, 0, 2);
+  game = moveWorker(game, 0, 1);
   assert.equal(game.workers[0], null);
-  assert.equal(game.workers[2].level, 2);
+  assert.equal(game.workers[1].level, 2);
 });
 
 test('food and coins produce each battle while weapons and armour take two battles', () => {
   let game = createGame(() => 0.5);
   game.workers[0] = createWorker(WORKER_ROLE.COOK, 1);
   game.workers[1] = createWorker(WORKER_ROLE.TRADER, 2);
-  game.workers[2] = createWorker(WORKER_ROLE.WEAPONSMITH, 3);
   game.workers[0].pendingOutput = { kind: 'food', quantity: 99 };
   game.phase = 'combat';
   game.dogs = [];
@@ -152,13 +188,20 @@ test('food and coins produce each battle while weapons and armour take two battl
 
   assert.deepEqual(game.workers[0].pendingOutput, { kind: 'food', quantity: 1 });
   assert.deepEqual(game.workers[1].pendingOutput, { kind: 'coins', quantity: 3 });
-  assert.equal(game.workers[2].pendingOutput, null);
+
+  game.workers[1] = createWorker(WORKER_ROLE.WEAPONSMITH, 3);
 
   game.phase = 'combat';
   game.dogs = [];
   game = finishRound(game);
 
-  assert.deepEqual(game.workers[2].pendingOutput, { kind: 'weapon', tier: 3, quantity: 1 });
+  assert.equal(game.workers[1].pendingOutput, null);
+
+  game.phase = 'combat';
+  game.dogs = [];
+  game = finishRound(game);
+
+  assert.deepEqual(game.workers[1].pendingOutput, { kind: 'weapon', tier: 3, quantity: 1 });
 
   let armourGame = createGame(() => 0.5);
   armourGame.workers[0] = createWorker(WORKER_ROLE.ARMOURER, 2);
@@ -173,18 +216,17 @@ test('food and coins produce each battle while weapons and armour take two battl
   assert.deepEqual(armourGame.workers[0].pendingOutput, { kind: 'armour', tier: 2, quantity: 1 });
 });
 
-test('collection stacks identical items with no quantity limit and uses six distinct slots', () => {
+test('collection stacks identical items with no quantity limit and uses two distinct storage squares', () => {
   let game = createGame(() => 0.5);
   game = addInventoryStack(game, { kind: 'food', quantity: 999 });
   game = addInventoryStack(game, { kind: 'food', quantity: 2 });
   assert.equal(game.inventory[0].quantity, 1001);
   assert.equal(game.inventory.filter(Boolean).length, 1);
 
-  for (let tier = 1; tier <= 3; tier += 1) {
-    game = addInventoryStack(game, { kind: 'weapon', tier, quantity: 1 });
-    game = addInventoryStack(game, { kind: 'armour', tier, quantity: 1 });
-  }
-  assert.equal(game.inventory.filter(Boolean).length, 6);
+  game = addInventoryStack(game, { kind: 'weapon', tier: 1, quantity: 1 });
+  assert.equal(game.inventory.filter(Boolean).length, 2);
+  const full = game;
+  assert.equal(addInventoryStack(game, { kind: 'armour', tier: 1, quantity: 1 }), full);
 });
 
 test('station item collection persists in inventory while merchant coins go directly to gold', () => {
@@ -259,11 +301,11 @@ test('three same-tier equipment items merge upward and tier three is capped', ()
 
 test('workers sell for one gold during prep and destroy pending output', () => {
   let game = createGame(() => 0.5);
-  game.workers[2] = createWorker(WORKER_ROLE.COOK);
-  game.workers[2].pendingOutput = { kind: 'food', quantity: 4 };
-  game = sellWorker(game, 2);
+  game.workers[1] = createWorker(WORKER_ROLE.COOK);
+  game.workers[1].pendingOutput = { kind: 'food', quantity: 4 };
+  game = sellWorker(game, 1);
   assert.equal(game.gold, 11);
-  assert.equal(game.workers[2], null);
+  assert.equal(game.workers[1], null);
 });
 
 test('food heals two in a tactics window and is not consumed on full health', () => {

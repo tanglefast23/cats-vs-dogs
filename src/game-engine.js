@@ -2,6 +2,7 @@ import {
   WORKER_ROLE, WORKER_INFO, workerShopEntries, outputForWorker,
   sameInventoryItem, WEAPON_INFO, ARMOUR_INFO, FOOD_HEAL,
 } from './production-rules.js';
+import { catMoveLimit } from './movement-rules.js';
 
 export { WORKER_ROLE, WORKER_INFO } from './production-rules.js';
 
@@ -10,9 +11,14 @@ export const COLS = 6;
 export const CAT_ZONE_START = 10;
 export const MAX_ROUNDS = 10;
 export const ACTIONS_PER_ROUND = 2;
-export const BENCH_SIZE = 6;
+export const BENCH_SIZE = 3;
+export const PRODUCTION_CAPACITY = 2;
+export const STORAGE_CAPACITY = 2;
 export const MAX_FIELD_CATS = 6;
 export const MAX_SHOP_SIZE = 5;
+export const DOG_MOVE_DISTANCE = 2;
+export const FAST_DOG_MOVE_DISTANCE = 3;
+export const DOG_CELL_CAPACITY = 2;
 
 /** Coat 0 orange tabby: column shot. Coat 1 grey/blue: melee tank. Coat 2 white: homing shot. */
 export const CAT_COAT = {
@@ -62,7 +68,7 @@ export const CAT_COAT_INFO = {
     strength: 'Reliable medium damage that can reach any column',
     weakness: 'Deals half or less of Purrcy\'s damage',
     blurb: 'Medium stats · homing',
-    attackDetail: 'Each action, fires one medium-strength sine-wave shot that homes by nearest column first. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
+    attackDetail: 'Each action, fires one medium-strength sine-wave shot at the lowest dog row first, then the nearest column. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
     shopTier: 1,
     unlockRound: 1,
   },
@@ -75,7 +81,7 @@ export const CAT_COAT_INFO = {
     weakness: 'Very low damage; a dog can only be tangled once',
     blurb: 'One-time stop · low damage',
     attackDetail: 'Fires weak homing yarn. The first hit on each dog tangles it so its next unblocked move is skipped; later hits on that dog only deal the low damage.',
-    shopTier: 2,
+    shopTier: 1,
     unlockRound: 1,
   },
   4: {
@@ -183,6 +189,10 @@ export const DOG_ROLE = Object.freeze({
   GROWLER: 'growler',
 });
 
+export function dogMoveDistance(dog) {
+  return dog?.role === DOG_ROLE.JUMPER ? FAST_DOG_MOVE_DISTANCE : DOG_MOVE_DISTANCE;
+}
+
 const DOG_ROLE_STATS = Object.freeze({
   [DOG_ROLE.SCRUFFY]: Object.freeze({
     1: Object.freeze({ hp: 8, attack: 4 }), 2: Object.freeze({ hp: 13, attack: 6 }),
@@ -255,9 +265,9 @@ export const DOG_ROLE_INFO = Object.freeze({
   }),
   [DOG_ROLE.JUMPER]: Object.freeze({
     name: 'Barkour Bandit', unlockRound: 5, role: 'Defence-bypass specialist',
-    strength: 'Leaps over one isolated defender', weakness: 'Low health and a weak bite; layered cats stop it',
-    blurb: 'A fragile bypass dog that punishes isolated defenders.',
-    attackDetail: 'Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
+    strength: 'Moves three squares and leaps over one isolated defender', weakness: 'Low health and a weak bite; layered cats stop it',
+    blurb: 'A fragile three-square sprinter that punishes isolated defenders.',
+    attackDetail: 'Moves one square faster than other dogs. Once per battle, jumps over the cat directly ahead if the landing square is empty. Layered cats stop it.',
   }),
   [DOG_ROLE.MEDIC]: Object.freeze({
     name: 'Dr. Droolittle', unlockRound: 8, role: 'Pack-healing specialist',
@@ -341,7 +351,7 @@ function dogRoleStats(role, attack, stats) {
     case DOG_ROLE.LOBBER:
       return `Bomb ${Math.max(1, Math.floor(attack * 0.6))} splash · Bite ${attack}`;
     case DOG_ROLE.JUMPER:
-      return `Jump 1× · Bite ${attack}`;
+      return `Speed ${FAST_DOG_MOVE_DISTANCE} · Jump 1× · Bite ${attack}`;
     case DOG_ROLE.MEDIC:
       return `Heal ${stats.healPower} 1× · Bite ${attack}`;
     case DOG_ROLE.GROWLER:
@@ -364,7 +374,7 @@ export function dogTooltipInfo(dog) {
     kind: 'dog',
     title: `T${tier} ${roleInfo.name}`,
     stats: `Health ${hp}/${maxHp} · ${dogRoleStats(role, attack, stats)}`,
-    attack: roleInfo.attackDetail,
+    attack: `${roleInfo.attackDetail} Otherwise it advances up to ${dogMoveDistance(dog)} squares, moving only left, right, or down, and attacks as soon as it reaches a defender.`,
     note: `${roleInfo.role} · Strength: ${roleInfo.strength} · Weakness: ${roleInfo.weakness}. ${tierInfo.blurb}`,
   };
 }
@@ -411,8 +421,8 @@ export function createGame(random = Math.random) {
     dogs: [],
     decoys: [],
     bench: [],
-    workers: Array(3).fill(null),
-    inventory: Array(6).fill(null),
+    workers: Array(PRODUCTION_CAPACITY).fill(null),
+    inventory: Array(STORAGE_CAPACITY).fill(null),
     shop: makeShop(random),
     nextWave: generateWave(1, random),
     events: [],
@@ -435,7 +445,12 @@ function copy(game) {
     dogs: game.dogs.map((unit) => ({ ...unit })),
     nextWave: (game.nextWave ?? []).map((unit) => ({ ...unit })),
     decoys: (game.decoys ?? []).map((unit) => ({ ...unit })),
-    bench: game.bench.map(cloneCat),
+    bench: game.bench.map((unit) => unit.kind === 'production-cat'
+      ? {
+        ...unit,
+        pendingOutput: unit.pendingOutput ? { ...unit.pendingOutput } : null,
+      }
+      : cloneCat(unit)),
     workers: game.workers.map((worker) => worker ? {
       ...worker,
       pendingOutput: worker.pendingOutput ? { ...worker.pendingOutput } : null,
@@ -564,7 +579,7 @@ export function purchaseShopFighterToBench(game, shopIndex, targetIndex) {
   const next = copy(game);
   next.bench.push(createCat(slot.level ?? 1, slot.coat));
   finishShopPurchase(next, shopIndex);
-  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} adopted to the bench.`;
+  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} reserved on the Cat Workbench.`;
   return next;
 }
 
@@ -576,7 +591,10 @@ export function purchaseShopFighterToBoard(game, shopIndex, row, col) {
     || game.cats.some((cat) => cat.row === row && cat.col === col)
   ) return game;
   const next = copy(game);
-  next.cats.push({ ...createCat(slot.level ?? 1, slot.coat), row, col });
+  next.cats.push({
+    ...createCat(slot.level ?? 1, slot.coat), row, col,
+    prepOrigin: { row, col }, prepMoved: false,
+  });
   finishShopPurchase(next, shopIndex);
   next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} deployed!`;
   return next;
@@ -587,7 +605,7 @@ export function purchaseShopFighterOnto(game, shopIndex, targetType, targetId) {
   const listName = targetType === 'bench' ? 'bench' : targetType === 'cat' ? 'cats' : null;
   const target = listName ? game[listName].find((cat) => cat.id === targetId) : null;
   if (
-    !slot || !target || target.level !== (slot.level ?? 1)
+    !slot || !target || target.kind === 'production-cat' || target.level !== (slot.level ?? 1)
     || normalizeCoat(target.coat) !== normalizeCoat(slot.coat) || target.level >= 3
   ) return game;
   const next = copy(game);
@@ -623,6 +641,29 @@ export function purchaseShopWorker(game, shopIndex, targetIndex) {
   return next;
 }
 
+export function purchaseShopWorkerToBench(game, shopIndex, targetIndex) {
+  const slot = game.shop[shopIndex];
+  if (
+    game.phase !== 'prep' || game.gold < 3 || !slot || slot.sold
+    || slot.category !== 'worker' || targetIndex < 0 || targetIndex >= BENCH_SIZE
+  ) return game;
+
+  const target = game.bench[targetIndex];
+  if (!target && game.bench.length >= BENCH_SIZE) return game;
+  const worker = createWorker(slot.role, slot.level ?? 1);
+  if (target && (
+    target.kind !== 'production-cat' || target.role !== worker.role
+    || Number(target.level) !== Number(worker.level) || Number(target.level) >= 3
+  )) return game;
+
+  const next = copy(game);
+  if (next.bench[targetIndex]) stackWorkerInto(next.bench[targetIndex], worker);
+  else next.bench.push(worker);
+  finishShopPurchase(next, shopIndex);
+  next.message = `${WORKER_INFO[worker.role].name} reserved on the Cat Workbench.`;
+  return next;
+}
+
 export function moveWorker(game, sourceIndex, targetIndex) {
   if (
     game.phase !== 'prep' || sourceIndex < 0 || sourceIndex >= game.workers.length
@@ -647,6 +688,75 @@ export function mergeWorkerOnto(game, sourceIndex, targetIndex) {
   if (!stackWorkerInto(target, source)) return game;
   next.workers[sourceIndex] = null;
   next.events.push({ type: 'worker-combine', id: target.id, level: target.level, copies: target.copies });
+  return next;
+}
+
+export function moveBenchWorkerToHouse(game, benchIndex, targetIndex) {
+  if (
+    game.phase !== 'prep' || benchIndex < 0 || benchIndex >= game.bench.length
+    || targetIndex < 0 || targetIndex >= game.workers.length
+  ) return game;
+  const source = game.bench[benchIndex];
+  if (source?.kind !== 'production-cat') return game;
+
+  const target = game.workers[targetIndex];
+  if (target && (
+    target.role !== source.role || Number(target.level) !== Number(source.level)
+    || Number(target.level) >= 3
+  )) return game;
+
+  const next = copy(game);
+  const reservedWorker = next.bench[benchIndex];
+  if (next.workers[targetIndex]) {
+    if (!stackWorkerInto(next.workers[targetIndex], reservedWorker)) return game;
+    next.bench.splice(benchIndex, 1);
+  } else {
+    const [worker] = next.bench.splice(benchIndex, 1);
+    next.workers[targetIndex] = worker;
+  }
+  next.message = `${WORKER_INFO[source.role].name} moved into the Production House.`;
+  return next;
+}
+
+export function returnWorkerToBench(game, workerIndex, targetIndex) {
+  if (
+    game.phase !== 'prep' || workerIndex < 0 || workerIndex >= game.workers.length
+    || targetIndex < 0 || targetIndex >= BENCH_SIZE || !game.workers[workerIndex]
+  ) return game;
+  const source = game.workers[workerIndex];
+  const target = game.bench[targetIndex];
+  if (!target && game.bench.length >= BENCH_SIZE) return game;
+  if (target && (
+    target.kind !== 'production-cat' || target.role !== source.role
+    || Number(target.level) !== Number(source.level) || Number(target.level) >= 3
+  )) return game;
+
+  const next = copy(game);
+  const houseWorker = next.workers[workerIndex];
+  if (next.bench[targetIndex]) {
+    if (!stackWorkerInto(next.bench[targetIndex], houseWorker)) return game;
+  } else next.bench.push(houseWorker);
+  next.workers[workerIndex] = null;
+  next.message = `${WORKER_INFO[source.role].name} reserved on the Cat Workbench.`;
+  return next;
+}
+
+export function mergeBenchWorkerOnto(game, sourceIndex, targetIndex) {
+  if (
+    game.phase !== 'prep' || sourceIndex === targetIndex
+    || sourceIndex < 0 || sourceIndex >= game.bench.length
+    || targetIndex < 0 || targetIndex >= game.bench.length
+  ) return game;
+  const next = copy(game);
+  const source = next.bench[sourceIndex];
+  const target = next.bench[targetIndex];
+  if (source?.kind !== 'production-cat' || target?.kind !== 'production-cat') return game;
+  if (!stackWorkerInto(target, source)) return game;
+  next.bench.splice(sourceIndex, 1);
+  next.events.push({ type: 'worker-combine', id: target.id, level: target.level, copies: target.copies });
+  next.message = target.level > source.level
+    ? `${WORKER_INFO[target.role].name} reached level ${target.level} on the Cat Workbench!`
+    : `${WORKER_INFO[target.role].name} stacked on the Cat Workbench.`;
   return next;
 }
 
@@ -678,7 +788,8 @@ export function catSellValue(cat) {
 
 function catForSale(game, sourceType, catId) {
   const collection = sourceType === 'cat' ? game.cats : sourceType === 'bench' ? game.bench : null;
-  return collection?.find((cat) => cat.id === catId) ?? null;
+  const cat = collection?.find((unit) => unit.id === catId) ?? null;
+  return cat?.kind === 'production-cat' ? null : cat;
 }
 
 function equippedItems(cat) {
@@ -696,7 +807,7 @@ export function catSaleQuote(game, sourceType, catId) {
   const preview = copy(game);
   for (const item of equippedItems(cat)) {
     if (addInventoryStackTo(preview, item) < 0) {
-      return { canSell: false, value, reason: 'Storage needs room for equipped items.' };
+      return { canSell: false, value, reason: 'House Storage needs room for equipped items.' };
     }
   }
   return { canSell: true, value, reason: '' };
@@ -717,7 +828,7 @@ export function sellCat(game, sourceType, catId) {
     type: 'sell-cat', catId: cat.id, level: cat.level,
     gold: quote.value, returnedItems,
   });
-  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} adopted for ${quote.value} gold${returnedItems.length ? '; equipment returned to Storage' : ''}.`;
+  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} adopted for ${quote.value} gold${returnedItems.length ? '; equipment returned to House Storage' : ''}.`;
   return next;
 }
 
@@ -779,7 +890,7 @@ export function equipInventoryItem(game, inventoryIndex, targetType, targetId, p
   if (!allowedPhase || !stack || (stack.kind !== 'weapon' && stack.kind !== 'armour')) return game;
   const listName = targetType === 'bench' ? 'bench' : targetType === 'cat' ? 'cats' : null;
   const target = listName ? game[listName].find((cat) => cat.id === targetId) : null;
-  if (!target) return game;
+  if (!target || target.kind === 'production-cat') return game;
   const next = copy(game);
   const nextTarget = next[listName].find((cat) => cat.id === targetId);
   if (stack.kind === 'weapon') {
@@ -828,6 +939,9 @@ function resolveEncore(next, caster, target, random) {
       .sort((a, b) => b.row - a.row).slice(0, 3);
   } else if (ability === 'column-shot') {
     const dog = nearestDogInColumn(target, next.dogs);
+    if (dog) targets = [dog];
+  } else if (ability === 'homing') {
+    const dog = closestHomingDog(target, next.dogs, random);
     if (dog) targets = [dog];
   } else {
     const dog = closestDogByColumnPriority(target, next.dogs, random);
@@ -918,7 +1032,7 @@ export function buyShopCat(game, slotIndex) {
   const next = addCatToBench(game, slot, true);
   next.shop[slotIndex].sold = true;
   next.shop[slotIndex].saved = false;
-  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} added to the bench.`;
+  next.message = `${CAT_COAT_INFO[normalizeCoat(slot.coat)].name} added to the Cat Workbench.`;
   return next;
 }
 
@@ -950,9 +1064,9 @@ export function combineCats(game) {
   const next = copy(game);
   for (let level = 1; level <= 2; level += 1) {
     for (const coat of Object.keys(CAT_COAT_INFO).map(Number)) {
-      while (next.bench.filter((cat) => cat.level === level && normalizeCoat(cat.coat) === coat).length >= 3) {
+      while (next.bench.filter((cat) => cat.kind !== 'production-cat' && cat.level === level && normalizeCoat(cat.coat) === coat).length >= 3) {
         const selected = next.bench
-          .filter((cat) => cat.level === level && normalizeCoat(cat.coat) === coat)
+          .filter((cat) => cat.kind !== 'production-cat' && cat.level === level && normalizeCoat(cat.coat) === coat)
           .slice(0, 3);
         const selectedIds = new Set(selected.map((cat) => cat.id));
         next.bench = next.bench.filter((cat) => !selectedIds.has(cat.id));
@@ -972,15 +1086,15 @@ function applyLevelStats(cat) {
 }
 
 export function mergeUnitOnto(game, sourceType, sourceId, targetType, targetId) {
+  if (game.phase !== 'prep') return game;
   const next = copy(game);
   const sourceList = sourceType === 'bench' ? next.bench : next.cats;
   const targetList = targetType === 'bench' ? next.bench : next.cats;
   const source = sourceList.find((cat) => cat.id === sourceId);
   const target = targetList.find((cat) => cat.id === targetId);
-  if (!source || !target || source.id === target.id) return game;
+  if (!source || !target || source.id === target.id || source.kind === 'production-cat' || target.kind === 'production-cat') return game;
   // Stacks only form within the same coat — each color keeps its own ability line.
   if (source.level !== target.level || normalizeCoat(source.coat) !== normalizeCoat(target.coat)) return game;
-
   // First merge creates a two-copy stack; the third promotes it.
   target.copies = (target.copies ?? 1) + (source.copies ?? 1);
   const removeFrom = sourceType === 'bench' ? 'bench' : 'cats';
@@ -999,14 +1113,18 @@ export function placeCat(game, benchIndex, row, col) {
   if (game.cats.length >= MAX_FIELD_CATS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col)) return game;
   const source = game.bench[benchIndex];
-  if (!source) return game;
+  if (!source || source.kind === 'production-cat') return game;
   if (source.prepOrigin) {
     const distance = Math.abs(row - source.prepOrigin.row) + Math.abs(col - source.prepOrigin.col);
-    if (source.prepMoved || distance > 1) return game;
+    if (source.prepMoved || distance > catMoveLimit(source)) return game;
   }
   const next = copy(game);
   const [cat] = next.bench.splice(benchIndex, 1);
   if (cat.prepOrigin) cat.prepMoved = true;
+  else {
+    cat.prepOrigin = { row, col };
+    cat.prepMoved = false;
+  }
   next.cats.push({ ...cat, row, col });
   return next;
 }
@@ -1014,40 +1132,23 @@ export function placeCat(game, benchIndex, row, col) {
 export function moveCat(game, catId, row, col) {
   if (game.phase !== 'prep' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col && cat.id !== catId)) return game;
+  const source = game.cats.find((unit) => unit.id === catId);
+  if (!source || source.prepMoved) return game;
+  const origin = source.prepOrigin ?? { row: source.row, col: source.col };
+  const distance = Math.abs(row - origin.row) + Math.abs(col - origin.col);
+  if (distance > catMoveLimit(source)) return game;
   const next = copy(game);
   const cat = next.cats.find((unit) => unit.id === catId);
-  if (!cat) return game;
-  if (cat.prepOrigin) {
-    const distance = Math.abs(row - cat.prepOrigin.row) + Math.abs(col - cat.prepOrigin.col);
-    if (cat.prepMoved || distance > 1) return game;
-    cat.prepMoved = true;
-  }
+  cat.prepOrigin ??= origin;
+  cat.prepMoved = true;
   cat.row = row;
   cat.col = col;
   return next;
 }
 
-// The one combat reposition: 1 cat, 1 orthogonal square, once per battle.
-export function moveCatInTactics(game, catId, row, col) {
-  if (game.phase !== 'tactics' || game.tacticsMoveUsed) return game;
-  if (row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
-  const source = game.cats.find((cat) => cat.id === catId);
-  if (!source) return game;
-  if (Math.abs(row - source.row) + Math.abs(col - source.col) !== 1) return game;
-  const blocked = game.cats.some((cat) => cat.id !== catId && cat.row === row && cat.col === col)
-    || game.decoys.some((decoy) => decoy.row === row && decoy.col === col)
-    || game.dogs.some((dog) => dog.hp > 0 && dog.row === row && dog.col === col);
-  if (blocked) return game;
-  const next = copy(game);
-  const cat = next.cats.find((unit) => unit.id === catId);
-  const fromRow = cat.row;
-  const fromCol = cat.col;
-  cat.row = row;
-  cat.col = col;
-  next.tacticsMoveUsed = true;
-  next.events.push({ type: 'tactics-move', id: cat.id, fromRow, fromCol, row, col });
-  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} repositioned — combat move spent.`;
-  return next;
+// Kept as a compatibility guard for older callers: manual battle movement is disabled.
+export function moveCatInTactics(game) {
+  return game;
 }
 
 export function returnCatToBench(game, catId) {
@@ -1069,7 +1170,7 @@ export function availableDogRolesForRound(round = 1) {
 }
 
 export function waveCountForRound(round = 1) {
-  const counts = [1, 2, 2, 3, 3, 4, 4, 5, 5, 6];
+  const counts = [2, 3, 3, 4, 4, 5, 5, 6, 7, 8];
   const safeRound = Math.max(1, Math.floor(Number(round) || 1));
   return counts[Math.min(safeRound - 1, counts.length - 1)];
 }
@@ -1097,9 +1198,10 @@ export function generateWave(round, random = Math.random) {
   const minTier = minimumDogTierForRound(round);
   const maxTier = shopTierForRound(round);
   const availableRoles = availableDogRolesForRound(round);
-  const available = Array.from({ length: COLS }, (_, col) => col);
+  let available = [];
   const dogs = [];
   for (let i = 0; i < count; i += 1) {
+    if (!available.length) available = Array.from({ length: COLS }, (_, col) => col);
     const pick = Math.floor(random() * available.length);
     const col = available.splice(pick, 1)[0];
     const tierSpan = Math.max(1, maxTier - minTier + 1);
@@ -1183,7 +1285,7 @@ function nearestDogInColumn(cat, dogs) {
 }
 
 /**
- * Hissiletoe targeting:
+ * Column-priority targeting:
  * 1) nearest column first (0 = own column, then 1, then 2, ...)
  * 2) within that column distance, lowest dog on the board (highest row index = closest to cats)
  * 3) full ties (same col distance + same row) → random among them
@@ -1206,6 +1308,38 @@ export function closestDogByColumnPriority(cat, dogs, random = Math.random) {
   const ties = nearestColumns.filter((dog) => dog.row === bestRow);
   if (ties.length === 1) return ties[0];
   return ties[Math.floor(random() * ties.length)];
+}
+
+/**
+ * Hissiletoe targeting:
+ * 1) lowest dog row first (highest row index = closest to the cats)
+ * 2) within that row, nearest column to Hissiletoe
+ * 3) equal row + column distance → random among them
+ */
+export function closestDogByRowPriority(cat, dogs, random = Math.random) {
+  const candidates = livingDogs(dogs);
+  if (!candidates.length) return null;
+
+  let bestRow = -Infinity;
+  for (const dog of candidates) {
+    bestRow = Math.max(bestRow, dog.row);
+  }
+
+  const lowestRow = candidates.filter((dog) => dog.row === bestRow);
+  let bestColDist = Infinity;
+  for (const dog of lowestRow) {
+    bestColDist = Math.min(bestColDist, Math.abs(dog.col - cat.col));
+  }
+
+  const ties = lowestRow.filter((dog) => Math.abs(dog.col - cat.col) === bestColDist);
+  if (ties.length === 1) return ties[0];
+  return ties[Math.floor(random() * ties.length)];
+}
+
+function closestHomingDog(cat, dogs, random = Math.random) {
+  return normalizeCoat(cat.coat) === CAT_COAT.WHITE
+    ? closestDogByRowPriority(cat, dogs, random)
+    : closestDogByColumnPriority(cat, dogs, random);
 }
 
 function dogInMeleeFront(cat, dogs) {
@@ -1312,6 +1446,141 @@ function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
   });
 }
 
+function dogCountAt(dogs, row, col, exceptId = null) {
+  return dogs.filter((dog) => dog.hp > 0
+    && dog.id !== exceptId
+    && dog.row === row
+    && dog.col === col).length;
+}
+
+function defenderAhead(next, dog) {
+  return next.cats.find((cat) => cat.hp > 0 && cat.col === dog.col && cat.row === dog.row + 1)
+    ?? next.decoys.find((decoy) => decoy.hp > 0 && decoy.col === dog.col && decoy.row === dog.row + 1)
+    ?? null;
+}
+
+function pushDogMove(next, dog, fromRow, fromCol, path = []) {
+  if (dog.row === fromRow && dog.col === fromCol) return;
+  next.events.push({
+    type: 'move', id: dog.id, fromRow, fromCol, toRow: dog.row, row: dog.row, col: dog.col,
+    path: [{ row: fromRow, col: fromCol }, ...path],
+  });
+}
+
+function meetDefender(next, dog, target, fromRow, fromCol, path = []) {
+  const landingRow = dog.row + 2;
+  const landingBlocked = landingRow >= ROWS
+    || dogCountAt(next.dogs, landingRow, dog.col, dog.id) >= DOG_CELL_CAPACITY
+    || next.cats.some((cat) => cat.hp > 0 && cat.col === dog.col && cat.row === landingRow)
+    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.col === dog.col && decoy.row === landingRow);
+  if (dog.role === DOG_ROLE.JUMPER && !dog.jumped && !landingBlocked) {
+    dog.row = landingRow;
+    dog.jumped = true;
+    next.events.push({
+      type: 'dog-jump', id: dog.id, fromRow, fromCol, toRow: dog.row,
+      row: dog.row, col: dog.col, over: target.id,
+      path: [{ row: fromRow, col: fromCol }, ...path, { row: dog.row, col: dog.col }],
+    });
+    return;
+  }
+
+  pushDogMove(next, dog, fromRow, fromCol, path);
+  applyDogDamage(next, dog, target);
+}
+
+const DOG_DIRECTIONS = Object.freeze({
+  down: Object.freeze({ row: 1, col: 0 }),
+  right: Object.freeze({ row: 0, col: 1 }),
+  left: Object.freeze({ row: 0, col: -1 }),
+});
+
+function defenderAheadFrom(next, row, col) {
+  return next.cats.some((cat) => cat.hp > 0 && cat.row === row + 1 && cat.col === col)
+    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === row + 1 && decoy.col === col);
+}
+
+function dogCellBlocked(next, dog, row, col) {
+  if (row < 0 || row > ROWS || col < 0 || col >= COLS) return true;
+  if (row === ROWS) return false;
+  return dogCountAt(next.dogs, row, col, dog.id) >= DOG_CELL_CAPACITY
+    || next.cats.some((cat) => cat.hp > 0 && cat.row === row && cat.col === col)
+    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === row && decoy.col === col);
+}
+
+function dogDirectionOptions(next, dog, position, lastDirection, horizontalDirection) {
+  if (lastDirection === 'left' || lastDirection === 'right') {
+    const down = DOG_DIRECTIONS.down;
+    const downBlocked = dogCellBlocked(next, dog, position.row + down.row, position.col + down.col);
+    return downBlocked ? [horizontalDirection] : ['down'];
+  }
+  return horizontalDirection ? ['down', horizontalDirection] : ['down', 'right', 'left'];
+}
+
+function chooseDogRoute(next, dog, distance) {
+  function search(position, stepsLeft, lastDirection = null, horizontalDirection = null, path = []) {
+    if (stepsLeft === 0 || position.row >= ROWS) return { path, complete: true };
+    if (defenderAheadFrom(next, position.row, position.col)) return { path, complete: true };
+
+    const candidates = dogDirectionOptions(
+      next, dog, position, lastDirection, horizontalDirection,
+    ).flatMap((direction) => {
+      const delta = DOG_DIRECTIONS[direction];
+      if (!delta) return [];
+      const target = { row: position.row + delta.row, col: position.col + delta.col };
+      if (dogCellBlocked(next, dog, target.row, target.col)) return [];
+      return [search(
+        target,
+        stepsLeft - 1,
+        direction,
+        direction === 'left' || direction === 'right' ? direction : horizontalDirection,
+        [...path, target],
+      )];
+    });
+
+    return candidates.find((candidate) => candidate.complete)
+      ?? candidates.sort((left, right) => right.path.length - left.path.length)[0]
+      ?? { path, complete: false };
+  }
+
+  return search({ row: dog.row, col: dog.col }, distance);
+}
+
+function advanceDog(next, dog) {
+  const fromRow = dog.row;
+  const fromCol = dog.col;
+  const immediateDefender = defenderAhead(next, dog);
+  if (immediateDefender) {
+    meetDefender(next, dog, immediateDefender, fromRow, fromCol);
+    return;
+  }
+
+  const route = chooseDogRoute(next, dog, dogMoveDistance(dog));
+  if (dog.tangled && route.path.length) {
+    dog.tangled = false;
+    next.events.push({ type: 'tangle-skip', id: dog.id, row: dog.row, col: dog.col });
+    return;
+  }
+
+  const travelled = [];
+  for (const step of route.path) {
+    const target = defenderAhead(next, dog);
+    if (target) {
+      meetDefender(next, dog, target, fromRow, fromCol, travelled);
+      return;
+    }
+    dog.row = step.row;
+    dog.col = step.col;
+    travelled.push(step);
+  }
+
+  const reachedDefender = defenderAhead(next, dog);
+  if (reachedDefender) {
+    meetDefender(next, dog, reachedDefender, fromRow, fromCol, travelled);
+    return;
+  }
+  pushDogMove(next, dog, fromRow, fromCol, travelled);
+}
+
 export function resolveSection(game) {
   if (game.phase === 'gameover' || game.phase === 'victory') return game;
   const next = copy(game);
@@ -1403,7 +1672,7 @@ export function resolveSection(game) {
     }
 
     if (ability === 'homing') {
-      const target = closestDogByColumnPriority(cat, next.dogs, game.random);
+      const target = closestHomingDog(cat, next.dogs, game.random);
       if (target) {
         pushDamageEvent(next.events, 'shot', cat, target, {
           fromCol: cat.col,
@@ -1453,8 +1722,13 @@ export function resolveSection(game) {
   });
   next.dogs = next.dogs.filter((dog) => dog.hp > 0);
 
-  // Front dogs act first so followers may advance into newly opened cells.
-  const actingDogs = [...next.dogs].sort((a, b) => b.row - a.row);
+  // Ready medics patch the pack before faster movement can carry patients out of range.
+  // All other dogs keep front-to-back order so followers may advance into opened cells.
+  const actingDogs = [...next.dogs].sort((a, b) => {
+    const aMedic = a.role === DOG_ROLE.MEDIC && !a.healUsed ? 1 : 0;
+    const bMedic = b.role === DOG_ROLE.MEDIC && !b.healUsed ? 1 : 0;
+    return bMedic - aMedic || b.row - a.row;
+  });
   for (const dog of actingDogs) {
     if (dog.frozenActions > 0) {
       dog.frozenActions -= 1;
@@ -1567,36 +1841,7 @@ export function resolveSection(game) {
         continue;
       }
     }
-    const blockingCat = next.cats.find((cat) => cat.col === dog.col && cat.row === dog.row + 1 && cat.hp > 0)
-      ?? next.decoys.find((decoy) => decoy.col === dog.col && decoy.row === dog.row + 1 && decoy.hp > 0);
-    if (blockingCat) {
-      const landingRow = dog.row + 2;
-      const landingBlocked = landingRow >= ROWS
-        || next.dogs.some((other) => other.id !== dog.id && other.col === dog.col && other.row === landingRow)
-        || next.cats.some((cat) => cat.hp > 0 && cat.col === dog.col && cat.row === landingRow)
-        || next.decoys.some((decoy) => decoy.hp > 0 && decoy.col === dog.col && decoy.row === landingRow);
-      if (dog.role === DOG_ROLE.JUMPER && !dog.jumped && !landingBlocked) {
-        const fromRow = dog.row;
-        dog.row = landingRow;
-        dog.jumped = true;
-        next.events.push({
-          type: 'dog-jump', id: dog.id, fromRow, toRow: dog.row,
-          row: dog.row, col: dog.col, over: blockingCat.id,
-        });
-      } else {
-        applyDogDamage(next, dog, blockingCat);
-      }
-    } else {
-      const dogAhead = next.dogs.some((other) => other.id !== dog.id && other.col === dog.col && other.row === dog.row + 1);
-      if (!dogAhead && dog.tangled) {
-        dog.tangled = false;
-        next.events.push({ type: 'tangle-skip', id: dog.id, row: dog.row, col: dog.col });
-      } else if (!dogAhead) {
-        const fromRow = dog.row;
-        dog.row += 1;
-        next.events.push({ type: 'move', id: dog.id, fromRow, toRow: dog.row, row: dog.row, col: dog.col });
-      }
-    }
+    advanceDog(next, dog);
   }
   next.cats = next.cats.filter((cat) => cat.hp > 0);
   next.decoys = next.decoys.filter((decoy) => decoy.hp > 0);
@@ -1647,9 +1892,8 @@ export function finishRound(game) {
     : next.dogs.length === 0
       ? `Wave cleared! Round ${next.round} prep: 10 fresh gold!`
       : `Round ${next.round} prep: 10 fresh gold!`;
-  // Surviving cats heal between rounds for a forgiving first level.
+  // Preserve surviving cats' health while resetting round-scoped effects.
   next.cats.forEach((cat) => {
-    cat.hp = cat.maxHp;
     cat.prepOrigin = { row: cat.row, col: cat.col };
     cat.prepMoved = false;
     cat.guard = 0;

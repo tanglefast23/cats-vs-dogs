@@ -21,7 +21,11 @@
           <div id="dog-preview-grid" class="dog-preview-grid"></div>
         </aside>
         <aside class="house-wing" aria-label="Production House">
-          <div id="production-grid" class="production-grid" aria-label="Production workers and stations"></div>
+          <div id="production-grid" class="production-grid" aria-label="Two production cats and House storage">
+            <section class="house-storage-bin" aria-label="House item storage">
+              <div id="inventory" class="inventory-grid house-storage-grid"></div>
+            </section>
+          </div>
         </aside>
         <div class="board-frame">
           <div id="board" class="board">
@@ -68,12 +72,12 @@
         <div id="shop" class="shop-grid"></div>
       </section>
 
-      <section class="inventory-panel control-inventory" aria-label="Item inventory">
+      <section class="workbench-panel" aria-label="Cat Workbench">
         <div class="panel-heading compact">
-          <div><span class="tiny-label">FOOD · WEAPONS · ARMOUR</span><h2>Storage <small id="inventory-count">0/6</small></h2></div>
+          <div><span class="tiny-label">RESERVE · MERGE · DEPLOY</span><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
         </div>
-        <div id="inventory" class="inventory-grid"></div>
-        <p class="production-help">Collect output from the House before its next production cycle replaces it.</p>
+        <div id="workbench" class="workbench-grid"></div>
+        <p class="workbench-help">Any cat can wait here. Stack 3 matching cats to level up, then deploy fighters to the yard or production cats to the House.</p>
       </section>
 
       <section id="adoption-box" class="adoption-box" aria-label="Adoption Box sell target">

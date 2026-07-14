@@ -93,7 +93,7 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 
 - Field cap: **6 cats**, shown in the HUD; purchases and bench placements cannot create a seventh field cat, while moves and merges remain legal.
 - Merge curve: every coat's level 2 health and attack are just over 3× level 1; level 3 is just over 3× level 2.
-- Wave sizes by round: **1, 2, 2, 3, 3, 4, 4, 5, 5, 6**.
+- Wave sizes by round: **2, 3, 3, 4, 4, 5, 5, 6, 7, 8**.
 - Tier floors: tier 1 in rounds 1–4, tier 2 in rounds 5–8, and tier 3 in rounds 9–10.
 - Featured specialists: Fetch Armstrong and Bone Jovi are forced into round 6; Bone Jovi and Dr. Droolittle into round 8; the last two waves guarantee three ranged/support roles, including Growl Gadot in round 10.
 - Tactics-window movement: `moveCatInTactics` moves 1 cat 1 orthogonal square onto an empty legal tile, once per combat (`tacticsMoveUsed`, reset by `startRound`); drag-only during tactics (clicks stay reserved for ability targeting), with the drop rule blocking mid-combat deploys/merges and the tactics-help line advertising the move until it is spent.

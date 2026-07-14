@@ -16,6 +16,7 @@ import {
   createDog,
   createGame,
   finishRound,
+  mergeUnitOnto,
   moveCat,
   moveCatInTactics,
   openTacticsWindow,
@@ -75,7 +76,7 @@ test('food is consumed only during a tactics window', () => {
   assert.equal(game.inventory[0], null);
 });
 
-test('every cat can move one square between rounds, once per prep', () => {
+test('melee cats move one square and smaller cats move two during setup, once per prep', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.GREY, 12, 1);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
@@ -89,9 +90,32 @@ test('every cat can move one square between rounds, once per prep', () => {
   assert.equal(game.cats.find((cat) => cat.id === meleeId).row, 11);
   assert.equal(moveCat(game, meleeId, 11, 2), game, 'a cat only relocates once per prep');
 
-  assert.equal(moveCat(game, rangedId, 10, 4), game, 'ranged cats cannot move two squares');
-  game = moveCat(game, rangedId, 11, 4);
-  assert.equal(game.cats.find((cat) => cat.id === rangedId).row, 11);
+  game = moveCat(game, rangedId, 10, 4);
+  assert.equal(game.cats.find((cat) => cat.id === rangedId).row, 10);
+  assert.equal(moveCat(game, rangedId, 11, 4), game, 'a ranged cat still relocates only once per prep');
+});
+
+test('a newly deployed cat gets one range-limited setup move after its free placement', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
+  const catId = game.cats[0].id;
+
+  game = moveCat(game, catId, 10, 2);
+  assert.deepEqual([game.cats[0].row, game.cats[0].col], [10, 2]);
+  assert.equal(moveCat(game, catId, 10, 3), game, 'the one setup move is now spent');
+});
+
+test('a battlefield merge bypasses movement distance and the spent-move flag', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 0);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 3);
+  const [source, target] = game.cats;
+  game = moveCat(game, source.id, 11, 0);
+
+  const merged = mergeUnitOnto(game, 'cat', source.id, 'cat', target.id);
+  assert.notEqual(merged, game);
+  assert.equal(merged.cats.length, 1);
+  assert.equal(merged.cats[0].copies, 2);
 });
 
 test('drag validation reads prepOrigin from real engine cats, so highlights match engine limits', () => {
@@ -117,7 +141,7 @@ test('drag validation reads prepOrigin from real engine cats, so highlights matc
   assert.equal(drop(melee, 10, 1).type, 'invalid', 'melee highlight must not promise a two-square move');
   assert.equal(drop(melee, 11, 1).type, 'move');
   assert.equal(drop(ranged, 10, 2).type, 'invalid', 'ranged highlight must not promise a four-square move');
-  assert.equal(drop(ranged, 10, 4).type, 'invalid', 'ranged cats also stop at one square');
+  assert.equal(drop(ranged, 10, 4).type, 'move', 'smaller ranged cats may move two squares');
   assert.equal(drop(ranged, 11, 4).type, 'move');
   assert.equal(moveCat(game, melee.id, 10, 1), game, 'engine rejects the same drop the highlight rejects');
 });
@@ -171,9 +195,13 @@ test('Stormcaller damages every living dog in one selected column', () => {
   game.cats = [createCat(2, CAT_COAT.STORM)];
   game.cats[0].row = 13; game.cats[0].col = 0;
   game.dogs = [createDog(3, 2, 4), createDog(3, 5, 4), createDog(3, 4, 2)];
+  const struckDogIds = game.dogs.filter((dog) => dog.col === 4).map((dog) => dog.id);
   game.phase = 'tactics';
   game = useActiveAbility(game, game.cats[0].id, { col: 4 });
   assert.deepEqual(game.dogs.map((dog) => dog.hp), [15, 15, 19]);
+  const strikes = game.events.filter((event) => event.type === 'spell' && event.style === 'lightning');
+  assert.deepEqual(strikes.map((event) => event.to), struckDogIds);
+  assert.deepEqual(strikes.map((event) => [event.toRow, event.col]), [[2, 4], [5, 4]]);
 });
 
 test('Encore Maestro grants one reduced-strength immediate allied attack', () => {
@@ -188,7 +216,7 @@ test('Encore Maestro grants one reduced-strength immediate allied attack', () =>
   assert.equal(game.events.some((event) => event.type === 'encore'), true);
 });
 
-test('starting a battle resets active casts and finishing fully heals survivors', () => {
+test('starting a battle resets active casts without healing survivors between rounds', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.FROST, 13, 0);
   game.cats[0].activeUsed = true;
@@ -196,69 +224,21 @@ test('starting a battle resets active casts and finishing fully heals survivors'
   game = startRound(game);
   assert.equal(game.cats[0].activeUsed, false);
   game = finishRound(game);
-  assert.equal(game.cats[0].hp, game.cats[0].maxHp);
+  assert.equal(game.cats[0].hp, 1);
 });
 
-test('a cat can reposition one square during a tactics window, once per combat', () => {
+test('manual cat movement stays disabled during a tactics window', () => {
   let game = createGame(() => 0.5);
-  assert.equal(game.tacticsMoveUsed, false, 'new games start with the combat move available');
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
   game = startRound(game);
   game = openTacticsWindow(game);
   const catId = game.cats[0].id;
 
-  game = moveCatInTactics(game, catId, 12, 3);
-  const moved = game.cats.find((cat) => cat.id === catId);
-  assert.deepEqual([moved.row, moved.col], [12, 3]);
-  assert.equal(game.tacticsMoveUsed, true);
-  assert.equal(game.events.some((event) => event.type === 'tactics-move'), true);
-
-  assert.equal(moveCatInTactics(game, catId, 12, 2), game, 'the single combat move is spent');
+  assert.equal(moveCatInTactics(game, catId, 12, 3), game);
+  assert.deepEqual([game.cats[0].row, game.cats[0].col], [12, 2]);
 });
 
-test('tactics moves obey the one-square, empty-target rules', () => {
-  let game = createGame(() => 0.5);
-  game = placeCoat(game, CAT_COAT.ORANGE, 10, 2);
-  game = placeCoat(game, CAT_COAT.GREY, 10, 3);
-  game = startRound(game);
-  game = openTacticsWindow(game);
-  const catId = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE).id;
-
-  assert.equal(moveCatInTactics(game, catId, 10, 4), game, 'two squares is too far');
-  assert.equal(moveCatInTactics(game, catId, 11, 3), game, 'diagonals are not a single step');
-  assert.equal(moveCatInTactics(game, catId, 10, 3), game, 'blocked by an ally');
-  assert.equal(moveCatInTactics(game, catId, 9, 2), game, 'cannot leave the cat zone');
-
-  game.dogs = [createDog(1, 11, 2)];
-  assert.equal(moveCatInTactics(game, catId, 11, 2), game, 'blocked by a dog');
-
-  game.decoys = [{ id: 'decoy-1', kind: 'phantom-cat', row: 10, col: 1, hp: 3, maxHp: 3 }];
-  assert.equal(moveCatInTactics(game, catId, 10, 1), game, 'blocked by a decoy');
-});
-
-test('the combat reposition is tactics-only and refreshes each battle', () => {
-  let game = createGame(() => 0.5);
-  game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
-  const catId = game.cats[0].id;
-  assert.equal(moveCatInTactics(game, catId, 12, 3), game, 'prep uses the normal move instead');
-  game = startRound(game);
-  assert.equal(moveCatInTactics(game, catId, 12, 3), game, 'live combat is not a tactics window');
-
-  game = openTacticsWindow(game);
-  game = moveCatInTactics(game, catId, 12, 3);
-  assert.equal(game.tacticsMoveUsed, true);
-
-  game = continueCombat(game);
-  game = finishRound(game);
-  assert.equal(game.phase, 'prep');
-  game = startRound(game);
-  assert.equal(game.tacticsMoveUsed, false, 'a new battle grants a fresh combat move');
-  game = openTacticsWindow(game);
-  game = moveCatInTactics(game, catId, 12, 2);
-  assert.equal(game.cats.find((cat) => cat.id === catId).col, 2);
-});
-
-test('drag rules allow exactly one single-square tactics reposition mid-combat', () => {
+test('drag rules reject all manual movement during a tactics window', () => {
   const drop = (source, target, extra = {}) => getDropAction({
     source,
     target,
@@ -272,14 +252,8 @@ test('drag rules allow exactly one single-square tactics reposition mid-combat',
 
   assert.deepEqual(
     drop(cat, { kind: 'cell', row: 12, col: 3, occupied: null }),
-    { type: 'tactics-move', row: 12, col: 3 },
+    { type: 'invalid', reason: 'phase' },
   );
-  assert.equal(
-    drop(cat, { kind: 'cell', row: 12, col: 3, occupied: null }, { tacticsMoveUsed: true }).type,
-    'invalid',
-    'the spent combat move blocks further drags',
-  );
-  assert.equal(drop(cat, { kind: 'cell', row: 12, col: 4, occupied: null }).type, 'invalid', 'two squares is too far');
   assert.equal(
     drop(cat, { kind: 'cell', row: 12, col: 3, occupied: { id: 'cat-2', level: 1, coat: CAT_COAT.ORANGE } }).type,
     'invalid',
