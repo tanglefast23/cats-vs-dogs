@@ -787,6 +787,18 @@ export function drawDog(canvas, tier = 1, role = 'scruffy') {
   drawDogGear(ctx, tier, DOG_GEOM[safeRole]);
 }
 
+/**
+ * Where a unit's face sits inside its 32×32 tile, as a 0–1 fraction of the sprite.
+ * The helm anchor already marks each head (it is where the helmet is fitted), so the
+ * KO X-eyes reuse it rather than inventing a second table. Sits a few pixels below the
+ * helmet line, which is where the eyes actually are on every body.
+ */
+export function headAnchor(kind, key) {
+  const geom = kind === 'dog' ? DOG_GEOM[key] : CAT_GEOM[key];
+  const [x, y, width] = geom?.helm ?? [10, 5, 13];
+  return { x: (x + width / 2) / 32, y: (y + 6) / 32 };
+}
+
 export function drawBackyard(canvas) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;

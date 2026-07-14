@@ -953,13 +953,66 @@ h1 span { color: var(--orange); font-size: .75em; }
   border-width: 2px;
   box-shadow: 0 0 0 1px #ff9f3f, 0 0 8px 3px rgba(255,245,118,.75);
 }
-.homing-projectile { width: 11px; height: 14px; border-radius: 55% 55% 40% 40%; border-color: #5f7f99; background: linear-gradient(#ffffff, #c9e9ff 55%, #8ec4ef); box-shadow: 0 0 0 2px #9ec5e8, 0 0 16px 7px rgba(170, 220, 255, .88), 0 8px 10px -4px rgba(160, 210, 255, .55); }
-.homing-projectile::after { left: 3px; top: 2px; width: 3px; height: 3px; background: #fff; border-radius: 50%; }
-.medic-projectile { border-color: #39855a; background: #bff2c7; box-shadow: 0 0 0 2px #69c789, 0 0 16px 7px rgba(130, 245, 160, .72); }
-.splash-projectile { border-radius: 50%; border-color: #34233f; background: #9d72b4; box-shadow: 0 0 0 2px #e3a24c, 0 0 14px 5px rgba(197, 111, 221, .72); }
-.splash-secondary-projectile { width: 7px; height: 7px; border-width: 2px; border-color: #5f3b72; background: #d89aef; }
-.piercing-projectile { width: 8px; height: 20px; border-color: #5a3b94; background: linear-gradient(90deg, #67f5ff, #fff, #ef91ff); box-shadow: 0 0 0 2px #ba8cff, 0 0 18px 8px rgba(101, 237, 255, .8); }
-.tennis-projectile {
+/* Purrcy's pop-gun pellet — the plain shot every other skin is measured against. */
+.projectile-pellet { width: 10px; height: 10px; border-radius: 50%; }
+/* Hissiletoe's guided shot. */
+.projectile-homing { width: 11px; height: 14px; border-radius: 55% 55% 40% 40%; border-color: #5f7f99; background: linear-gradient(#ffffff, #c9e9ff 55%, #8ec4ef); box-shadow: 0 0 0 2px #9ec5e8, 0 0 16px 7px rgba(170, 220, 255, .88), 0 8px 10px -4px rgba(160, 210, 255, .55); }
+.projectile-homing::after { left: 3px; top: 2px; width: 3px; height: 3px; background: #fff; border-radius: 50%; }
+/* Frosty Paws — a shard off the frost staff. */
+.projectile-frost-shard {
+  width: 9px; height: 16px; border-color: #4d94b8;
+  background: linear-gradient(#f4ffff, #9fe9ff 60%, #4fb6dc);
+  clip-path: polygon(50% 0, 100% 32%, 78% 100%, 22% 100%, 0 32%);
+  box-shadow: 0 0 0 2px #cdf4ff, 0 0 14px 6px rgba(120, 226, 255, .75);
+}
+/* Purrtal — a mote torn out of the rift. */
+.projectile-rift-mote {
+  width: 13px; height: 13px; border-radius: 50%; border-color: #3d2a72;
+  background: radial-gradient(circle at 50% 50%, #f0e6ff 0 22%, #9b7cff 24% 60%, #5ff4ef 62%);
+  box-shadow: 0 0 0 2px #5ff4ef, 0 0 16px 7px rgba(155, 124, 255, .8);
+}
+/* Faux Paw — a flung playing card. */
+.projectile-mirage-card {
+  width: 10px; height: 14px; border-radius: 2px; border-color: #6e3f82;
+  background: linear-gradient(#fff, #f3d8ff);
+  box-shadow: 0 0 0 2px #d8a9e8, 0 0 12px 4px rgba(216, 169, 232, .7);
+}
+/* Thunderpaws — a loose crackle of static. */
+.projectile-static-spark {
+  width: 12px; height: 12px; border: none; background: #fff36b;
+  clip-path: polygon(42% 0, 62% 38%, 100% 42%, 66% 60%, 78% 100%, 44% 70%, 8% 92%, 26% 54%, 0 30%, 38% 34%);
+  box-shadow: 0 0 12px 5px rgba(255, 227, 95, .85);
+}
+.projectile-static-spark::after { content: none; }
+/* Meowstro — a struck note. */
+.projectile-music-note {
+  width: 11px; height: 11px; border-radius: 50%; border-color: #402337;
+  background: #ffe56e;
+  box-shadow: 6px -7px 0 -3px #ffe56e, 0 0 0 2px #f1c083, 0 0 12px 4px rgba(255, 229, 110, .7);
+}
+/* Knotty Kitty — the yarn ball, still trailing its string. */
+.projectile-yarn {
+  width: 13px; height: 13px; border-radius: 50%; border-color: #9a3f77;
+  background: radial-gradient(circle at 34% 30%, #ffb6dc 0 26%, #df6ba8 28%);
+  box-shadow: 0 0 0 2px #ffb6dc, 0 0 10px 3px rgba(223, 107, 168, .7);
+}
+.projectile-yarn.has-tether::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 2px; height: 46px;
+  background: repeating-linear-gradient(#df6ba8 0 4px, transparent 4px 8px);
+  transform: translate(-50%, 0); opacity: .8;
+}
+/* Bombay Boom — the satchel charge, fuse lit. */
+.projectile-bomb {
+  width: 15px; height: 15px; border-radius: 50%; border-color: #14181f;
+  background: radial-gradient(circle at 34% 30%, #6b7684 0 20%, #232c3d 24%);
+  box-shadow: 0 0 0 2px #4a5566, 0 0 12px 4px rgba(255, 160, 72, .55);
+}
+.projectile-bomb::after {
+  content: ''; left: 50%; top: -6px; width: 4px; height: 4px; border-radius: 50%;
+  background: #ffe08a; box-shadow: 0 0 8px 4px #ff7048; animation: fuse-crackle .12s steps(2) infinite alternate;
+}
+@keyframes fuse-crackle { from { transform: scale(.7); } to { transform: scale(1.35); } }
+.projectile-tennis {
   width: 13px;
   height: 13px;
   border-radius: 50%;
@@ -967,7 +1020,7 @@ h1 span { color: var(--orange); font-size: .75em; }
   background: radial-gradient(circle at 35% 30%, #f7ff9a 0 18%, #cce842 20% 68%, #79a72d 70%);
   box-shadow: 0 0 0 2px #efff75, 0 3px 8px rgba(35, 62, 30, .6);
 }
-.frisbee-projectile {
+.projectile-frisbee {
   width: 17px;
   height: 7px;
   border-radius: 50%;
@@ -975,22 +1028,14 @@ h1 span { color: var(--orange); font-size: .75em; }
   background: linear-gradient(#9fe8ff, #3ea4d9 55%, #276f9d);
   box-shadow: 0 0 0 2px #d8f7ff, 0 0 10px rgba(80, 196, 243, .8);
 }
-.bone-bomb-projectile {
+/* Bone Jovi's mortar shell. */
+.projectile-bone-bomb {
   width: 15px;
   height: 9px;
   border-radius: 45%;
   border-color: #5b3927;
   background: #f3e4bd;
   box-shadow: -5px 0 0 -1px #f3e4bd, 5px 0 0 -1px #f3e4bd, 0 0 9px #ff9e3d;
-}
-.bone-bomb-secondary-projectile {
-  width: 8px;
-  height: 8px;
-  border-width: 2px;
-  border-radius: 50%;
-  border-color: #7b342c;
-  background: #ffb344;
-  box-shadow: 0 0 9px #ff713d;
 }
 .miss-fizzle {
   opacity: .55;
@@ -1004,8 +1049,170 @@ h1 span { color: var(--orange); font-size: .75em; }
 .damage-number.to-dog { color: #ffd743; text-shadow: 2px 2px 0 #5b3d10, -1px -1px 0 #fff4dc; }
 .heal-number { position: absolute; color: #7cf08d; font-size: 16px; font-weight: 900; text-shadow: 2px 2px 0 #194b31, -1px -1px 0 #efffdc; transform: translate(-50%, -60%); animation: heal-rise .68s steps(6) forwards; z-index: 19; }
 .unit.healed canvas { filter: brightness(1.25) drop-shadow(0 0 6px #83f29a); }
+/* ---------------------------------------------------------------------------
+   Getting hurt.
+   Everything flashes red, but it is thrown along the line from whatever hit it,
+   and the shake depends on what landed: a bite rattles harder than a pellet.
+   --hurt-dx / --hurt-dy are set per hit and point away from the attacker.
+   --------------------------------------------------------------------------- */
 .unit.hurt::after { content: ''; position: absolute; inset: 9%; background: rgba(255,32,32,.55); border: 3px solid #ffdfd4; animation: hurt-overlay .34s steps(4) forwards; z-index: 2; }
 .unit.hurt canvas { animation: hurt-flash .34s steps(4); }
+.unit.hurt { z-index: 6; }
+/* Added to the unit's own transform, never replacing it: stacked dogs already carry a
+   stack offset, and overwriting it would snap them across the tile as they got hit. */
+.unit.hurt.shake-soft { animation: knockback-soft .34s steps(4); animation-composition: add; }
+.unit.hurt.shake-hard { animation: knockback-hard .34s steps(4); animation-composition: add; }
+.unit.hurt.shake-rattle { animation: knockback-rattle .34s steps(6); animation-composition: add; }
+@keyframes knockback-soft {
+  0% { transform: translate(0, 0); }
+  40% { transform: translate(var(--hurt-dx, 0), var(--hurt-dy, 0)); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes knockback-hard {
+  0% { transform: translate(0, 0) scale(1); }
+  30% { transform: translate(calc(var(--hurt-dx, 0) * 1.4), calc(var(--hurt-dy, 0) * 1.4)) scale(1.08, .92); }
+  65% { transform: translate(calc(var(--hurt-dx, 0) * .5), calc(var(--hurt-dy, 0) * .5)) scale(.97, 1.03); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes knockback-rattle {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(var(--hurt-dx, 0), var(--hurt-dy, 0)); }
+  40% { transform: translate(calc(var(--hurt-dx, 0) * -.6), calc(var(--hurt-dy, 0) * -.6)); }
+  60% { transform: translate(calc(var(--hurt-dx, 0) * .8), calc(var(--hurt-dy, 0) * .8)); }
+  80% { transform: translate(calc(var(--hurt-dx, 0) * -.3), calc(var(--hurt-dy, 0) * -.3)); }
+}
+
+/* The decal left at the contact point, on the edge facing whatever hit it. */
+.hurt-mark {
+  position: absolute; width: 20px; height: 20px; z-index: 17;
+  transform: translate(-50%, -50%) rotate(var(--mark-angle, 0deg));
+  animation: mark-fade .34s steps(4) forwards;
+}
+@keyframes mark-fade { 0% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--mark-angle, 0deg)) scale(.7); } 60% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--mark-angle, 0deg)) scale(1.15); } 100% { opacity: 0; } }
+/* Teeth. */
+.mark-chomp { background: conic-gradient(from -30deg at 50% 50%, #fff4dc 0 12deg, transparent 12deg 30deg, #fff4dc 30deg 42deg, transparent 42deg 60deg, #fff4dc 60deg 72deg, transparent 72deg 100%); filter: drop-shadow(0 0 2px #7c1d22); }
+/* Claw rakes. */
+.mark-rake { background: repeating-linear-gradient(72deg, #fff4dc 0 2px, transparent 2px 7px); filter: drop-shadow(0 0 2px #c33); }
+/* A pellet spark. */
+.mark-spark { width: 12px; height: 12px; background: radial-gradient(circle, #fff5a0 0 40%, transparent 42%); }
+.mark-thump { width: 14px; height: 14px; background: radial-gradient(circle, #ffdfd4 0 35%, transparent 38%); }
+/* An explosion leaves soot. */
+.mark-scorch { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle, rgba(30,20,16,.85) 0 38%, rgba(255,130,50,.55) 42% 66%, transparent 70%); }
+/* A bone mortar leaves a bruise and stars. */
+.mark-thud { width: 24px; height: 24px; background: radial-gradient(circle, #ffd34e 0 22%, transparent 26%), radial-gradient(circle at 20% 20%, #fff5a0 0 12%, transparent 14%), radial-gradient(circle at 80% 75%, #fff5a0 0 12%, transparent 14%); }
+/* The beam bores straight through. */
+.mark-burn { width: 10px; height: 24px; background: linear-gradient(#fff, #ef91ff 40%, #67f5ff); box-shadow: 0 0 10px 4px rgba(101, 237, 255, .8); }
+.mark-frost { width: 22px; height: 22px; background: conic-gradient(#dfffff 0 8%, transparent 8% 25%, #dfffff 25% 33%, transparent 33% 50%, #dfffff 50% 58%, transparent 58% 75%, #dfffff 75% 83%, transparent 83%); filter: drop-shadow(0 0 3px #8eefff); }
+.mark-zap { background: repeating-linear-gradient(30deg, #fff36b 0 2px, transparent 2px 6px); filter: drop-shadow(0 0 4px #8ee7ff); }
+.mark-wrap { width: 22px; height: 22px; border: 3px dashed #df6ba8; border-radius: 50%; }
+.mark-dent { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #cce842; }
+.mark-slice { width: 26px; height: 4px; background: linear-gradient(90deg, transparent, #d8f7ff 30%, #fff 50%, #d8f7ff 70%, transparent); }
+.mark-warp { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #5ff4ef; box-shadow: 0 0 10px #9b7cff inset; }
+.mark-chime { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #ffe56e; box-shadow: 0 0 8px #f1c083; }
+
+/* ---------------------------------------------------------------------------
+   Muzzle flashes — proof the attack came out of the attacker.
+   --------------------------------------------------------------------------- */
+.muzzle-flash { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); z-index: 15; animation: muzzle-pop .22s steps(3) forwards; }
+@keyframes muzzle-pop { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.5); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } }
+.muzzle-gunsmoke { background: radial-gradient(circle, #fff5a0 0 30%, #ff9f3f 32% 55%, transparent 58%); }
+.muzzle-fuse-spark { background: radial-gradient(circle, #ffe08a 0 28%, #ff7048 30% 52%, transparent 55%); }
+.muzzle-frost-puff { background: radial-gradient(circle, #f4ffff 0 32%, #8eefff 34% 58%, transparent 60%); }
+.muzzle-rift-ring { border: 3px solid #5ff4ef; border-radius: 50%; box-shadow: 0 0 10px #9b7cff; }
+.muzzle-card-fan { background: conic-gradient(#f3d8ff 0 20deg, transparent 20deg 40deg, #f3d8ff 40deg 60deg, transparent 60deg); }
+.muzzle-static-pop { background: repeating-conic-gradient(#ffe35f 0 10deg, transparent 10deg 30deg); }
+.muzzle-prism-charge { border-radius: 50%; background: radial-gradient(circle, #fff 0 22%, #67f5ff 25% 45%, #ef91ff 48% 62%, transparent 66%); }
+.muzzle-baton-flourish { background: conic-gradient(#ffe56e 0 30deg, transparent 30deg); border-radius: 50%; }
+.muzzle-racket-swing { background: conic-gradient(#cce842 0 40deg, transparent 40deg); border-radius: 50%; }
+.muzzle-mortar-smoke { background: radial-gradient(circle, #c9c2b0 0 34%, #8d8577 36% 58%, transparent 60%); }
+
+/* ---------------------------------------------------------------------------
+   The explosion. Bombay Boom's bomb and Bone Jovi's mortar.
+   The scorch is drawn on every square the blast covers, so the area the bomb
+   hits is visible on the board rather than implied.
+   --------------------------------------------------------------------------- */
+.blast-fireball {
+  position: absolute; width: 46px; height: 46px; border-radius: 50%;
+  transform: translate(-50%, -50%); z-index: 17;
+  background: radial-gradient(circle, #fff9d8 0 18%, #ffd34e 22% 38%, #ff8a2b 42% 62%, #d43e34 66% 82%, transparent 86%);
+  box-shadow: 0 0 26px 10px rgba(255, 152, 60, .75);
+  animation: blast-fireball .52s steps(6) forwards;
+}
+@keyframes blast-fireball {
+  0% { transform: translate(-50%, -50%) scale(.25); opacity: 1; }
+  45% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; }
+}
+.blast-shockwave {
+  position: absolute; width: var(--blast-width, 50%); height: 34px;
+  transform: translate(-50%, -50%); z-index: 16;
+  border: 4px solid #fff5a0; border-radius: 50%;
+  box-shadow: 0 0 18px 6px rgba(255, 210, 110, .7), 0 0 0 3px rgba(212, 62, 52, .6) inset;
+  animation: blast-shockwave .52s steps(5) forwards;
+}
+@keyframes blast-shockwave {
+  0% { transform: translate(-50%, -50%) scale(.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
+}
+/* One of these per square the blast covers. */
+.blast-scorch {
+  position: absolute; width: calc(100% / 6); height: calc(100% / 14);
+  transform: translate(-50%, -50%); z-index: 12; opacity: 1;
+  background:
+    radial-gradient(circle, rgba(255, 214, 110, .85) 0 24%, rgba(255, 122, 44, .7) 28% 52%, rgba(40, 24, 18, .55) 56% 78%, transparent 82%);
+  animation: blast-scorch var(--blast-ms, 520ms) steps(6) forwards;
+}
+@keyframes blast-scorch {
+  0% { opacity: .5; transform: translate(-50%, -50%) scale(.4); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  60% { opacity: .85; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+.board.board-blast-shake { animation: board-blast-shake .3s steps(4); }
+@keyframes board-blast-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(3px, -2px); }
+  75% { transform: translate(-2px, -1px); }
+}
+
+/* ---------------------------------------------------------------------------
+   Laserpaw's beam — one beam through the lane, not three separate shots.
+   --------------------------------------------------------------------------- */
+.pierce-beam {
+  position: absolute; width: 12px; height: var(--beam-height, 20%);
+  transform: translate(-50%, -100%) scaleX(.15); transform-origin: 50% 100%;
+  z-index: 15; opacity: 0;
+  background: linear-gradient(90deg, rgba(103,245,255,.2), #67f5ff 22%, #fff 50%, #ef91ff 78%, rgba(239,145,255,.2));
+  box-shadow: 0 0 18px 8px rgba(101, 237, 255, .7), 0 0 34px 14px rgba(239, 145, 255, .4);
+}
+/* Once fired the beam is visible on its own; the animation only snaps it on and cuts it
+   out. An effect that can only be seen while its animation is running disappears entirely
+   the moment animations do not run. */
+.pierce-beam.is-firing { opacity: 1; transform: translate(-50%, -100%) scaleX(1); animation: pierce-beam .62s steps(6) forwards; }
+@keyframes pierce-beam {
+  0% { opacity: 0; transform: translate(-50%, -100%) scaleX(.15); }
+  12% { opacity: 1; transform: translate(-50%, -100%) scaleX(1.35); }
+  30% { opacity: 1; transform: translate(-50%, -100%) scaleX(1); }
+  80% { opacity: .9; transform: translate(-50%, -100%) scaleX(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -100%) scaleX(.2); }
+}
+
+/* Knotty Kitty leaves the dog wrapped up. */
+.tangle-wrap {
+  position: absolute; width: 30px; height: 30px; transform: translate(-50%, -50%);
+  border: 3px dashed #df6ba8; border-radius: 50%; z-index: 16;
+  animation: tangle-wrap .5s steps(4) forwards;
+}
+@keyframes tangle-wrap {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.5) rotate(0deg); }
+  40% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(90deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.9) rotate(180deg); }
+}
+
+/* Meowstro conducting an encore. */
+.unit.encore-conducting canvas { filter: brightness(1.3) drop-shadow(0 0 8px #ffe56e); }
+.unit.encore-performing canvas { filter: brightness(1.25) drop-shadow(0 0 8px #f1c083); }
 .unit.melee-lunge { animation: melee-lunge .43s steps(4); z-index: 5; }
 .unit.melee-lunge-up { animation: melee-lunge-up .43s steps(4); z-index: 5; }
 .unit.dog-jumping { z-index: 18; filter: drop-shadow(0 10px 4px rgba(17, 38, 32, .42)); }
@@ -1775,10 +1982,147 @@ h1 span { color: var(--orange); font-size: .75em; }
   .glossary-entry canvas { width: 72px; height: 72px; }
 }
 
+/* ---------------------------------------------------------------------------
+   Dying.
+
+   Every sprite is drawn standing with its feet at the bottom of its tile, so the
+   half-turn the JS applies is what lands the unit on its back with all four paws
+   in the air — and it keeps its own silhouette the whole way down. The flip itself
+   is a Web Animation (it needs per-unit spin, drift and bounce), so what lives here
+   is the state the unit is left in: X-ed out eyes, the lolling tongue, its own bit
+   of business, and the flash and fade that end it.
+   --------------------------------------------------------------------------- */
+.unit.unit-dying {
+  z-index: 20;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 3px rgba(17, 38, 32, .45));
+}
+/* A corpse has no tier badge and no health left to show. Set outright rather than
+   transitioned: the resting state has to be right on its own, without waiting for an
+   animation to tick. */
+.unit.unit-dying .hp-wrap,
+.unit.unit-dying .unit-badge { opacity: 0; }
+
+/* X-ed out eyes, placed on the unit's real head by the sprite's own helm anchor.
+   Visible by default — the animation only adds the pop. Anything that says "this unit is
+   dead" must not depend on an animation actually running to be seen. */
+.ko-face {
+  position: absolute; width: 30%; height: 13%;
+  transform: translate(-50%, -50%);
+  z-index: 4; pointer-events: none; opacity: 1;
+  animation: ko-face-in .16s steps(2) forwards;
+}
+.ko-face > b {
+  position: absolute; top: 0; width: 40%; height: 100%;
+  background:
+    linear-gradient(45deg, transparent 46%, #1a1a1a 46% 54%, transparent 54%),
+    linear-gradient(-45deg, transparent 46%, #1a1a1a 46% 54%, transparent 54%);
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, .9));
+}
+.ko-face > b:first-child { left: 0; }
+.ko-face > b:last-child { right: 0; }
+/* Scale only — never opacity. An animation that does not run must not be able to hide the
+   eyes. */
+@keyframes ko-face-in { from { transform: translate(-50%, -50%) scale(1.9); } to { transform: translate(-50%, -50%) scale(1); } }
+
+/* The tongue lolls out of the side of the mouth. */
+.unit.ko-tongue::before {
+  content: ''; position: absolute; left: 58%; top: 46%;
+  width: 16%; height: 9%; border-radius: 0 0 40% 40%;
+  background: #dc7f76; box-shadow: 0 0 0 1px #7c3b3b;
+  transform-origin: 50% 0;
+  z-index: 4;
+  animation: ko-tongue-out .28s steps(3) forwards;
+}
+@keyframes ko-tongue-out { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
+
+/* Ghosts do not land. */
+.unit.ko-float { filter: drop-shadow(0 0 8px #5ff4ef); }
+
+/* Flash, then fade. The end of every death. */
+.unit.ko-strobe canvas { animation: ko-strobe .14s steps(1) 3; }
+@keyframes ko-strobe {
+  0% { filter: brightness(4) saturate(0) contrast(2); }
+  50% { filter: sepia(1) saturate(9) hue-rotate(315deg) brightness(1.6); }
+  100% { filter: none; }
+}
+.unit.ko-fade { animation: ko-fade .17s linear forwards; }
+@keyframes ko-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* --- Each unit's own last bit of business. ------------------------------- */
+.unit-dying[class*="gag-"]::after {
+  content: ''; position: absolute; z-index: 3; pointer-events: none;
+}
+/* Purrcy — the pop-gun goes off one last time. */
+.gag-gunsmoke-puff::after { left: 50%; top: 10%; width: 40%; height: 40%; border-radius: 50%; background: radial-gradient(circle, rgba(255,245,160,.9) 0 26%, rgba(200,200,190,.6) 30% 60%, transparent 64%); animation: gag-rise .7s steps(5) forwards; }
+/* Clawdius — too heavy to fly. The ground takes it. */
+.gag-ground-quake::after { left: 50%; bottom: -6%; width: 90%; height: 16%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(120,90,60,.75) 0 40%, transparent 62%); animation: gag-thud .5s steps(4) forwards; }
+/* Hissiletoe faints in a puff of fur. */
+.gag-fur-plume::after { left: 50%; top: 30%; width: 60%; height: 50%; background: radial-gradient(circle at 30% 40%, #fff7df 0 12%, transparent 14%), radial-gradient(circle at 70% 30%, #fff7df 0 10%, transparent 12%), radial-gradient(circle at 50% 70%, #fff7df 0 9%, transparent 11%); animation: gag-rise .8s steps(5) forwards; }
+/* Knotty Kitty's yarn ball rolls away across the grass. */
+.gag-yarn-roll::after { left: 40%; top: 60%; width: 26%; height: 26%; border-radius: 50%; background: radial-gradient(circle at 34% 30%, #ffb6dc 0 26%, #df6ba8 28%); box-shadow: 0 0 0 1px #9a3f77; animation: gag-roll .9s steps(6) forwards; }
+/* Bombay Boom's bomb finally goes off. It is a dud. */
+.gag-dud-fizzle::after { left: 62%; top: 22%; width: 26%; height: 26%; border-radius: 50%; background: radial-gradient(circle, #6b7684 0 30%, transparent 34%); box-shadow: 0 0 6px 2px rgba(150,150,150,.6); animation: gag-fizzle .85s steps(6) forwards; }
+/* Laserpaw's visor shorts out. */
+.gag-short-circuit::after { left: 50%; top: 34%; width: 70%; height: 18%; transform: translateX(-50%); background: repeating-linear-gradient(90deg, #67f5ff 0 3px, transparent 3px 7px); animation: gag-glitch .6s steps(6) forwards; }
+/* Frosty freezes solid and shatters. */
+.gag-frost-shatter::after { left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); background: conic-gradient(from 0deg, rgba(223,255,255,.85) 0 6%, transparent 6% 25%, rgba(223,255,255,.85) 25% 31%, transparent 31% 50%, rgba(223,255,255,.85) 50% 56%, transparent 56% 75%, rgba(223,255,255,.85) 75% 81%, transparent 81%); animation: gag-shatter .7s steps(5) forwards; }
+/* Purrtal comes apart into motes. */
+.gag-mote-dissolve::after { left: 50%; top: 50%; width: 110%; height: 110%; transform: translate(-50%, -50%); background: radial-gradient(circle at 25% 30%, #5ff4ef 0 6%, transparent 8%), radial-gradient(circle at 70% 25%, #9b7cff 0 5%, transparent 7%), radial-gradient(circle at 40% 70%, #5ff4ef 0 5%, transparent 7%), radial-gradient(circle at 80% 65%, #9b7cff 0 4%, transparent 6%); animation: gag-motes 1s steps(6) forwards; }
+/* Faux Paw milks the exit. */
+.gag-curtain-call::after { left: 50%; top: 20%; width: 70%; height: 60%; transform: translateX(-50%); background: radial-gradient(circle at 20% 30%, #f3d8ff 0 8%, transparent 10%), radial-gradient(circle at 80% 20%, #fff 0 7%, transparent 9%), radial-gradient(circle at 50% 60%, #d8a9e8 0 8%, transparent 10%); animation: gag-sparkle .9s steps(6) forwards; }
+/* Thunderpaws electrocutes itself. */
+.gag-zap-twitch::after { left: 50%; top: 50%; width: 120%; height: 120%; transform: translate(-50%, -50%); background: repeating-conic-gradient(rgba(255,227,95,.9) 0 4deg, transparent 4deg 22deg); animation: gag-zap .5s steps(4) 2 forwards; }
+/* Meowstro's monocle pops off and spins away. */
+.gag-monocle-pop::after { left: 58%; top: 30%; width: 22%; height: 22%; border-radius: 50%; border: 2px solid #f1c083; animation: gag-pop-off .8s steps(6) forwards; }
+/* Chomps flops. That is the whole joke. */
+.gag-tongue-flop::after { left: 50%; bottom: 0; width: 70%; height: 12%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(120,90,60,.6) 0 40%, transparent 60%); animation: gag-thud .5s steps(4) forwards; }
+/* Fetch Armstrong's own disc lands on his face. */
+.gag-disc-drop::after { left: 50%; top: 24%; width: 44%; height: 18%; transform: translateX(-50%); border-radius: 50%; border: 2px solid #254b69; background: linear-gradient(#9fe8ff, #3ea4d9); animation: gag-drop-on .75s steps(5) forwards; }
+/* Bark McEnroe's tennis ball bounces off his head. */
+.gag-ball-bounce::after { left: 46%; top: 12%; width: 22%; height: 22%; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f7ff9a 0 18%, #cce842 20%); box-shadow: 0 0 0 1px #314d25; animation: gag-bounce .95s steps(7) forwards; }
+/* Howl Pacino gets out one last cracked note. */
+.gag-last-howl::after { left: 62%; top: 6%; width: 34%; height: 34%; border-radius: 50%; border: 2px solid #ffe56e; border-left-color: transparent; border-bottom-color: transparent; animation: gag-rise .85s steps(5) forwards; }
+/* Bone Jovi's mortar bone clatters out. */
+.gag-bone-clatter::after { left: 30%; top: 58%; width: 34%; height: 12%; border-radius: 40%; background: #f3e4bd; box-shadow: -3px 0 0 -1px #f3e4bd, 3px 0 0 -1px #f3e4bd, 0 0 0 1px #5b3927; animation: gag-clatter .9s steps(6) forwards; }
+/* Barkour's spring boots fire once more. */
+.gag-spring-boing::after { left: 50%; bottom: 4%; width: 40%; height: 20%; transform: translateX(-50%); background: repeating-linear-gradient(#aeb8b9 0 2px, transparent 2px 5px); animation: gag-boing .7s steps(5) forwards; }
+/* Sir Flinches-a-Lot's blanket settles over him. */
+.gag-faint-stiff::after { left: 50%; top: 50%; width: 105%; height: 60%; transform: translate(-50%, -50%); border-radius: 6px; background: linear-gradient(#8066a8, #5c477f); opacity: .8; animation: gag-settle .8s steps(5) forwards; }
+/* Dr. Droolittle's heart tonic spills. */
+.gag-tonic-spill::after { left: 24%; top: 62%; width: 28%; height: 28%; background: radial-gradient(circle, #e95f68 0 40%, transparent 44%); animation: gag-spill .85s steps(6) forwards; }
+/* Growl Gadot drops the megaphone and it squeals. */
+.gag-megaphone-drop::after { left: 66%; top: 54%; width: 34%; height: 26%; background: linear-gradient(90deg, #d84a45, #ff8576); clip-path: polygon(0 28%, 60% 0, 100% 12%, 100% 88%, 60% 100%, 0 72%); animation: gag-clatter .85s steps(6) forwards; }
+
+@keyframes gag-rise { 0% { opacity: 0; transform: translate(0, 0) scale(.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -22px) scale(1.5); } }
+@keyframes gag-thud { 0% { opacity: 0; transform: translateX(-50%) scaleX(.3); } 25% { opacity: 1; transform: translateX(-50%) scaleX(1.2); } 100% { opacity: 0; transform: translateX(-50%) scaleX(1.5); } }
+@keyframes gag-roll { 0% { opacity: 1; transform: translate(0, 0) rotate(0deg); } 100% { opacity: 0; transform: translate(-30px, 12px) rotate(-540deg); } }
+@keyframes gag-fizzle { 0% { opacity: 1; transform: scale(.5); } 40% { opacity: .9; transform: scale(1.3) translate(2px, -6px); } 100% { opacity: 0; transform: scale(1.9) translate(6px, -18px); } }
+@keyframes gag-glitch { 0%, 100% { opacity: 0; } 15%, 45%, 75% { opacity: 1; transform: translateX(-50%) translateX(2px); } 30%, 60% { opacity: .4; transform: translateX(-50%) translateX(-2px); } }
+@keyframes gag-shatter { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.7); } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } }
+@keyframes gag-motes { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.8); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1.5); } }
+@keyframes gag-sparkle { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } 50% { transform: translateX(-50%) scale(1.2); } }
+@keyframes gag-zap { 0%, 100% { opacity: 0; } 40% { opacity: .9; } }
+@keyframes gag-pop-off { 0% { opacity: 1; transform: translate(0, 0) rotate(0deg); } 100% { opacity: 0; transform: translate(20px, -16px) rotate(720deg); } }
+@keyframes gag-drop-on { 0% { opacity: 0; transform: translateX(-50%) translateY(-26px) rotate(-40deg); } 45% { opacity: 1; transform: translateX(-50%) translateY(0) rotate(6deg); } 60% { transform: translateX(-50%) translateY(-4px) rotate(-3deg); } 100% { opacity: .9; transform: translateX(-50%) translateY(0) rotate(0deg); } }
+@keyframes gag-bounce { 0% { opacity: 1; transform: translateY(-20px); } 30% { transform: translateY(0); } 45% { transform: translateY(-12px); } 65% { transform: translateY(0); } 80% { transform: translateY(-5px); } 100% { opacity: 0; transform: translate(14px, 4px); } }
+@keyframes gag-clatter { 0% { opacity: 1; transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-8px, 6px) rotate(-40deg); } 100% { opacity: 0; transform: translate(-16px, 10px) rotate(-90deg); } }
+@keyframes gag-boing { 0%, 100% { opacity: 0; } 20% { opacity: 1; transform: translateX(-50%) scaleY(1.6); } 50% { opacity: 1; transform: translateX(-50%) scaleY(.6); } 75% { opacity: .7; transform: translateX(-50%) scaleY(1.2); } }
+@keyframes gag-settle { 0% { opacity: 0; transform: translate(-50%, -80%) rotate(-6deg); } 60% { opacity: .85; transform: translate(-50%, -50%) rotate(2deg); } 100% { opacity: .8; transform: translate(-50%, -50%) rotate(0deg); } }
+@keyframes gag-spill { 0% { opacity: 0; transform: scale(.3); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6) translate(-6px, 8px); } }
+
 @media (prefers-reduced-motion: reduce) {
   .cell.drag-valid, .worker-slot.drag-valid, .bench-slot.drag-valid, .drag-floor-shadow, .wave-banner, .icon-button.confirming,
   .board.board-drop-thump, .board.board-shake, .board.upgrade-board-pulse, .board.storm-recoil,
   .unit.storm-casting canvas, .work-action > i, .worker-slot.is-working > canvas,
   .freeze-shell, .freeze-skip-cue { animation: none; }
   .hp-bar { transition: none; }
+  /* Deaths keep their flash and fade — that is the part that says the unit is gone —
+     but drop the acrobatics and the props. The JS skips the flip to match. */
+  .board.board-blast-shake, .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before,
+  .unit.hurt.shake-soft, .unit.hurt.shake-hard, .unit.hurt.shake-rattle { animation: none; }
+  .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
 }

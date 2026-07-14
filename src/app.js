@@ -10,14 +10,18 @@ import {
   collectWorkerOutput, mergeInventoryItems, equipInventoryItem, useFood,
   catSaleQuote, sellCat,
 } from './game-engine.js';
-import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
+import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
-import { combatTiming, cellCenter, homingShotKeyframes, stormColumnPosition } from './combat-animation.js';
+import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
+import {
+  ATTACK_FX, HURT_FX, attackSignature, attackGroupKey, blastCells, contactVector, isKill,
+} from './battle-fx.js';
+import { deathSpecFor, deathTiming } from './death-animation.js';
 
 let game = createGame();
 let selected = null;
@@ -1204,6 +1208,10 @@ function tryActiveTarget(row, col, cat, dog) {
       void playStormAbility(nextGame);
       return true;
     }
+    if (targeting.mode === 'encore') {
+      void playEncoreAbility(nextGame);
+      return true;
+    }
     game = nextGame;
     $('#board')?.classList.add('ability-cast');
     window.setTimeout(() => $('#board')?.classList.remove('ability-cast'), 420);
@@ -1214,15 +1222,43 @@ function tryActiveTarget(row, col, cat, dog) {
 
 async function playStormAbility(nextGame) {
   playing = true;
+  snapshotUnits(game);
   game = nextGame;
   renderHud();
   renderTacticsPanel();
   try {
     await animateStorm(nextGame.events);
+    await playDeaths(nextGame.events.filter((item) => item.type === 'spell'));
     for (const event of nextGame.events.filter((item) => item.type === 'panic-sidestep')) {
       await animateMove(event);
     }
   } finally {
+    playing = false;
+    render();
+  }
+}
+
+/**
+ * Meowstro orders an ally to attack right now. The ally's own attack plays — so an encore
+ * out of Bombay Boom really does drop a bomb — and anything it kills goes down with it.
+ * Before this, an encore kill simply blinked off the board.
+ */
+async function playEncoreAbility(nextGame) {
+  playing = true;
+  snapshotUnits(game);
+  game = nextGame;
+  renderHud();
+  renderTacticsPanel();
+  $('#board')?.classList.add('ability-cast');
+  try {
+    const shots = nextGame.events.filter((event) => event.type === 'shot');
+    const conductor = nextGame.events.find((event) => event.type === 'encore');
+    findUnitElement(conductor?.from)?.classList.add('encore-conducting');
+    findUnitElement(conductor?.to)?.classList.add('encore-performing');
+    await Promise.all(groupAttacks(shots).map((group, index) => animateAttack(group, index)));
+    await playDeaths(shots);
+  } finally {
+    $('#board')?.classList.remove('ability-cast');
     playing = false;
     render();
   }
@@ -1264,9 +1300,13 @@ function renderBoard() {
         if (dogs.length > 1) cell.classList.add('has-dog-stack');
         bindTooltip(cell, () => dogStackTooltipInfo(dogs));
       } else if (decoy) {
-        const visual = unitCanvas('cat', { level: 1, coat: 8 });
-        visual.classList.add('decoy-unit');
-        cell.append(visual);
+        // A real unit, not a loose canvas: the phantom blocker takes hits and dies like
+        // anything else on the board, so it needs an id the effects layer can find.
+        const phantom = document.createElement('div');
+        phantom.className = 'unit decoy-unit';
+        phantom.dataset.unitId = decoy.id;
+        phantom.append(unitCanvas('cat', { level: 1, coat: 8 }));
+        cell.append(phantom);
         cell.classList.add('has-unit', 'has-decoy');
       }
       if (activeTargeting) {
@@ -1390,85 +1430,414 @@ function findUnitElement(id) {
   return [...document.querySelectorAll('.unit')].find((unit) => unit.dataset.unitId === id);
 }
 
+/**
+ * Who was on the board when this exchange started.
+ *
+ * The engine drops dead units from its state as it resolves, but the animation runs
+ * afterwards — so by the time a dog needs to flip over, the engine has already forgotten
+ * it existed. This snapshot is taken from the board as it was *before* the exchange, and
+ * it is what lets the renderer still answer "which dog was that, and what did it look
+ * like" while playing its death. It also identifies the attacker, which is how the six
+ * cats that share `style: 'homing'` get told apart.
+ */
+let fxUnits = new Map();
+
+function snapshotUnits(state) {
+  fxUnits = new Map();
+  for (const cat of state.cats ?? []) {
+    fxUnits.set(cat.id, { kind: 'cat', key: normalizeCoat(cat.coat), coat: normalizeCoat(cat.coat) });
+  }
+  for (const dog of state.dogs ?? []) {
+    fxUnits.set(dog.id, { kind: 'dog', key: dog.role, role: dog.role });
+  }
+  for (const decoy of state.decoys ?? []) {
+    // The phantom blocker is drawn as Faux Paw, so it dies like one.
+    fxUnits.set(decoy.id, { kind: 'cat', key: 8, coat: 8, decoy: true });
+  }
+}
+
+const fxUnitFor = (id) => fxUnits.get(id) ?? null;
+
 function effectAt(className, row, col, text = '') {
   const position = cellCenter(row, col);
+  return effectAtPercent(className, position.xPercent, position.yPercent, text);
+}
+
+/** Effects that sit between cells — contact sparks, blast fronts — need raw coordinates. */
+function effectAtPercent(className, xPercent, yPercent, text = '') {
   const effect = document.createElement('i');
   effect.className = className;
-  effect.style.left = `${position.xPercent}%`;
-  effect.style.top = `${position.yPercent}%`;
+  effect.style.left = `${xPercent}%`;
+  effect.style.top = `${yPercent}%`;
   effect.textContent = text;
   effectsEl.append(effect);
   return effect;
 }
 
-function showHit(event, { heavy = false, sound = true } = {}) {
+/**
+ * What it looks like to get hit.
+ *
+ * Every victim flashes red, but the rest of the reaction is matched to whatever landed on
+ * it: it is thrown along the line from the attacker, the spark lands on the edge facing
+ * the attacker rather than in the middle of the tile, and the decal left behind is the
+ * one that source leaves — teeth for a bite, a dent for a tennis ball, a scorch for a
+ * bomb, a burn for the beam.
+ */
+function showImpact(event, signature = null, { sound = true } = {}) {
   if (event.miss || !event.to) return;
-  if (sound) playHit({ heavy });
+  const key = signature ?? attackSignature(event, fxUnitFor(event.from));
+  const fx = ATTACK_FX[key] ?? ATTACK_FX.homing;
+  const hurt = HURT_FX[fx.impact] ?? HURT_FX.thump;
+  if (sound) playHit({ heavy: Boolean(fx.heavy) });
+
   const target = findUnitElement(event.to);
-  const burst = effectAt('impact-burst', event.toRow, event.col);
-  // Dog bites and tennis shots hurt cats; cat attacks use the opposing damage tone.
+  // The blow comes from the attacker's tile; storm bolts and blasts come from above.
+  const fromRow = event.fromRow ?? (event.toRow - 1);
+  const fromCol = event.fromCol ?? event.col;
+  const { dx, dy } = contactVector(fromRow, fromCol, event.toRow, event.col);
+
+  // The contact point is on the victim's near edge — back along the line to the attacker.
+  const centre = cellCenter(event.toRow, event.col);
+  const reach = 0.34;
+  const contactX = centre.xPercent - dx * (100 / COLS) * reach;
+  const contactY = centre.yPercent - dy * (100 / ROWS) * reach;
+
+  const burst = effectAtPercent(`impact-burst impact-${fx.impact}`, contactX, contactY);
+  const mark = effectAtPercent(`hurt-mark mark-${hurt.mark}`, contactX, contactY);
+  mark.style.setProperty('--mark-angle', `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
+
   const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
   const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
+
   if (target) {
-    target.classList.remove('hurt');
+    target.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle');
     void target.offsetWidth;
-    target.classList.add('hurt');
+    // The recoil is a real direction, not a generic wobble: away from whatever hit it.
+    target.style.setProperty('--hurt-dx', `${dx * hurt.recoil * 100}%`);
+    target.style.setProperty('--hurt-dy', `${dy * hurt.recoil * 100}%`);
+    target.classList.add('hurt', `shake-${hurt.shake}`);
     const hpBar = target.querySelector('.hp-bar');
     if (hpBar) {
       hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
       hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
     }
   }
-  window.setTimeout(() => burst.remove(), timing.impactMs);
+  window.setTimeout(() => { burst.remove(); mark.remove(); }, timing.impactMs);
   window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
-  window.setTimeout(() => target?.classList.remove('hurt'), timing.impactMs);
+  window.setTimeout(() => {
+    target?.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle');
+  }, timing.impactMs);
 }
 
-async function animateShot(event, index) {
-  const isBurst = Boolean(event.burst);
-  const isHoming = event.style === 'homing' || event.style === 'medic';
-  const stagger = isBurst
-    ? (event.pelletIndex ?? 0) * timing.burstStaggerMs + index * 8
-    : index * timing.shotStaggerMs;
-  await wait(stagger);
+/**
+ * One attack, not one damage event.
+ *
+ * The engine reports damage per victim, so an area attack arrives as several events. Draw
+ * those one-by-one and a bomb comes out as a handful of pellets flying sideways — which
+ * is exactly what Bombay Boom's explosion used to look like. So events are grouped back
+ * into the attack that caused them, and the attack is drawn once: one bomb, one blast,
+ * every victim caught in it.
+ */
+function groupAttacks(events) {
+  const groups = new Map();
+  for (const event of events) {
+    const caster = fxUnitFor(event.from);
+    const key = attackGroupKey(event, caster);
+    if (!groups.has(key)) groups.set(key, { caster, events: [] });
+    groups.get(key).events.push(event);
+  }
+  return [...groups.values()];
+}
+
+/** The event that actually threw the thing; secondaries are only its victims. */
+function primaryOf(group) {
+  return group.events.find((event) => {
+    const fx = ATTACK_FX[attackSignature(event, group.caster)];
+    return fx && !fx.absorbedBy;
+  }) ?? group.events[0];
+}
+
+async function animateAttack(group, index) {
+  const primary = primaryOf(group);
+  const signature = attackSignature(primary, group.caster);
+  const fx = ATTACK_FX[signature] ?? ATTACK_FX.homing;
+  if (fx.path === 'lob') return animateLobbedBlast(group, primary, signature, fx, index);
+  if (fx.path === 'beam') return animateBeam(group, primary, signature, fx, index);
+  return animateProjectileVolley(group, signature, fx, index);
+}
+
+function showMuzzle(fx, row, col) {
+  if (!fx.muzzle) return;
+  const flash = effectAt(`muzzle-flash muzzle-${fx.muzzle}`, row, col);
+  window.setTimeout(() => flash.remove(), timing.impactMs);
+}
+
+async function flyProjectile(event, signature, fx, { durationMs, arc = false }) {
   const fromCol = event.fromCol ?? event.col;
-  const toCol = event.col;
   const start = cellCenter(event.fromRow, fromCol);
-  const end = cellCenter(event.toRow, toCol);
-  const projectileStyle = event.style ? `${event.style}-projectile` : '';
+  const end = cellCenter(event.toRow, event.col);
+  const homing = fx.path === 'homing';
   const projectile = effectAt(
-    `projectile-effect ${isHoming ? 'homing-projectile' : ''} ${isBurst ? 'burst-projectile' : ''} ${projectileStyle}`.trim(),
+    `projectile-effect projectile-${fx.projectile} ${event.burst ? 'burst-projectile' : ''}`.trim(),
     event.fromRow,
     fromCol,
   );
+  if (fx.tether) projectile.classList.add('has-tether');
+
   const flight = projectile.animate(
-    isHoming
-      ? homingShotKeyframes(start, end)
-      : [
-        { left: `${start.xPercent}%`, top: `${start.yPercent}%`, transform: 'translate(-50%, -50%) scale(.7) rotate(0deg)' },
-        { left: `${end.xPercent}%`, top: `${end.yPercent}%`, transform: `translate(-50%, -50%) scale(${isBurst ? 0.95 : 1.15}) rotate(360deg)` },
-      ],
-    {
-      duration: isHoming
-        ? timing.homingMs
-        : isBurst
-          ? timing.burstProjectileMs
-          : timing.projectileMs,
-      // Linear keyframe timing — the path itself eases the seek.
-      easing: 'linear',
-      fill: 'forwards',
-    },
+    arc
+      ? lobShotKeyframes(start, end)
+      : homing
+        ? homingShotKeyframes(start, end)
+        : [
+          { left: `${start.xPercent}%`, top: `${start.yPercent}%`, transform: 'translate(-50%, -50%) scale(.7) rotate(0deg)' },
+          { left: `${end.xPercent}%`, top: `${end.yPercent}%`, transform: `translate(-50%, -50%) scale(${event.burst ? 0.95 : 1.15}) rotate(360deg)` },
+        ],
+    { duration: durationMs, easing: 'linear', fill: 'forwards' },
   );
   await flight.finished.catch(() => {});
   projectile.remove();
-  if (event.miss || !event.to) {
-    const fizzle = effectAt('impact-burst miss-fizzle', event.toRow, event.col);
-    window.setTimeout(() => fizzle.remove(), timing.impactMs);
+}
+
+/** Straight shots and homing shots, including Purrcy's three-pellet volley. */
+async function animateProjectileVolley(group, signature, fx, index) {
+  await Promise.all(group.events.map(async (event, pellet) => {
+    const stagger = event.burst
+      ? (event.pelletIndex ?? pellet) * timing.burstStaggerMs + index * 8
+      : index * timing.shotStaggerMs;
+    await wait(stagger);
+    showMuzzle(fx, event.fromRow, event.fromCol ?? event.col);
+
+    const durationMs = fx.path === 'homing'
+      ? timing.homingMs
+      : event.burst ? timing.burstProjectileMs : timing.projectileMs;
+    await flyProjectile(event, signature, fx, { durationMs });
+
+    if (event.miss || !event.to) {
+      const fizzle = effectAt('impact-burst miss-fizzle', event.toRow, event.col);
+      window.setTimeout(() => fizzle.remove(), timing.impactMs);
+      await wait(Math.floor(timing.impactMs * 0.55));
+      return;
+    }
+    showImpact(event, signature);
+    if (fx.tether) showTether(event);
+    await wait(timing.impactMs + timing.hpPauseMs);
+  }));
+}
+
+/** Knotty Kitty's yarn stays attached to whatever it wrapped up. */
+function showTether(event) {
+  const wrap = effectAt('tangle-wrap', event.toRow, event.col);
+  window.setTimeout(() => wrap.remove(), timing.impactMs + timing.hpPauseMs);
+}
+
+/**
+ * Bombay Boom's bomb and Bone Jovi's mortar: lob it, then blow it up across the whole
+ * blast footprint — the square it landed on and the squares either side of it. The fire
+ * is drawn on every square the blast covers, and everything standing in it reacts.
+ */
+async function animateLobbedBlast(group, primary, signature, fx, index) {
+  await wait(index * timing.shotStaggerMs);
+  showMuzzle(fx, primary.fromRow, primary.fromCol ?? primary.col);
+
+  if (primary.miss || !primary.to) {
+    await flyProjectile(primary, signature, fx, { durationMs: timing.lobMs, arc: true });
+    const dud = effectAt('impact-burst miss-fizzle', primary.toRow, primary.col);
+    window.setTimeout(() => dud.remove(), timing.impactMs);
     await wait(Math.floor(timing.impactMs * 0.55));
     return;
   }
-  showHit(event);
-  await wait(timing.impactMs + timing.hpPauseMs);
+
+  await flyProjectile(primary, signature, fx, { durationMs: timing.lobMs, arc: true });
+
+  // The explosion. blastCells mirrors the engine's own splash rule, so the fire lands on
+  // exactly the squares the bomb damages — never one square off.
+  const footprint = blastCells(primary.toRow, primary.col);
+  const centre = cellCenter(primary.toRow, primary.col);
+  const fireball = effectAtPercent('blast-fireball', centre.xPercent, centre.yPercent);
+  const shockwave = effectAtPercent('blast-shockwave', centre.xPercent, centre.yPercent);
+  shockwave.style.setProperty('--blast-width', `${footprint.length * (100 / COLS)}%`);
+
+  const scorches = footprint.map(({ row, col }) => {
+    const scorch = effectAt('blast-scorch', row, col);
+    scorch.style.setProperty('--blast-ms', `${timing.blastMs}ms`);
+    return scorch;
+  });
+
+  $('#board')?.classList.add('board-blast-shake');
+  playHit({ heavy: true });
+
+  // Everything caught in the blast reacts — the dog under it first, then outward.
+  group.events.forEach((event) => {
+    if (event.miss || !event.to) return;
+    const distance = Math.abs(event.col - primary.col);
+    window.setTimeout(
+      () => showImpact(event, attackSignature(event, group.caster), { sound: false }),
+      distance * 70,
+    );
+  });
+
+  await wait(timing.blastMs);
+  $('#board')?.classList.remove('board-blast-shake');
+  fireball.remove();
+  shockwave.remove();
+  scorches.forEach((scorch) => scorch.remove());
+  await wait(timing.hpPauseMs);
+}
+
+/**
+ * Laserpaw: a single beam from the cat through every dog it pierces, not one shot each.
+ * It snaps on, burns through the line front-to-back, then cuts out.
+ */
+async function animateBeam(group, primary, signature, fx, index) {
+  await wait(index * timing.shotStaggerMs);
+  showMuzzle(fx, primary.fromRow, primary.fromCol ?? primary.col);
+
+  const hits = group.events.filter((event) => !event.miss && event.to);
+  const start = cellCenter(primary.fromRow, primary.fromCol ?? primary.col);
+  // Reach the furthest dog pierced, or off the top of the board when nothing is there.
+  const deepestRow = hits.length
+    ? Math.min(...hits.map((event) => event.toRow))
+    : 0;
+  const end = cellCenter(deepestRow, primary.col);
+
+  const beam = effectAtPercent('pierce-beam', start.xPercent, start.yPercent);
+  const height = Math.abs(start.yPercent - end.yPercent) + (100 / ROWS) * 0.5;
+  beam.style.setProperty('--beam-height', `${height}%`);
+  beam.style.setProperty('--beam-charge-ms', `${timing.beamChargeMs}ms`);
+
+  await wait(timing.beamChargeMs);
+  beam.classList.add('is-firing');
+
+  if (!hits.length) {
+    const fizzle = effectAt('impact-burst miss-fizzle', 0, primary.col);
+    window.setTimeout(() => fizzle.remove(), timing.impactMs);
+    await wait(timing.beamHoldMs);
+    beam.remove();
+    return;
+  }
+
+  playHit({ heavy: true });
+  // Front dog burns through first, then the beam pushes deeper into the lane.
+  [...hits]
+    .sort((left, right) => right.toRow - left.toRow)
+    .forEach((event, order) => {
+      window.setTimeout(
+        () => showImpact(event, signature, { sound: false }),
+        order * timing.pierceStaggerMs,
+      );
+    });
+
+  await wait(timing.beamHoldMs + hits.length * timing.pierceStaggerMs);
+  beam.remove();
+  await wait(timing.hpPauseMs);
+}
+
+/**
+ * Everything killed during this half of the exchange goes down together.
+ *
+ * They all play at once, so a wipe costs one beat rather than one beat per body. The
+ * board must not re-render until this resolves — re-rendering is what deletes the very
+ * element being animated.
+ */
+async function playDeaths(events) {
+  const fallen = new Map();
+  for (const event of events) {
+    if (isKill(event) && !fallen.has(event.to)) fallen.set(event.to, event);
+  }
+  if (!fallen.size) return;
+  await Promise.all([...fallen].map(([id, event]) => playDeath(id, event)));
+}
+
+/**
+ * One unit's death: it takes the hit, flips over, lands on its back with its paws in the
+ * air, does its own bit of business, then flashes and fades out.
+ *
+ * The sprite is drawn standing with its feet at the bottom of the tile, so turning it a
+ * half-turn is what puts it belly-up — and it keeps its own silhouette the whole way, so
+ * a dachshund still dies looking like a dachshund. Which way it spins is decided by the
+ * blow that killed it: you get knocked away from whatever hit you.
+ */
+async function playDeath(victimId, killingBlow) {
+  const element = findUnitElement(victimId);
+  const unit = fxUnitFor(victimId);
+  if (!element || !unit) return;
+
+  const spec = deathSpecFor(unit.kind, unit.key);
+  const beats = deathTiming(combatSpeed);
+  const fromRow = killingBlow.fromRow ?? (killingBlow.toRow - 1);
+  const fromCol = killingBlow.fromCol ?? killingBlow.col;
+  const { dx } = contactVector(fromRow, fromCol, killingBlow.toRow, killingBlow.col);
+
+  // Spun away from the blow: hit from the left and you roll to the right.
+  const spin = dx < -0.2 ? Math.abs(spec.spin) : dx > 0.2 ? -Math.abs(spec.spin) : spec.spin;
+  const rest = (spin < 0 ? -180 : 180) + spec.tilt;
+  const drift = dx * 16;
+
+  element.classList.add('unit-dying', `gag-${spec.gag}`);
+  if (spec.tongue) element.classList.add('ko-tongue');
+  if (spec.float) element.classList.add('ko-float');
+  element.append(koFace(unit));
+
+  if (prefersReducedMotion) {
+    // Skip the acrobatics. The flash and the fade carry the actual information — that
+    // this unit is gone — so those are the parts that stay.
+    element.classList.add('ko-strobe');
+    await wait(beats.strobeMs);
+    element.classList.add('ko-fade');
+    await wait(beats.fadeMs);
+    return;
+  }
+
+  const grounded = spec.float ? -spec.hop * 0.6 : 0;
+  const settle = [];
+  for (let bounce = 1; bounce <= spec.bounces; bounce += 1) {
+    const height = (spec.hop * 0.22) / bounce;
+    settle.push(
+      { transform: `translate(${drift}%, ${grounded - height}%) rotate(${rest - 4 / bounce}deg) scale(1, .96)` },
+      { transform: `translate(${drift}%, ${grounded}%) rotate(${rest}deg) scale(1.06, .9)` },
+    );
+  }
+
+  const flop = element.animate([
+    // Hitstop: the killing blow lands and everything holds for a frame.
+    { transform: 'translate(0, 0) rotate(0deg) scale(1.14, .88)', offset: 0 },
+    // Knocked off its feet and starting to turn over.
+    { transform: `translate(${drift * 0.5}%, ${-spec.hop}%) rotate(${spin * 0.45}deg) scale(.94, 1.08)`, offset: 0.28 },
+    // Comes down on its back.
+    { transform: `translate(${drift}%, ${grounded}%) rotate(${spin}deg) scale(1.1, .88)`, offset: 0.62 },
+    // Settles at its own resting angle.
+    { transform: `translate(${drift}%, ${grounded}%) rotate(${rest}deg) scale(1, 1)`, offset: 0.74 },
+    ...settle,
+    { transform: `translate(${drift}%, ${grounded}%) rotate(${rest}deg) scale(1, 1)`, offset: 1 },
+  ], {
+    duration: beats.hitstopMs + beats.launchMs + beats.flopMs + beats.settleMs,
+    easing: 'linear',
+    fill: 'forwards',
+    // Added to the unit's existing transform rather than replacing it. Dogs stack two to
+    // a cell and carry a stack offset in CSS; overwriting it would make a stacked dog
+    // jump across the tile the instant it died.
+    composite: 'add',
+  });
+  await flop.finished.catch(() => {});
+
+  // Lie there a moment so the pose actually reads, then flash and fade.
+  await wait(beats.restMs);
+  element.classList.add('ko-strobe');
+  await wait(beats.strobeMs);
+  element.classList.add('ko-fade');
+  await wait(beats.fadeMs);
+}
+
+/** X-ed out eyes, placed on the unit's real face using the sprite's own head anchor. */
+function koFace(unit) {
+  const face = document.createElement('i');
+  face.className = 'ko-face';
+  const anchor = headAnchor(unit.kind, unit.key);
+  face.style.left = `${anchor.x * 100}%`;
+  face.style.top = `${anchor.y * 100}%`;
+  face.innerHTML = '<b></b><b></b>';
+  return face;
 }
 
 async function animateMelee(event, direction = 'down') {
@@ -1477,7 +1846,8 @@ async function animateMelee(event, direction = 'down') {
   attacker?.classList.add(className);
   await wait(Math.floor(timing.meleeMs / 2));
   if (!event.miss && event.to) {
-    showHit(event, { heavy: true });
+    // The bare bite carries no style, so this resolves to the teeth reaction.
+    showImpact(event);
     await wait(Math.ceil(timing.meleeMs / 2) + timing.hpPauseMs);
   } else {
     await wait(Math.ceil(timing.meleeMs / 2));
@@ -1504,7 +1874,7 @@ async function animateCatScratch(event) {
   attacker?.classList.add(BLUE_SCRATCH_FLURRY.attackerClass);
   attacker?.append(flurry);
   await wait(Math.round(BLUE_SCRATCH_FLURRY.hitAtMs / combatSpeed));
-  if (!event.miss && event.to) showHit(event, { heavy: true });
+  if (!event.miss && event.to) showImpact(event, 'melee');
   await wait(Math.round((BLUE_SCRATCH_FLURRY.durationMs - BLUE_SCRATCH_FLURRY.hitAtMs) / combatSpeed));
   if (!event.miss && event.to) await wait(timing.hpPauseMs);
   flurry.remove();
@@ -1613,7 +1983,27 @@ async function animateSuperCat(event) {
   drawCat(canvas, 3, 0, true);
   runner.append(canvas);
   effectsEl.append(runner);
-  await wait(Math.round(720 / combatSpeed));
+
+  // The super cat clears the whole breached column. The dogs in it are killed outright —
+  // the engine simply drops them — so they are flipped over here by position rather than
+  // by a damage event, and they go down as the cat runs through them.
+  const flattened = [...fxUnits]
+    .filter(([id, unit]) => unit.kind === 'dog' && findUnitElement(id))
+    .map(([id]) => id)
+    .filter((id) => {
+      const cell = findUnitElement(id)?.closest('.cell');
+      return Number(cell?.dataset.col) === event.col;
+    });
+
+  await wait(Math.round(260 / combatSpeed));
+  await Promise.all(flattened.map((id) => {
+    const cell = findUnitElement(id)?.closest('.cell');
+    const row = Number(cell?.dataset.row ?? 0);
+    // Struck from below by a cat charging up the board.
+    return playDeath(id, { to: id, toRow: row, col: event.col, fromRow: row + 1, fromCol: event.col });
+  }));
+
+  await wait(Math.round(460 / combatSpeed));
   runner.remove();
 }
 
@@ -1664,7 +2054,7 @@ async function animateStorm(events) {
     targetMarkers.forEach((marker) => marker.classList.add('is-striking'));
     await wait(timing.stormFlashLeadMs);
     playHit({ heavy: true });
-    strikes.forEach((event) => showHit(event, { heavy: true, sound: false }));
+    strikes.forEach((event) => showImpact(event, 'lightning', { sound: false }));
     await wait(timing.stormAftermathMs);
   } finally {
     board?.classList.remove('storm-active', 'storm-recoil');
@@ -1704,16 +2094,20 @@ async function animateEvents(events) {
   const freezeSkips = events.filter((event) => event.type === 'freeze-skip');
   const superCats = events.filter((event) => event.type === 'super-cat');
 
+  // --- The cats act. Every dog they kill goes down before the dogs get their turn. ---
   if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
   await Promise.all([
-    ...shots.map((event, index) => animateShot(event, index)),
+    ...groupAttacks(shots).map((group, index) => animateAttack(group, index)),
     ...catMelee.map(animateCatScratch),
     ...heals.map(animateHeal),
   ]);
+  await playDeaths([...shots, ...catMelee]);
   for (const event of panicMoves) await animateMove(event);
+
+  // --- The dogs act. Every cat they kill goes down at the end of it. ---
   if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length || freezeSkips.length) setTurnTag('dogs');
   await Promise.all([
-    ...dogShots.map((event, index) => animateShot(event, index)),
+    ...groupAttacks(dogShots).map((group, index) => animateAttack(group, index)),
     ...howls.map(animateHowl),
     ...dogHeals.map(animateHeal),
     ...fears.map(animateFear),
@@ -1721,7 +2115,11 @@ async function animateEvents(events) {
   ]);
   await Promise.all([...moves.map(animateMove), ...jumps.map(animateDogJump)]);
   await Promise.all(melee.map((event) => animateMelee(event, 'down')));
-  await Promise.all(superCats.map(animateSuperCat));
+  await playDeaths([...dogShots, ...melee]);
+
+  // The super cat mows down the whole column that broke through — they all go with it.
+  for (const event of superCats) await animateSuperCat(event);
+
   setTurnTag(null);
   effectsEl.innerHTML = '';
 }
@@ -1948,8 +2346,12 @@ function render() {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function runCombatSection() {
+  // Take the roll call before resolving: the engine drops the dead as it goes, and the
+  // deaths cannot be animated without knowing who they were.
+  snapshotUnits(game);
   const nextGame = resolveSection(game);
   await animateEvents(nextGame.events);
+  // Only now is it safe to re-render — that is what removes the bodies from the board.
   game = nextGame;
   render();
   await wait(timing.hpPauseMs);
@@ -2113,3 +2515,15 @@ loadSoundEnabled();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
 render();
+
+// Dev-only QA hook. Vite strips this from production builds. Combat effects are hard to
+// reach by clicking — Bombay Boom's bomb needs round 4 and a row of dogs to blow up — so
+// this allows a board to be set up directly and one exchange to be run against it.
+if (import.meta.env?.DEV) {
+  window.__cvd = {
+    get state() { return game; },
+    apply(mutate) { mutate(game); render(); },
+    runSection: runCombatSection,
+    render,
+  };
+}

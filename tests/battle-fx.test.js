@@ -1,0 +1,132 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  ATTACK_FX, HURT_FX, ENGINE_ATTACK_STYLES,
+  attackSignature, blastCells, contactVector, isKill, attackGroupKey,
+} from '../src/battle-fx.js';
+import { COLS } from '../src/game-engine.js';
+
+// The bug this whole system exists to prevent: an ability ships, the engine stamps a new
+// style on its events, and the renderer silently falls back to a generic ball. That is
+// exactly how Bombay Boom's explosion went missing. Every style the engine can emit must
+// resolve to real graphics.
+test('every attack style the engine emits has graphics', () => {
+  for (const style of ENGINE_ATTACK_STYLES) {
+    const fx = ATTACK_FX[style];
+    assert.ok(fx, `no ATTACK_FX entry for engine style "${style}"`);
+    assert.ok(fx.impact, `"${style}" has no impact kind`);
+    assert.ok(HURT_FX[fx.impact], `"${style}" impact "${fx.impact}" has no HURT_FX entry`);
+  }
+});
+
+test('a bare dog bite (no style on the event) still resolves', () => {
+  // game-engine.js applyDogDamage(next, dog, target) passes no style at all.
+  const signature = attackSignature({ type: 'melee' }, { role: 'scruffy' });
+  assert.equal(signature, 'bite');
+  assert.ok(ATTACK_FX.bite);
+});
+
+test('the six homing cats each get their own projectile skin', () => {
+  const skins = new Map([
+    [2, 'homing'], // Hissiletoe keeps the classic
+    [6, 'frost'],  // Frosty Paws
+    [7, 'rift'],   // Purrtal
+    [8, 'mirage'], // Faux Paw
+    [9, 'spark'],  // Thunderpaws
+    [10, 'note'],  // Meowstro
+  ]);
+  const seen = new Set();
+  for (const [coat, expected] of skins) {
+    const signature = attackSignature({ type: 'shot', style: 'homing' }, { coat });
+    assert.equal(signature, expected, `coat ${coat} should map to "${expected}"`);
+    assert.ok(ATTACK_FX[signature], `no graphics for "${signature}"`);
+    seen.add(ATTACK_FX[signature].projectile);
+  }
+  assert.equal(seen.size, skins.size, 'the six homing cats must not share a projectile');
+});
+
+test('an unknown caster falls back without throwing', () => {
+  assert.ok(ATTACK_FX[attackSignature({ type: 'shot', style: 'homing' }, null)]);
+  assert.ok(ATTACK_FX[attackSignature({ type: 'shot' }, null)]);
+});
+
+// The heart of the bomb fix: secondary damage is a victim of one blast, never its own
+// projectile. If these ever grow a projectile again, the sideways-pellets bug is back.
+test('splash secondaries are absorbed into the parent blast, not fired separately', () => {
+  for (const [secondary, parent] of [['splash-secondary', 'splash'], ['bone-bomb-secondary', 'bone-bomb']]) {
+    assert.equal(ATTACK_FX[secondary].projectile, null, `${secondary} must not fire a projectile`);
+    assert.equal(ATTACK_FX[secondary].absorbedBy, parent);
+    assert.equal(ATTACK_FX[parent].blast, 'row-neighbours', `${parent} must draw a blast`);
+  }
+});
+
+test('area attacks group with their secondaries into one attack', () => {
+  const primary = { type: 'shot', from: 'cat1', style: 'splash', col: 2, toRow: 4 };
+  const secondary = { type: 'shot', from: 'cat1', style: 'splash-secondary', col: 3, toRow: 4 };
+  assert.equal(attackGroupKey(primary, { coat: 4 }), attackGroupKey(secondary, { coat: 4 }));
+});
+
+test('two different cats firing the same style stay separate attacks', () => {
+  const a = { type: 'shot', from: 'cat1', style: 'splash', col: 2, toRow: 4 };
+  const b = { type: 'shot', from: 'cat2', style: 'splash', col: 2, toRow: 4 };
+  assert.notEqual(attackGroupKey(a, { coat: 4 }), attackGroupKey(b, { coat: 4 }));
+});
+
+// blastCells must mirror the engine's own splash rule exactly, or fire lands on squares
+// that took no damage (or worse, a damaged dog stands in a square with no fire on it).
+// Engine rule: dog.row === impactRow && Math.abs(dog.col - impactCol) === 1, plus target.
+test('blastCells matches the engine splash footprint mid-board', () => {
+  assert.deepEqual(blastCells(4, 2), [
+    { row: 4, col: 1 }, { row: 4, col: 2 }, { row: 4, col: 3 },
+  ]);
+});
+
+test('blastCells clips at both board edges', () => {
+  assert.deepEqual(blastCells(0, 0), [{ row: 0, col: 0 }, { row: 0, col: 1 }]);
+  assert.deepEqual(blastCells(3, COLS - 1), [
+    { row: 3, col: COLS - 2 }, { row: 3, col: COLS - 1 },
+  ]);
+});
+
+test('blastCells never leaves the board', () => {
+  for (let col = 0; col < COLS; col += 1) {
+    for (const cell of blastCells(5, col)) {
+      assert.ok(cell.col >= 0 && cell.col < COLS, `col ${cell.col} off board`);
+    }
+  }
+});
+
+// The hurt reaction has to "match the contact" — the victim recoils away from whatever
+// hit it, so the spark lands on the side facing the attacker.
+test('contactVector points from the attacker to the victim', () => {
+  // A dog at row 5 biting a cat at row 6: the cat is knocked further down the board.
+  const down = contactVector(5, 2, 6, 2);
+  assert.ok(down.dy > 0 && Math.abs(down.dx) < 1e-9);
+
+  // A cat at row 10 shooting a dog at row 4: the dog is knocked back up the board.
+  const up = contactVector(10, 2, 4, 2);
+  assert.ok(up.dy < 0 && Math.abs(up.dx) < 1e-9);
+
+  // A diagonal hit pushes on both axes.
+  const diagonal = contactVector(8, 1, 6, 3);
+  assert.ok(diagonal.dx > 0 && diagonal.dy < 0);
+});
+
+test('contactVector is a unit vector, and a self-hit does not divide by zero', () => {
+  const v = contactVector(9, 0, 4, 4);
+  assert.ok(Math.abs(Math.hypot(v.dx, v.dy) - 1) < 1e-9);
+
+  const same = contactVector(3, 3, 3, 3);
+  assert.ok(Number.isFinite(same.dx) && Number.isFinite(same.dy));
+});
+
+// A death is just an event that took a unit to zero. No engine change needed to spot it.
+test('isKill spots the killing blow and nothing else', () => {
+  // Real damage events always name their victim; only a miss has to: null.
+  assert.equal(isKill({ to: 'dog3', hpBefore: 3, hpAfter: 0 }), true);
+  assert.equal(isKill({ to: 'dog3', hpBefore: 9, hpAfter: 4 }), false);
+  assert.equal(isKill({ to: 'dog3', hpBefore: 0, hpAfter: 0 }), false, 'already dead is not a fresh kill');
+  assert.equal(isKill({ miss: true, hpBefore: 4, hpAfter: 0, to: null }), false, 'a miss kills nobody');
+  assert.equal(isKill({}), false);
+});
