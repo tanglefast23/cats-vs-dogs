@@ -49,13 +49,13 @@ import {
   sellCat,
 } from '../src/game-engine.js';
 
-test('desktop board uses six columns, fourteen rows, a six-cat squad, and two actions', () => {
+test('desktop board uses six columns, fourteen rows, a five-cat squad, and two actions', () => {
   assert.equal(COLS, 6);
   assert.equal(ROWS, 14);
   assert.equal(CAT_ZONE_START, 10);
   assert.equal(ROWS - CAT_ZONE_START, 4);
   assert.equal(ACTIONS_PER_ROUND, 2);
-  assert.equal(MAX_FIELD_CATS, 6);
+  assert.equal(MAX_FIELD_CATS, 5);
   assert.equal(MAX_ROUNDS, 10);
 });
 
@@ -940,7 +940,7 @@ test('illegal placement above cat territory leaves the bench unchanged', () => {
   assert.equal(unchanged.cats.length, 0);
 });
 
-test('the field cap blocks a seventh deployment but still allows board movement', () => {
+test('the field cap blocks a sixth deployment but still allows board movement', () => {
   let game = createGame(() => 0.2);
   for (let index = 0; index < MAX_FIELD_CATS; index += 1) {
     game = addCatToBench(game, { level: 1, coat: index % 3 });

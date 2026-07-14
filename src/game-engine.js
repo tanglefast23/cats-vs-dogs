@@ -14,7 +14,7 @@ export const ACTIONS_PER_ROUND = 2;
 export const BENCH_SIZE = 3;
 export const PRODUCTION_CAPACITY = 2;
 export const STORAGE_CAPACITY = 2;
-export const MAX_FIELD_CATS = 6;
+export const MAX_FIELD_CATS = 5;
 export const MAX_SHOP_SIZE = 5;
 export const DOG_MOVE_DISTANCE = 2;
 export const FAST_DOG_MOVE_DISTANCE = 3;
@@ -407,6 +407,7 @@ export function createCat(level = 1, coat = 0) {
     ability: stats.ability,
     activeAbility: CAT_COAT_INFO[safeCoat].activeAbility ?? null,
     activeUsed: false,
+    hasEnteredBattle: false,
     equipment: { weapon: null, armour: null },
   };
 }
@@ -926,7 +927,8 @@ export function equipInventoryItem(game, inventoryIndex, targetType, targetId, p
 export function useFood(game, inventoryIndex, catId) {
   const stack = game.inventory[inventoryIndex];
   const target = game.cats.find((cat) => cat.id === catId);
-  if (game.phase !== 'tactics' || stack?.kind !== 'food' || !target || target.hp <= 0 || target.hp >= target.maxHp) return game;
+  const canFeed = game.phase === 'prep' || game.phase === 'tactics';
+  if (!canFeed || stack?.kind !== 'food' || !target || target.hp <= 0 || target.hp >= target.maxHp) return game;
   const next = copy(game);
   const nextTarget = next.cats.find((cat) => cat.id === catId);
   const hpBefore = nextTarget.hp;
@@ -993,6 +995,7 @@ export function useActiveAbility(game, casterId, target = {}) {
     if (ally && legal) {
       const fromRow = ally.row; const fromCol = ally.col;
       ally.row = target.row; ally.col = target.col;
+      if (!ally.tacticsMoved) ally.tacticsOrigin = { row: ally.row, col: ally.col };
       if (caster.level >= 2) ally.guard = Math.max(ally.guard ?? 0, 2);
       if (caster.level >= 3) ally.nextAttackBonus = Math.max(ally.nextAttackBonus ?? 0, 2);
       next.events.push({ type: 'teleport', from: caster.id, to: ally.id, fromRow, fromCol, row: ally.row, col: ally.col });
@@ -1083,7 +1086,9 @@ export function combineCats(game) {
           .slice(0, 3);
         const selectedIds = new Set(selected.map((cat) => cat.id));
         next.bench = next.bench.filter((cat) => !selectedIds.has(cat.id));
-        next.bench.push(createCat(level + 1, coat));
+        const combined = createCat(level + 1, coat);
+        combined.hasEnteredBattle = selected.some((cat) => cat.hasEnteredBattle);
+        next.bench.push(combined);
         next.events.push({ type: 'combine', level: level + 1, coat });
       }
     }
@@ -1110,6 +1115,7 @@ export function mergeUnitOnto(game, sourceType, sourceId, targetType, targetId) 
   if (source.level !== target.level || normalizeCoat(source.coat) !== normalizeCoat(target.coat)) return game;
   // First merge creates a two-copy stack; the third promotes it.
   target.copies = (target.copies ?? 1) + (source.copies ?? 1);
+  target.hasEnteredBattle = Boolean(target.hasEnteredBattle || source.hasEnteredBattle);
   const removeFrom = sourceType === 'bench' ? 'bench' : 'cats';
   next[removeFrom] = next[removeFrom].filter((cat) => cat.id !== source.id);
   if (target.copies >= 3 && target.level < 3) {
@@ -1127,13 +1133,13 @@ export function placeCat(game, benchIndex, row, col) {
   if (game.cats.some((cat) => cat.row === row && cat.col === col)) return game;
   const source = game.bench[benchIndex];
   if (!source || source.kind === 'production-cat') return game;
-  if (source.prepOrigin) {
+  if (source.hasEnteredBattle && source.prepOrigin) {
     const distance = Math.abs(row - source.prepOrigin.row) + Math.abs(col - source.prepOrigin.col);
     if (source.prepMoved || distance > catMoveLimit(source)) return game;
   }
   const next = copy(game);
   const [cat] = next.bench.splice(benchIndex, 1);
-  if (cat.prepOrigin) cat.prepMoved = true;
+  if (cat.hasEnteredBattle && cat.prepOrigin) cat.prepMoved = true;
   else {
     cat.prepOrigin = { row, col };
     cat.prepMoved = false;
@@ -1146,22 +1152,42 @@ export function moveCat(game, catId, row, col) {
   if (game.phase !== 'prep' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col && cat.id !== catId)) return game;
   const source = game.cats.find((unit) => unit.id === catId);
-  if (!source || source.prepMoved) return game;
+  if (!source || (source.hasEnteredBattle && source.prepMoved)) return game;
   const origin = source.prepOrigin ?? { row: source.row, col: source.col };
   const distance = Math.abs(row - origin.row) + Math.abs(col - origin.col);
-  if (distance > catMoveLimit(source)) return game;
+  if (source.hasEnteredBattle && distance > catMoveLimit(source)) return game;
   const next = copy(game);
   const cat = next.cats.find((unit) => unit.id === catId);
-  cat.prepOrigin ??= origin;
-  cat.prepMoved = true;
+  cat.prepOrigin = source.hasEnteredBattle ? origin : { row, col };
+  cat.prepMoved = Boolean(source.hasEnteredBattle);
   cat.row = row;
   cat.col = col;
   return next;
 }
 
-// Kept as a compatibility guard for older callers: manual battle movement is disabled.
-export function moveCatInTactics(game) {
-  return game;
+export function moveCatInTactics(game, catId, row, col) {
+  if (game.phase !== 'tactics' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  const source = game.cats.find((cat) => cat.id === catId);
+  if (!source || source.tacticsMoved) return game;
+  const blocked = game.cats.some((cat) => cat.id !== catId && cat.row === row && cat.col === col)
+    || game.decoys.some((decoy) => decoy.row === row && decoy.col === col)
+    || game.dogs.some((dog) => dog.hp > 0 && dog.row === row && dog.col === col);
+  if (blocked) return game;
+  const origin = source.tacticsOrigin ?? { row: source.row, col: source.col };
+  const distance = Math.abs(row - origin.row) + Math.abs(col - origin.col);
+  if (distance < 1 || distance > catMoveLimit(source)) return game;
+
+  const next = copy(game);
+  const cat = next.cats.find((unit) => unit.id === catId);
+  const fromRow = cat.row;
+  const fromCol = cat.col;
+  cat.tacticsOrigin ??= origin;
+  cat.tacticsMoved = true;
+  cat.row = row;
+  cat.col = col;
+  next.events.push({ type: 'tactics-move', id: cat.id, fromRow, fromCol, row, col });
+  next.message = `${CAT_COAT_INFO[normalizeCoat(cat.coat)].name} repositioned for the next exchange.`;
+  return next;
 }
 
 export function returnCatToBench(game, catId) {
@@ -1251,6 +1277,7 @@ export function startRound(game) {
   next.decoys = [];
   next.tacticsMoveUsed = false;
   next.cats.forEach((cat) => {
+    cat.hasEnteredBattle = true;
     cat.activeUsed = false;
     cat.guard = 0;
     cat.nextAttackBonus = 0;
@@ -1275,7 +1302,11 @@ export function openTacticsWindow(game) {
   if (game.phase !== 'combat') return game;
   const next = copy(game);
   next.phase = 'tactics';
-  next.message = 'TACTICS: feed cats, cast one-use abilities, then continue.';
+  next.cats.forEach((cat) => {
+    cat.tacticsOrigin = { row: cat.row, col: cat.col };
+    cat.tacticsMoved = false;
+  });
+  next.message = 'TACTICS: move each cat once, use supplies or abilities, then continue.';
   return next;
 }
 

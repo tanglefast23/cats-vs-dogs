@@ -1,6 +1,6 @@
 export const BIG_MELEE_MOVE_LIMIT = 1;
 export const SMALL_CAT_MOVE_LIMIT = 2;
-export const CAT_PLANNING_MOVE_SPENT_MESSAGE = '1 move per planning phase.';
+export const CAT_PLANNING_MOVE_SPENT_MESSAGE = '1 move per setup or battle break.';
 
 export function catMoveLimit(cat) {
   return cat?.ability === 'melee' ? BIG_MELEE_MOVE_LIMIT : SMALL_CAT_MOVE_LIMIT;
@@ -12,7 +12,7 @@ export function catMoveLimitMessage(catOrLimit) {
 }
 
 // Draw a stable shortest route: across columns first, then across rows.
-export function catMovementPath(source, target) {
+export function catMovementPath(source, target, phase = 'prep') {
   if (
     source?.type !== 'cat' || target?.kind !== 'cell'
     || target.occupied
@@ -20,8 +20,9 @@ export function catMovementPath(source, target) {
     || !Number.isInteger(target.row) || !Number.isInteger(target.col)
   ) return [];
 
-  const limit = catMoveLimit(source);
-  const canMove = !source.prepMoved;
+  const unrestrictedSetup = phase === 'prep' && !source.hasEnteredBattle;
+  const limit = unrestrictedSetup ? Number.POSITIVE_INFINITY : catMoveLimit(source);
+  const canMove = unrestrictedSetup || (phase === 'tactics' ? !source.tacticsMoved : !source.prepMoved);
   const path = [{ row: source.row, col: source.col, withinLimit: canMove }];
   let row = source.row;
   let col = source.col;

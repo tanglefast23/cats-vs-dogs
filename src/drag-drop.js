@@ -9,7 +9,7 @@ export const DRAG_FEEDBACK = Object.freeze({
   returnMs: 260,
 });
 
-export const FIELD_CAP_MESSAGE = 'Elite Squad full (6/6). Merge, workbench, or sell a cat before deploying another.';
+export const FIELD_CAP_MESSAGE = 'Elite Squad full (5/5). Merge, workbench, or sell a cat before deploying another.';
 
 // Placement feedback retains 40% of the original landing force (a 60% cut).
 export const DROP_IMPACT = Object.freeze({
@@ -57,7 +57,7 @@ export function getDropAction({
 
   if (source.type === 'item' && target.kind === 'fighter') {
     if (source.itemKind === 'food') {
-      return phase === 'tactics' && target.hp > 0 && target.hp < target.maxHp
+      return (phase === 'prep' || phase === 'tactics') && target.hp > 0 && target.hp < target.maxHp
         ? { type: 'use-food', targetId: target.id }
         : invalid();
     }
@@ -91,6 +91,14 @@ export function getDropAction({
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
     if (!inBounds || target.row < catZoneStart) return invalid();
+    if (phase === 'tactics') {
+      if (source.type !== 'cat' || target.occupied) return invalid();
+      if (source.tacticsMoved) return invalid('prep-moved');
+      const origin = source.tacticsOrigin ?? { row: source.row, col: source.col };
+      const distance = Math.abs(target.row - origin.row) + Math.abs(target.col - origin.col);
+      if (distance < 1 || distance > catMoveLimit(source)) return invalid('move-distance');
+      return { type: 'tactics-move', row: target.row, col: target.col };
+    }
     if (phase !== 'prep') return invalid('phase');
     if (target.occupied) {
       if (!sameCatKind(source, target.occupied)) return invalid();
@@ -98,12 +106,13 @@ export function getDropAction({
         ? { type: 'purchase-merge', targetType: 'cat', targetId: target.occupied.id }
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
     }
-    if ((source.type === 'cat' || source.type === 'bench') && source.prepMoved) return invalid('prep-moved');
+    const restrictedSetupMove = (source.type === 'cat' || source.type === 'bench') && source.hasEnteredBattle;
+    if (restrictedSetupMove && source.prepMoved) return invalid('prep-moved');
     const moveOrigin = source.prepOrigin
       ?? (source.type === 'cat' && Number.isInteger(source.row) && Number.isInteger(source.col)
         ? { row: source.row, col: source.col }
         : null);
-    if ((source.type === 'cat' || source.type === 'bench') && moveOrigin) {
+    if (restrictedSetupMove && moveOrigin) {
       const distance = Math.abs(target.row - moveOrigin.row) + Math.abs(target.col - moveOrigin.col);
       if (distance > catMoveLimit(source)) return invalid('move-distance');
     }

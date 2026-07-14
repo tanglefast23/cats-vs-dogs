@@ -1,7 +1,7 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, PRODUCTION_CAPACITY, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
-  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat,
+  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility,
   purchaseShopFighterToBench, purchaseShopFighterToBoard,
@@ -11,7 +11,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, stormColumnPosition } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
@@ -339,6 +339,14 @@ function dogMarkup(dog, stackIndex = 0, stackSize = 1) {
     unit.dataset.stackIndex = String(stackIndex);
   }
   unit.append(unitCanvas('dog', dog));
+  if (dog.frozenActions > 0) {
+    unit.classList.add('dog-frozen');
+    const ice = document.createElement('span');
+    ice.className = 'freeze-shell';
+    ice.setAttribute('aria-hidden', 'true');
+    ice.innerHTML = '<i class="ice-shard ice-shard-left"></i><i class="ice-shard ice-shard-right"></i><i class="ice-shard ice-shard-top"></i>';
+    unit.append(ice);
+  }
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">T${dog.tier}</span>
     <span class="hp-wrap"><span class="hp-bar hp-${hpTone(dog.hp, dog.maxHp)}" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
@@ -445,7 +453,11 @@ function tryMerge(targetType, targetId) {
 function selectCat(type, cat) {
   selected = { type, id: cat.id };
   const info = CAT_COAT_INFO[normalizeCoat(cat.coat)];
-  game.message = `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
+  game.message = game.phase === 'tactics'
+    ? `Level ${cat.level} ${info.name} selected. Move it to an empty glowing tile for its battle-break movement.`
+    : !cat.hasEnteredBattle
+    ? `Level ${cat.level} ${info.name} selected. Place or reposition it anywhere in cat territory until its first battle starts.`
+    : `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
 }
 
 function dragSource(type, cat) {
@@ -465,6 +477,9 @@ function dragSource(type, cat) {
     col: cat.col,
     prepOrigin: cat.prepOrigin,
     prepMoved: cat.prepMoved,
+    hasEnteredBattle: cat.hasEnteredBattle,
+    tacticsOrigin: cat.tacticsOrigin,
+    tacticsMoved: cat.tacticsMoved,
     sellable: sale.canSell,
     sellValue: sale.value,
     sellReason: sale.reason,
@@ -498,7 +513,11 @@ function targetFromElement(element) {
       element: cell,
       descriptor: {
         kind: 'cell', row, col,
-        occupied: occupied ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) } : null,
+        occupied: occupied
+          ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) }
+          : game.dogs.find((dog) => dog.hp > 0 && dog.row === row && dog.col === col)
+            ?? game.decoys.find((decoy) => decoy.hp > 0 && decoy.row === row && decoy.col === col)
+            ?? null,
       },
     };
   }
@@ -550,7 +569,7 @@ function showMovementPath(source, descriptor) {
   document.querySelectorAll('.move-path-valid, .move-path-invalid').forEach((element) => {
     element.classList.remove('move-path-valid', 'move-path-invalid');
   });
-  catMovementPath(source, descriptor).forEach(({ row, col, withinLimit }) => {
+  catMovementPath(source, descriptor, game.phase).forEach(({ row, col, withinLimit }) => {
     const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
     cell?.classList.add(withinLimit ? 'move-path-valid' : 'move-path-invalid');
   });
@@ -638,7 +657,7 @@ function updateDragHover(clientX, clientY) {
 
 function bindPetDrag(anchor, type, cat) {
   const phaseAllowsDrag = game.phase === 'prep'
-    || (type === 'item' && game.phase === 'tactics');
+    || ((type === 'item' || type === 'cat') && game.phase === 'tactics');
   if (!phaseAllowsDrag) return;
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
@@ -714,6 +733,8 @@ function applyDropAction(action, source) {
     game = placeCat(game, benchIndex, action.row, action.col);
   } else if (action.type === 'move') {
     game = moveCat(game, source.id, action.row, action.col);
+  } else if (action.type === 'tactics-move') {
+    game = moveCatInTactics(game, source.id, action.row, action.col);
   } else if (action.type === 'merge') {
     game = mergeUnitOnto(game, source.type, source.id, action.targetType, action.targetId);
     if (game !== before) queueUpgradeReveal(before, game, action.targetType, action.targetId);
@@ -824,7 +845,7 @@ async function finishDrag(event, cancelled = false) {
   selected = null;
   if (changed) {
     const workerAction = action.type.includes('worker');
-    game.message = action.type === 'sell' || workerAction
+    game.message = action.type === 'sell' || action.type === 'tactics-move' || workerAction
       ? game.message
       : action.type === 'equip'
         ? `T${state.source.tier ?? 1} ${state.source.itemKind} equipped!`
@@ -930,6 +951,7 @@ function productionStation(worker, index) {
     return station;
   }
   const info = WORKER_INFO[worker.role];
+  station.classList.add(`station-${worker.role}`);
   station.append(unitCanvas('station', worker));
   station.insertAdjacentHTML('beforeend', `<small>${info.station.toUpperCase()}</small>`);
   if (worker.pendingOutput) {
@@ -951,6 +973,34 @@ function productionStation(worker, index) {
     const productionRounds = info.productionRounds ?? 1;
     const remaining = Math.max(1, productionRounds - (worker.productionProgress ?? 0));
     station.title = `${info.name} produces after ${remaining === 1 ? 'the next battle' : `${remaining} more battles`}`;
+    if (productionRounds > 1) {
+      const progress = productionProgressStatus(worker, info);
+      station.setAttribute('aria-label', `${info.name} ${info.station}, ${progress.label.toLowerCase()} until completion`);
+      const progressHost = document.createElement('span');
+      progressHost.className = 'station-progress';
+      progressHost.innerHTML = `
+        <b>${progress.label}</b>
+        <span class="station-progress-track"><i style="width:${progress.percent}%"></i></span>
+      `;
+      station.append(progressHost);
+    }
+    const workVisual = productionWorkVisual(worker.role);
+    if (workVisual && game.phase === 'prep' && !playing) {
+      station.classList.add('is-working', `work-${workVisual}`);
+      const workAction = document.createElement('span');
+      workAction.className = `work-action work-${workVisual}`;
+      workAction.setAttribute('aria-hidden', 'true');
+      if (workVisual === 'stir') {
+        workAction.innerHTML = '<i class="cook-spoon"></i><i class="cook-steam steam-one"></i><i class="cook-steam steam-two"></i>';
+      } else if (workVisual === 'coin') {
+        workAction.innerHTML = '<i class="trade-coin">●</i><i class="trade-spark trade-spark-one">✦</i><i class="trade-spark trade-spark-two">✦</i>';
+      } else if (workVisual === 'hammer') {
+        workAction.innerHTML = '<i class="forge-hammer"></i><i class="forge-spark spark-one"></i><i class="forge-spark spark-two"></i><i class="forge-spark spark-three"></i>';
+      } else if (workVisual === 'polish') {
+        workAction.innerHTML = '<i class="polish-cloth"></i><i class="armour-glint glint-one">✦</i><i class="armour-glint glint-two">✦</i>';
+      }
+      station.append(workAction);
+    }
   }
   return station;
 }
@@ -969,6 +1019,10 @@ function productionWorkerSlot(index) {
   }
   const info = WORKER_INFO[worker.role];
   slot.append(unitCanvas('worker', worker));
+  const workVisual = productionWorkVisual(worker.role);
+  if (workVisual && game.phase === 'prep' && !worker.pendingOutput && !playing) {
+    slot.classList.add('is-working', `worker-${workVisual}`);
+  }
   slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
   bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
   bindTooltip(slot, () => workerTooltipInfo(worker, info));
@@ -1117,7 +1171,7 @@ function renderTacticsPanel() {
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
   $('#tactics-help').textContent = activeTargeting
     ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
-    : 'Drag food or equipment onto a cat, or cast one available ability. Cats only move during setup.';
+    : 'Move each cat once, drag supplies onto a cat, or cast one available ability.';
 }
 
 function tryActiveTarget(row, col, cat, dog) {
@@ -1186,6 +1240,9 @@ function renderBoard() {
       const dogs = game.dogs.filter((unit) => unit.row === row && unit.col === col);
       const dog = dogs.at(-1) ?? null;
       const decoy = game.decoys?.find((unit) => unit.row === row && unit.col === col);
+      const occupiedDescriptor = cat
+        ? { id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) }
+        : dog ?? decoy ?? null;
       const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
       const equipmentLabel = cat
         ? equippedItemMarkers(cat).map((item) => `tier ${item.tier} ${item.kind}`).join(' and ')
@@ -1222,14 +1279,14 @@ function renderBoard() {
         if (validActiveTarget) cell.classList.add('ability-target');
       }
       // A click-selected cat lights the same targets, the same way, a drag would.
-      if (!activeTargeting && selected && game.phase === 'prep' && !playing) {
+      if (!activeTargeting && selected && (game.phase === 'prep' || game.phase === 'tactics') && !playing) {
         const selectedUnit = selected.type === 'bench'
           ? game.bench.find((entry) => entry.id === selected.id)
           : selected.type === 'cat' ? game.cats.find((entry) => entry.id === selected.id) : null;
         if (selectedUnit) {
           const descriptor = {
             kind: 'cell', row, col,
-            occupied: cat ? { id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) } : null,
+            occupied: occupiedDescriptor,
           };
           if (dropAction({ ...selectedUnit, type: selected.type }, descriptor).type !== 'invalid') {
             cell.classList.add('drag-valid');
@@ -1242,9 +1299,9 @@ function renderBoard() {
           return;
         }
         if (tryActiveTarget(row, col, cat, dog)) return;
-        if (game.phase !== 'prep' || playing) return;
+        if ((game.phase !== 'prep' && game.phase !== 'tactics') || playing) return;
         if (cat) {
-          if (!tryMerge('cat', cat.id)) selectCat('cat', cat);
+          if (game.phase === 'tactics' || !tryMerge('cat', cat.id)) selectCat('cat', cat);
         } else if (selected && row < CAT_ZONE_START) {
           // A silent no-op reads as a broken game — shake and say why instead.
           game.message = 'Cats stay in the four glowing rows at the bottom of the yard.';
@@ -1268,10 +1325,12 @@ function renderBoard() {
             const movingCat = game.cats.find((unit) => unit.id === selected.id);
             const attemptedAction = dropAction(
               movingCat ? { ...movingCat, type: 'cat' } : null,
-              { kind: 'cell', row, col, occupied: null },
+              { kind: 'cell', row, col, occupied: occupiedDescriptor },
             );
             const before = game;
-            game = moveCat(game, selected.id, row, col);
+            game = game.phase === 'tactics'
+              ? moveCatInTactics(game, selected.id, row, col)
+              : moveCat(game, selected.id, row, col);
             if (game !== before) {
               selected = null;
               playCatDrop();
@@ -1520,6 +1579,18 @@ async function animateFear(event) {
   pulse.remove();
 }
 
+async function animateFreezeSkip(event) {
+  const dog = findUnitElement(event.id);
+  if (!dog) return;
+  const cue = effectAt('freeze-skip-cue', event.row, event.col, 'FROZEN!');
+  dog.classList.add('freeze-skipping');
+  await wait(Math.round(440 / combatSpeed));
+  dog.classList.remove('freeze-skipping');
+  dog.classList.add('ice-thawing');
+  await wait(Math.round(220 / combatSpeed));
+  cue.remove();
+}
+
 async function animateHeal(event) {
   const target = findUnitElement(event.to);
   const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
@@ -1630,6 +1701,7 @@ async function animateEvents(events) {
   const heals = events.filter((event) => event.type === 'heal');
   const dogHeals = events.filter((event) => event.type === 'dog-heal');
   const fears = events.filter((event) => event.type === 'dog-fear');
+  const freezeSkips = events.filter((event) => event.type === 'freeze-skip');
   const superCats = events.filter((event) => event.type === 'super-cat');
 
   if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
@@ -1639,12 +1711,13 @@ async function animateEvents(events) {
     ...heals.map(animateHeal),
   ]);
   for (const event of panicMoves) await animateMove(event);
-  if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length) setTurnTag('dogs');
+  if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length || freezeSkips.length) setTurnTag('dogs');
   await Promise.all([
     ...dogShots.map((event, index) => animateShot(event, index)),
     ...howls.map(animateHowl),
     ...dogHeals.map(animateHeal),
     ...fears.map(animateFear),
+    ...freezeSkips.map(animateFreezeSkip),
   ]);
   await Promise.all([...moves.map(animateMove), ...jumps.map(animateDogJump)]);
   await Promise.all(melee.map((event) => animateMelee(event, 'down')));

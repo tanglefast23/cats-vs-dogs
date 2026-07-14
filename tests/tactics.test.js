@@ -63,16 +63,22 @@ test('combat opens a tactics window between its two normal exchanges', () => {
   assert.equal(game.section, ACTIONS_PER_ROUND);
 });
 
-test('food is consumed only during a tactics window', () => {
+test('food is consumed during setup or a tactics window, but not active combat', () => {
   let game = createGame(() => 0.5);
-  game = placeCoat(game, CAT_COAT.ORANGE, 12, 0);
+  game = placeCoat(game, CAT_COAT.GREY, 12, 0);
   game.cats[0].hp = 2;
-  game = addInventoryStack(game, { kind: 'food', quantity: 1 });
-  game.phase = 'combat';
-  assert.equal(useFood(game, 0, game.cats[0].id), game);
-  game = openTacticsWindow(game);
+  game = addInventoryStack(game, { kind: 'food', quantity: 2 });
+
   game = useFood(game, 0, game.cats[0].id);
   assert.equal(game.cats[0].hp, 4);
+  assert.equal(game.inventory[0].quantity, 1);
+
+  game.phase = 'combat';
+  assert.equal(useFood(game, 0, game.cats[0].id), game);
+
+  game = openTacticsWindow(game);
+  game = useFood(game, 0, game.cats[0].id);
+  assert.equal(game.cats[0].hp, 6);
   assert.equal(game.inventory[0], null);
 });
 
@@ -80,7 +86,7 @@ test('melee cats move one square and smaller cats move two during setup, once pe
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.GREY, 12, 1);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
-  game.phase = 'combat';
+  game = startRound(game);
   game = finishRound(game);
   const meleeId = game.cats.find((cat) => cat.coat === CAT_COAT.GREY).id;
   const rangedId = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE).id;
@@ -95,20 +101,31 @@ test('melee cats move one square and smaller cats move two during setup, once pe
   assert.equal(moveCat(game, rangedId, 11, 4), game, 'a ranged cat still relocates only once per prep');
 });
 
-test('a newly deployed cat gets one range-limited setup move after its free placement', () => {
+test('a newly deployed cat can reposition anywhere until its first battle starts', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
   const catId = game.cats[0].id;
 
-  game = moveCat(game, catId, 10, 2);
-  assert.deepEqual([game.cats[0].row, game.cats[0].col], [10, 2]);
-  assert.equal(moveCat(game, catId, 10, 3), game, 'the one setup move is now spent');
+  game = moveCat(game, catId, 10, 5);
+  game = moveCat(game, catId, 13, 0);
+  assert.deepEqual([game.cats[0].row, game.cats[0].col], [13, 0]);
+  assert.equal(game.cats[0].hasEnteredBattle, false);
+
+  game = startRound(game);
+  assert.equal(game.cats[0].hasEnteredBattle, true);
+  game = finishRound(game);
+  assert.equal(moveCat(game, catId, 10, 0), game, 'the normal range applies after battle starts');
+  game = moveCat(game, catId, 11, 0);
+  assert.deepEqual([game.cats[0].row, game.cats[0].col], [11, 0]);
+  assert.equal(moveCat(game, catId, 11, 1), game, 'the veteran cat has spent its setup move');
 });
 
 test('a battlefield merge bypasses movement distance and the spent-move flag', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 0);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 3);
+  game = startRound(game);
+  game = finishRound(game);
   const [source, target] = game.cats;
   game = moveCat(game, source.id, 11, 0);
 
@@ -118,11 +135,26 @@ test('a battlefield merge bypasses movement distance and the spent-move flag', (
   assert.equal(merged.cats[0].copies, 2);
 });
 
+test('merging a veteran cat into a rookie preserves the first-battle movement lock', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 0);
+  game = startRound(game);
+  game = finishRound(game);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 3);
+  const veteran = game.cats.find((cat) => cat.hasEnteredBattle);
+  const rookie = game.cats.find((cat) => !cat.hasEnteredBattle);
+
+  game = mergeUnitOnto(game, 'cat', veteran.id, 'cat', rookie.id);
+
+  assert.equal(game.cats.length, 1);
+  assert.equal(game.cats[0].hasEnteredBattle, true);
+});
+
 test('drag validation reads prepOrigin from real engine cats, so highlights match engine limits', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.GREY, 12, 1);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
-  game.phase = 'combat';
+  game = startRound(game);
   game = finishRound(game);
   const melee = game.cats.find((cat) => cat.coat === CAT_COAT.GREY);
   const ranged = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE);
@@ -227,18 +259,57 @@ test('starting a battle resets active casts without healing survivors between ro
   assert.equal(game.cats[0].hp, 1);
 });
 
-test('manual cat movement stays disabled during a tactics window', () => {
+test('every cat gets one normal range-limited move during each tactics window', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.GREY, 12, 1);
+  game = placeCoat(game, CAT_COAT.ORANGE, 12, 4);
+  game = startRound(game);
+  game = openTacticsWindow(game);
+  const meleeId = game.cats.find((cat) => cat.coat === CAT_COAT.GREY).id;
+  const rangedId = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE).id;
+
+  assert.deepEqual(game.cats.find((cat) => cat.id === meleeId).tacticsOrigin, { row: 12, col: 1 });
+  assert.equal(moveCatInTactics(game, meleeId, 10, 1), game, 'melee movement stays limited to one square');
+  game = moveCatInTactics(game, meleeId, 11, 1);
+  assert.deepEqual(
+    [game.cats.find((cat) => cat.id === meleeId).row, game.cats.find((cat) => cat.id === meleeId).col],
+    [11, 1],
+  );
+  assert.equal(moveCatInTactics(game, meleeId, 11, 2), game, 'the melee cat spent its break movement');
+
+  game = moveCatInTactics(game, rangedId, 10, 4);
+  assert.deepEqual(
+    [game.cats.find((cat) => cat.id === rangedId).row, game.cats.find((cat) => cat.id === rangedId).col],
+    [10, 4],
+  );
+
+  game = continueCombat(game);
+  game = openTacticsWindow(game);
+  game = moveCatInTactics(game, meleeId, 11, 2);
+  assert.deepEqual(
+    [game.cats.find((cat) => cat.id === meleeId).row, game.cats.find((cat) => cat.id === meleeId).col],
+    [11, 2],
+    'a new battle break grants a fresh move',
+  );
+});
+
+test('tactics movement cannot enter a cat, dog, or decoy tile', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
   game = startRound(game);
   game = openTacticsWindow(game);
   const catId = game.cats[0].id;
+  game.cats.push({ ...createCat(1, CAT_COAT.GREY), row: 12, col: 3 });
+  game.dogs = [createDog(1, 11, 2)];
+  game.decoys = [{ id: 'decoy-1', row: 13, col: 2, hp: 3, maxHp: 3 }];
 
   assert.equal(moveCatInTactics(game, catId, 12, 3), game);
+  assert.equal(moveCatInTactics(game, catId, 11, 2), game);
+  assert.equal(moveCatInTactics(game, catId, 13, 2), game);
   assert.deepEqual([game.cats[0].row, game.cats[0].col], [12, 2]);
 });
 
-test('drag rules reject all manual movement during a tactics window', () => {
+test('drag rules allow each cat normal tactics movement but reject merges and deployment', () => {
   const drop = (source, target, extra = {}) => getDropAction({
     source,
     target,
@@ -248,11 +319,22 @@ test('drag rules reject all manual movement during a tactics window', () => {
     phase: 'tactics',
     ...extra,
   });
-  const cat = { type: 'cat', id: 'cat-9', level: 1, coat: CAT_COAT.ORANGE, row: 12, col: 2 };
+  const cat = {
+    type: 'cat', id: 'cat-9', level: 1, coat: CAT_COAT.ORANGE, ability: 'homing',
+    row: 12, col: 2, tacticsOrigin: { row: 12, col: 2 }, tacticsMoved: false,
+  };
 
   assert.deepEqual(
-    drop(cat, { kind: 'cell', row: 12, col: 3, occupied: null }),
-    { type: 'invalid', reason: 'phase' },
+    drop(cat, { kind: 'cell', row: 10, col: 2, occupied: null }),
+    { type: 'tactics-move', row: 10, col: 2 },
+  );
+  assert.deepEqual(
+    drop(cat, { kind: 'cell', row: 10, col: 1, occupied: null }),
+    { type: 'invalid', reason: 'move-distance' },
+  );
+  assert.deepEqual(
+    drop({ ...cat, tacticsMoved: true }, { kind: 'cell', row: 12, col: 3, occupied: null }),
+    { type: 'invalid', reason: 'prep-moved' },
   );
   assert.equal(
     drop(cat, { kind: 'cell', row: 12, col: 3, occupied: { id: 'cat-2', level: 1, coat: CAT_COAT.ORANGE } }).type,

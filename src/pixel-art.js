@@ -84,7 +84,7 @@ export const DOG_BODY_BUILDS = {
 export const WORKER_ART_MARKERS = {
   cook: ['straw-hat', 'apron', 'spoon'],
   trader: ['waistcoat', 'coin-purse', 'merchant-hat'],
-  weaponsmith: ['leather-apron', 'hammer', 'weapon-rack'],
+  weaponsmith: ['leather-apron', 'hammer', 'anvil'],
   armourer: ['goggles', 'heavy-gloves', 'anvil'],
 };
 
@@ -516,8 +516,12 @@ export function drawStation(canvas, role = 'cook') {
     px(ctx, outline, 4, 8, 24, 17); px(ctx, '#b96f42', 5, 9, 22, 15); px(ctx, '#f3d27b', 7, 11, 18, 5);
     px(ctx, '#d84a45', 3, 4, 26, 6); px(ctx, '#f2cf4a', 13, 17, 6, 6);
   } else if (role === 'weaponsmith') {
-    px(ctx, outline, 4, 7, 4, 19); px(ctx, outline, 24, 6, 4, 20);
-    px(ctx, '#cbd2d0', 10, 5, 4, 19); px(ctx, '#d5a544', 17, 8, 3, 16);
+    // Broad weapon anvil, with a hot blade blank resting on its face.
+    px(ctx, outline, 2, 11, 28, 8); px(ctx, '#68777d', 3, 12, 26, 6);
+    px(ctx, '#b9c5c5', 5, 12, 20, 2); px(ctx, '#3e4c52', 4, 17, 23, 2);
+    px(ctx, outline, 12, 18, 10, 7); px(ctx, '#59666b', 14, 18, 6, 7);
+    px(ctx, outline, 8, 24, 18, 4); px(ctx, '#49565b', 9, 24, 16, 3);
+    px(ctx, '#ffb33d', 8, 9, 14, 3); px(ctx, '#fff17a', 10, 9, 8, 1); px(ctx, '#d85a32', 21, 10, 5, 2);
   } else {
     px(ctx, outline, 7, 17, 19, 8); px(ctx, '#697982', 8, 18, 17, 6);
     px(ctx, outline, 12, 8, 9, 10); px(ctx, '#8d9ba0', 13, 9, 7, 8); px(ctx, outline, 14, 25, 5, 6);

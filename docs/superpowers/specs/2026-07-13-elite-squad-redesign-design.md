@@ -29,9 +29,9 @@ Merging **halves** your total HP and damage and drops your lane coverage. So spr
 
 ## The design
 
-### 1. Field cap — a flat 6 cats
+### 1. Field cap — a flat 5 cats
 
-You may **deploy at most 6 cats on the battlefield**, in every round (flat, no ramp).
+You may **deploy at most 5 cats on the battlefield**, in every round (flat, no ramp).
 
 - The bench (6) and the shop are **unchanged** — you still buy freely. The squeeze is purely on *deployment*.
 - Why this works: once slots are scarce, the comparison that matters flips from "3 level-1s vs 1 level-2" (where spreading wins) to **"1 level-2 vs 1 level-1 in the same slot"** (where the level-2 clearly wins). Scarcity is what makes merging correct.
@@ -77,7 +77,7 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 
 - **Do the cap first, then judge.** The flat-6 cap cuts firepower from ~20 cats down to 6, which by itself lets dogs march much deeper before dying. Much of the "no doom" feeling should fix itself. Implement the cap, playtest a few rounds, *then* decide whether pacing still needs work — so we don't stack two big difficulty changes at once and overshoot into "too hard, no time to react."
 - **If it's still too easy after the cap:** prefer **shrinking the vertical approach** over speeding dogs up.
-  - Trim the empty approach so dogs cross ~5–6 rows to reach the front line instead of ~10, and shrink the cat zone to ~2–3 rows (6 cats don't need 4 rows of depth).
+  - Trim the empty approach so dogs cross ~5–6 rows to reach the front line instead of ~10, and shrink the cat zone to ~2–3 rows (5 cats don't need 4 rows of depth).
   - *Not* "every dog moves 3 rows/turn": normal dogs advance 2 squares, while T2+ Barkour Bandit is the readable 3-square speed specialist. Its Light Gear makes every damaging hit deal +1 damage, paying for that speed without slowing the rest of the pack.
   - T2+ Sir Flinches-a-Lot uses Panic Shuffle after surviving a hit: it sidesteps left or right when possible, and only a square already holding two dogs counts as dog-blocked.
 - **Reserve lever (only if shrinking + cap still isn't enough):** cap how far cats can shoot, so dogs get a "safe" far zone and dread builds as they enter range. Bigger change — hold it back.
@@ -87,12 +87,12 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 ## Open items (to tune / verify, not blocking)
 
 - **Exact merge stat curves** per coat — start from the "beat the sum by a little" rule, tune in playtest.
-- **Whether flat 6 holds** — confirm it feels right after playing; adjust the number if not.
+- **Whether flat 5 holds** — confirm it feels right after playing; adjust the number if not.
 - **Incoming-wave visibility** — confirm the UI shows the *columns* of the next wave during prep. The engine knows them (`nextWave`); movement is far more strategic if the player can see where the dogs are about to come. If it's not shown, showing it becomes part of this work.
 
 ## Implemented balance baseline
 
-- Field cap: **6 cats**, shown in the HUD; purchases and bench placements cannot create a seventh field cat, while moves and merges remain legal.
+- Field cap: **5 cats**, shown in the HUD; purchases and bench placements cannot create a sixth field cat, while moves and merges remain legal.
 - Merge curve: every coat's level 2 health and attack are just over 3× level 1; level 3 is just over 3× level 2.
 - Wave sizes by round: **2, 3, 3, 4, 4, 5, 5, 6, 7, 8**.
 - Tier floors: tier 1 in rounds 1–4, tier 2 in rounds 5–8, and tier 3 in rounds 9–10.

@@ -75,6 +75,36 @@ export function productionCollectionDestination(inventory = [], output = null) {
   return emptyIndex >= 0 ? { type: 'storage', index: emptyIndex } : null;
 }
 
+/** Visible battle-based progress for slower Production House stations. */
+export function productionProgressStatus(worker = {}, info = {}) {
+  const total = Math.max(1, Number(info.productionRounds) || 1);
+  const completed = worker.pendingOutput
+    ? total
+    : Math.min(total, Math.max(0, Number(worker.productionProgress) || 0));
+  const remaining = worker.pendingOutput ? 0 : total - completed;
+  return {
+    completed,
+    total,
+    remaining,
+    percent: Math.round((completed / total) * 100),
+    label: worker.pendingOutput
+      ? 'READY'
+      : `${remaining} ${remaining === 1 ? 'BATTLE' : 'BATTLES'}`,
+  };
+}
+
+const PRODUCTION_WORK_VISUALS = Object.freeze({
+  cook: 'stir',
+  trader: 'coin',
+  weaponsmith: 'hammer',
+  armourer: 'polish',
+});
+
+/** Role-specific planning-stage action used by each Production House station. */
+export function productionWorkVisual(role) {
+  return PRODUCTION_WORK_VISUALS[role] ?? null;
+}
+
 /** Minimal Cat Cart copy; detailed abilities remain in the glossary. */
 export function shopCardSummary(slot, info) {
   return {

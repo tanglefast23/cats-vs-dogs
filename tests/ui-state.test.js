@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -30,6 +30,49 @@ test('production collection feedback targets matching storage, empty storage, or
   assert.deepEqual(productionCollectionDestination(inventory, { kind: 'armour', tier: 1, quantity: 1 }), { type: 'storage', index: 1 });
   assert.deepEqual(productionCollectionDestination(inventory, { kind: 'coins', quantity: 2 }), { type: 'gold', index: null });
   assert.equal(productionCollectionDestination(inventory.map(() => ({ kind: 'blocked' })), { kind: 'food' }), null);
+});
+
+test('Clawhammer progress reports battles remaining without implying a real-time countdown', () => {
+  const info = WORKER_INFO.weaponsmith;
+  assert.deepEqual(productionProgressStatus({ productionProgress: 0 }, info), {
+    completed: 0, total: 2, remaining: 2, percent: 0, label: '2 BATTLES',
+  });
+  assert.deepEqual(productionProgressStatus({ productionProgress: 1 }, info), {
+    completed: 1, total: 2, remaining: 1, percent: 50, label: '1 BATTLE',
+  });
+  assert.deepEqual(productionProgressStatus({
+    productionProgress: 0,
+    pendingOutput: { kind: 'weapon', tier: 1, quantity: 1 },
+  }, info), {
+    completed: 2, total: 2, remaining: 0, percent: 100, label: 'READY',
+  });
+});
+
+test('every production cat has a distinct planning-stage work visual', () => {
+  assert.deepEqual(Object.keys(WORKER_INFO).map((role) => productionWorkVisual(role)), [
+    'stir',
+    'coin',
+    'hammer',
+    'polish',
+  ]);
+  assert.equal(productionWorkVisual('unknown'), null);
+});
+
+test('every multi-battle production cat exposes the same completion countdown', () => {
+  const slowWorkers = Object.entries(WORKER_INFO).filter(([, info]) => info.productionRounds > 1);
+  assert.deepEqual(slowWorkers.map(([role, info]) => ({
+    role,
+    status: productionProgressStatus({ role, productionProgress: 1 }, info),
+  })), [
+    {
+      role: 'weaponsmith',
+      status: { completed: 1, total: 2, remaining: 1, percent: 50, label: '1 BATTLE' },
+    },
+    {
+      role: 'armourer',
+      status: { completed: 1, total: 2, remaining: 1, percent: 50, label: '1 BATTLE' },
+    },
+  ]);
 });
 
 test('deployed cat equipment markers show weapon then armour with their tiers', () => {
@@ -189,11 +232,11 @@ test('a full squad blocks new deployments while still allowing moves and merges'
     catZoneStart: 9,
     rows: 14,
     cols: 6,
-    fieldCount: 6,
-    fieldCap: 6,
+    fieldCount: 5,
+    fieldCap: 5,
   };
 
-  assert.equal(FIELD_CAP_MESSAGE, 'Elite Squad full (6/6). Merge, workbench, or sell a cat before deploying another.');
+  assert.equal(FIELD_CAP_MESSAGE, 'Elite Squad full (5/5). Merge, workbench, or sell a cat before deploying another.');
   assert.deepEqual(getDropAction({
     ...common,
     source: { type: 'bench', id: 'cat-1', level: 1 },
@@ -220,32 +263,44 @@ test('drag highlights match the setup move limit for each cat build', () => {
   const common = { target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
   assert.deepEqual(getDropAction({
     ...common,
-    source: { type: 'cat', id: 1, ability: 'melee', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+    source: { type: 'cat', id: 1, ability: 'melee', hasEnteredBattle: true, prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }), { type: 'invalid', reason: 'move-distance' });
   assert.deepEqual(getDropAction({
     ...common,
-    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+    source: { type: 'cat', id: 2, ability: 'homing', hasEnteredBattle: true, prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }), { type: 'move', row: 10, col: 3 });
   assert.deepEqual(getDropAction({
     ...common,
     target: { kind: 'cell', row: 10, col: 4, occupied: false },
-    source: { type: 'cat', id: 2, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+    source: { type: 'cat', id: 2, ability: 'homing', hasEnteredBattle: true, prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }), { type: 'invalid', reason: 'move-distance' });
   assert.deepEqual(getDropAction({
     ...common,
     target: { kind: 'cell', row: 10, col: 4, occupied: { id: 9, level: 1 } },
-    source: { type: 'cat', id: 2, level: 1, ability: 'homing', prepOrigin: { row: 10, col: 1 }, prepMoved: false },
+    source: { type: 'cat', id: 2, level: 1, ability: 'homing', hasEnteredBattle: true, prepOrigin: { row: 10, col: 1 }, prepMoved: false },
   }), { type: 'merge', targetType: 'cat', targetId: 9 });
   assert.equal(getDropAction({
     ...common,
-    source: { type: 'cat', id: 3, ability: 'homing', prepOrigin: { row: 10, col: 2 }, prepMoved: true },
+    source: { type: 'cat', id: 3, ability: 'homing', hasEnteredBattle: true, prepOrigin: { row: 10, col: 2 }, prepMoved: true },
   }).type, 'invalid');
+});
+
+test('a rookie cat can drag anywhere repeatedly before its first battle', () => {
+  const source = {
+    type: 'cat', id: 4, ability: 'melee', hasEnteredBattle: false,
+    row: 10, col: 0, prepOrigin: { row: 10, col: 0 }, prepMoved: true,
+  };
+  const target = { kind: 'cell', row: 13, col: 5, occupied: false };
+  const common = { source, target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
+
+  assert.deepEqual(getDropAction(common), { type: 'move', row: 13, col: 5 });
+  assert.equal(catMovementPath(source, target).every((step) => step.withinLimit), true);
 });
 
 test('movement path marks allowed steps green and excess steps red', () => {
   assert.deepEqual(
     catMovementPath(
-      { type: 'cat', ability: 'homing', row: 10, col: 1 },
+      { type: 'cat', ability: 'homing', hasEnteredBattle: true, row: 10, col: 1 },
       { kind: 'cell', row: 10, col: 4 },
     ),
     [
@@ -258,10 +313,10 @@ test('movement path marks allowed steps green and excess steps red', () => {
 });
 
 test('a cat that already moved marks every hovered path square invalid', () => {
-  assert.equal(CAT_PLANNING_MOVE_SPENT_MESSAGE, '1 move per planning phase.');
+  assert.equal(CAT_PLANNING_MOVE_SPENT_MESSAGE, '1 move per setup or battle break.');
   const source = {
     type: 'cat', id: 3, level: 1, ability: 'homing', row: 10, col: 2,
-    prepOrigin: { row: 10, col: 1 }, prepMoved: true,
+    hasEnteredBattle: true, prepOrigin: { row: 10, col: 1 }, prepMoved: true,
   };
   const target = { kind: 'cell', row: 10, col: 4, occupied: false };
   const common = { source, target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep' };
@@ -402,8 +457,12 @@ test('production cats route between the two-slot House and the universal workben
   }), { type: 'merge-bench-worker', index: 1, targetId: 'worker-3' });
 });
 
-test('food and equipment target cats only during a tactics window', () => {
+test('food targets cats during setup or tactics, while active combat stays blocked', () => {
   const target = { kind: 'fighter', id: 'cat-1', hp: 3, maxHp: 6 };
+  assert.deepEqual(getDropAction({
+    source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
+    target, catZoneStart: 10, rows: 14, cols: 6, phase: 'prep', paused: false,
+  }), { type: 'use-food', targetId: 'cat-1' });
   assert.deepEqual(getDropAction({
     source: { type: 'item', inventoryIndex: 0, itemKind: 'food' },
     target, catZoneStart: 10, rows: 14, cols: 6, phase: 'combat', paused: false,
@@ -523,6 +582,7 @@ test('production workers and items expose distinct readable art markers', () => 
   assert.ok(WORKER_ART_MARKERS.cook.includes('straw-hat'));
   assert.ok(WORKER_ART_MARKERS.trader.includes('coin-purse'));
   assert.ok(WORKER_ART_MARKERS.weaponsmith.includes('hammer'));
+  assert.ok(WORKER_ART_MARKERS.weaponsmith.includes('anvil'));
   assert.ok(WORKER_ART_MARKERS.armourer.includes('goggles'));
   assert.deepEqual(Object.keys(ITEM_ART_MARKERS).sort(), ['armour', 'coins', 'food', 'weapon']);
 });
