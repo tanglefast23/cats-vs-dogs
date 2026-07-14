@@ -13,7 +13,8 @@
     "electron:dev": "concurrently -k --success first \"vite\" \"wait-on tcp:127.0.0.1:4173 && electron . --dev\"",
     "electron": "npm run build && electron .",
     "package:electron": "npm run build && electron-forge package",
-    "test": "node --test tests/*.test.js"
+    "check": "node --check src/app.js && node --check src/game-engine.js && node --check src/battle-fx.js && node --check src/death-animation.js && node --check src/pixel-art.js && node --check src/combat-animation.js",
+    "test": "npm run check && node --test tests/*.test.js"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",

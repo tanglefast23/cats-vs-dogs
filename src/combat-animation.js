@@ -16,6 +16,15 @@ export const COMBAT_TIMING = Object.freeze({
   stormChargeMs: 380,
   stormFlashLeadMs: 130,
   stormAftermathMs: 620,
+  // A lobbed bomb hangs in the air — you should have time to see where it will land.
+  lobMs: 900,
+  // The explosion itself: fireball, shockwave, and the scorch it leaves behind.
+  blastMs: 520,
+  // Laserpaw's beam snaps on, holds while it bores through the line, then cuts out.
+  beamChargeMs: 240,
+  beamHoldMs: 380,
+  // Gap between a beam reaching each successive dog it pierces.
+  pierceStaggerMs: 90,
 });
 
 /** Scaled copy of COMBAT_TIMING for the speed toggle; the tuned table itself never changes. */
@@ -41,6 +50,30 @@ export function stormColumnPosition(col, cols = COLS) {
     centerPercent: (col + 0.5) * widthPercent,
     widthPercent,
   };
+}
+
+/**
+ * The arc of a thrown bomb — Bombay Boom's satchel charge and Bone Jovi's mortar shell.
+ * A bomb is lobbed, not fired: it rises, hangs, and drops onto the square, tumbling all
+ * the way. The lift is a sine hump, so it is zero at the throw and zero again on landing.
+ */
+export function lobShotKeyframes(start, end, { steps = 26, arcPercent = 13, spin = 540 } = {}) {
+  const frames = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps;
+    const x = start.xPercent + (end.xPercent - start.xPercent) * t;
+    const flat = start.yPercent + (end.yPercent - start.yPercent) * t;
+    // Up the board is negative, so subtracting the hump lifts the bomb.
+    const y = flat - Math.sin(Math.PI * t) * arcPercent;
+    // Grows slightly as it comes down at the board — it is coming toward the viewer.
+    const scale = 0.78 + Math.sin(Math.PI * t) * 0.3 + t * 0.16;
+    frames.push({
+      left: `${x}%`,
+      top: `${y}%`,
+      transform: `translate(-50%, -50%) rotate(${t * spin}deg) scale(${scale})`,
+    });
+  }
+  return frames;
 }
 
 /**
