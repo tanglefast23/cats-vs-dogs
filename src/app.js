@@ -45,6 +45,9 @@ let tutorialActive = false;
 let tutorialStepIndex = 0;
 const tutorialSeenTips = new Set();
 let tutorialCurrentTip = null;
+let dragHintKey = null;
+let dragHintAnim = null;
+let tutorialStartNudged = false;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -90,6 +93,10 @@ const tutorialSpotlightEl = $('#tutorial-spotlight');
 const tutorialBubbleEl = $('#tutorial-bubble');
 const tutorialTextEl = $('#tutorial-text');
 const tutorialNextEl = $('#tutorial-next');
+const tutorialDropTargetEl = $('#tutorial-drop-target');
+const tutorialDragGhostEl = $('#tutorial-drag-ghost');
+const tutorialDragUnitEl = $('#tutorial-drag-unit');
+const tutorialSourceHighlightEl = $('#tutorial-source-highlight');
 
 let tooltipEl = document.querySelector('.unit-tooltip');
 if (!tooltipEl) {
@@ -2577,18 +2584,26 @@ function closeGlossary() {
 }
 
 // --- Tutorial overlay: spotlight a target element + show a coach bubble. ---
-function positionTutorialOverlay(selector, showContinue) {
+// dim: darken the rest of the screen (only for informational steps). showSpotlight:
+// draw the ring on `selector` (off for drag steps, which light source+target instead).
+function positionTutorialOverlay(selector, showContinue, opts = {}) {
+  const { dim = true, showSpotlight = true } = opts;
   const target = selector ? document.querySelector(selector) : null;
   const pad = 8;
-  if (target) {
+  if (target && showSpotlight) {
     const r = target.getBoundingClientRect();
     tutorialSpotlightEl.style.display = 'block';
+    tutorialSpotlightEl.classList.toggle('no-dim', !dim);
     tutorialSpotlightEl.style.left = `${r.left - pad}px`;
     tutorialSpotlightEl.style.top = `${r.top - pad}px`;
     tutorialSpotlightEl.style.width = `${r.width + pad * 2}px`;
     tutorialSpotlightEl.style.height = `${r.height + pad * 2}px`;
-    // Prefer below the target; if it would run off the bottom (or cover a low
-    // target like the House), flip above so the spotlighted target stays visible.
+  } else {
+    tutorialSpotlightEl.style.display = 'none';
+  }
+  // Bubble anchors to `selector` even when the ring is hidden (drag steps).
+  if (target) {
+    const r = target.getBoundingClientRect();
     const bubbleH = tutorialBubbleEl.offsetHeight || 140;
     const spaceBelow = window.innerHeight - r.bottom;
     const bubbleTop = spaceBelow > bubbleH + 24
@@ -2599,7 +2614,6 @@ function positionTutorialOverlay(selector, showContinue) {
     tutorialBubbleEl.style.left = `${bubbleLeft}px`;
     tutorialBubbleEl.style.transform = 'none';
   } else {
-    tutorialSpotlightEl.style.display = 'none';
     tutorialBubbleEl.style.top = '50%';
     tutorialBubbleEl.style.left = '50%';
     tutorialBubbleEl.style.transform = 'translate(-50%, -50%)';
@@ -2607,14 +2621,63 @@ function positionTutorialOverlay(selector, showContinue) {
   tutorialNextEl.hidden = !showContinue;
 }
 
-function showTutorialBubble(text, selector, showContinue) {
+function showTutorialBubble(text, selector, showContinue, opts) {
   tutorialTextEl.textContent = text;
   tutorialOverlayEl.hidden = false;
-  positionTutorialOverlay(selector, showContinue);
+  positionTutorialOverlay(selector, showContinue, opts);
 }
 
 function hideTutorialOverlay() {
   tutorialOverlayEl.hidden = true;
+  hideDragHint();
+}
+
+// Highlight the drop target and loop a ghost "drag" from source to target so the
+// player sees the exact gesture. from/to are CSS selectors resolved live.
+function showDragHint(fromSel, toSel) {
+  const from = document.querySelector(fromSel);
+  const to = document.querySelector(toSel);
+  if (!from || !to) { hideDragHint(); return; }
+  const tr = to.getBoundingClientRect();
+  const pad = 6;
+  tutorialDropTargetEl.hidden = false;
+  tutorialDropTargetEl.style.left = `${tr.left - pad}px`;
+  tutorialDropTargetEl.style.top = `${tr.top - pad}px`;
+  tutorialDropTargetEl.style.width = `${tr.width + pad * 2}px`;
+  tutorialDropTargetEl.style.height = `${tr.height + pad * 2}px`;
+  // Light up the source (card / storage item) so it's clearly where to drag from.
+  const fr0 = from.getBoundingClientRect();
+  tutorialSourceHighlightEl.hidden = false;
+  tutorialSourceHighlightEl.style.left = `${fr0.left - pad}px`;
+  tutorialSourceHighlightEl.style.top = `${fr0.top - pad}px`;
+  tutorialSourceHighlightEl.style.width = `${fr0.width + pad * 2}px`;
+  tutorialSourceHighlightEl.style.height = `${fr0.height + pad * 2}px`;
+  if (prefersReducedMotion) { tutorialDragGhostEl.hidden = true; return; }
+  const key = `${fromSel}=>${toSel}`;
+  if (dragHintKey === key && dragHintAnim) { tutorialDragGhostEl.hidden = false; return; }
+  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
+  dragHintKey = key;
+  const fr = from.getBoundingClientRect();
+  const srcCanvas = from.querySelector('canvas');
+  tutorialDragUnitEl.style.backgroundImage = srcCanvas ? `url(${srcCanvas.toDataURL()})` : 'none';
+  const fromX = fr.left + fr.width / 2, fromY = fr.top + fr.height / 2;
+  const toX = tr.left + tr.width / 2, toY = tr.top + tr.height / 2;
+  tutorialDragGhostEl.hidden = false;
+  dragHintAnim = tutorialDragGhostEl.animate([
+    { offset: 0,    left: `${fromX}px`, top: `${fromY}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(0.7)' },
+    { offset: 0.14, left: `${fromX}px`, top: `${fromY}px`, opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    { offset: 0.70, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    { offset: 0.86, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(0.88)' },
+    { offset: 1,    left: `${toX}px`,   top: `${toY}px`,   opacity: 0, transform: 'translate(-50%, -50%) scale(0.88)' },
+  ], { duration: 2200, iterations: Infinity, easing: 'ease-in-out' });
+}
+
+function hideDragHint() {
+  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
+  dragHintKey = null;
+  if (tutorialDropTargetEl) tutorialDropTargetEl.hidden = true;
+  if (tutorialDragGhostEl) tutorialDragGhostEl.hidden = true;
+  if (tutorialSourceHighlightEl) tutorialSourceHighlightEl.hidden = true;
 }
 
 function tutorialCatColumns(state) {
@@ -2639,6 +2702,7 @@ function startTutorial() {
   tutorialStepIndex = 0;
   tutorialCurrentTip = null;
   tutorialSeenTips.clear();
+  tutorialStartNudged = false;
   game.shop = tutorialShop(1) ?? game.shop;
   game.message = 'Tutorial: follow the highlights.';
   render();
@@ -2660,6 +2724,7 @@ function applyTutorialWave() {
 // Set the scripted shop when a new prep round begins; graduate after round 4.
 function applyTutorialRound() {
   if (game.round > 4) { endTutorial(); return; }
+  tutorialStartNudged = false;
   const shop = tutorialShop(game.round);
   if (shop) game.shop = shop;
   // Round 3 teaches healing: leave the strongest cat lightly wounded (persisted
@@ -2673,6 +2738,20 @@ function applyTutorialRound() {
 // Called at the tail of every render() while the tutorial is active.
 function syncTutorial() {
   if (playing) { hideTutorialOverlay(); return; } // never cover a live animation
+  // Nudge: don't start a round with gold still to spend.
+  if (tutorialStartNudged && game.phase === 'prep' && game.gold >= 3) {
+    hideDragHint();
+    showTutorialBubble(`Hold on — you've still got ${game.gold} gold. Grab another cat before you start; unspent gold is lost.`,
+      '#shop', false, { dim: false });
+    return;
+  }
+  // Squad-full coaching, once, the moment you hit the 5-cat cap.
+  if (game.phase === 'prep' && game.cats.length >= MAX_FIELD_CATS
+      && tutorialStepIndex >= CORE_STEPS.length
+      && !tutorialCurrentTip && !tutorialSeenTips.has('squad-full')) {
+    tutorialCurrentTip = { id: 'squad-full', spotlight: '#adoption-box',
+      text: "Squad's full at 5! To add another cat, make room: combine three matching cats into one, park one on the Workbench, or sell your weakest in the Adoption Box." };
+  }
   while (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
     if (step.mode === 'gate' && step.isDone(game)) { tutorialStepIndex += 1; continue; }
@@ -2681,18 +2760,23 @@ function syncTutorial() {
   if (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
     if (!step.showWhen || step.showWhen(game)) {
-      showTutorialBubble(step.text, step.spotlight, step.mode === 'tap');
+      const isDrag = !!(step.dragFrom && step.dragTo);
+      showTutorialBubble(step.text, step.spotlight, step.mode === 'tap',
+        { dim: step.mode === 'tap', showSpotlight: !isDrag });
+      if (isDrag) showDragHint(step.dragFrom, step.dragTo);
+      else hideDragHint();
       return;
     }
     hideTutorialOverlay();
     return;
   }
   if (tutorialCurrentTip) {
-    showTutorialBubble(tutorialCurrentTip.text, tutorialCurrentTip.spotlight, true);
+    hideDragHint();
+    showTutorialBubble(tutorialCurrentTip.text, tutorialCurrentTip.spotlight, true, { dim: false });
     return;
   }
   const tip = TIPS.find((t) => !tutorialSeenTips.has(t.id) && t.when(game));
-  if (tip) { tutorialCurrentTip = tip; showTutorialBubble(tip.text, tip.spotlight, true); return; }
+  if (tip) { tutorialCurrentTip = tip; hideDragHint(); showTutorialBubble(tip.text, tip.spotlight, true, { dim: false }); return; }
   hideTutorialOverlay();
 }
 
@@ -2830,7 +2914,7 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
-window.addEventListener('resize', () => { if (tutorialActive) syncTutorial(); });
+window.addEventListener('resize', () => { if (tutorialActive) { dragHintKey = null; syncTutorial(); } });
 window.addEventListener('click', (event) => {
   const control = event.target?.closest?.('button, input[type="checkbox"], [role="button"]');
   if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
@@ -2850,7 +2934,16 @@ $('#refresh').addEventListener('click', () => {
   selected = null;
   render();
 });
-$('#done').addEventListener('click', playRound);
+function onDoneClick() {
+  // In the tutorial, if you'd start a round with money on the table, nudge once first.
+  if (tutorialActive && game.phase === 'prep' && game.gold >= 3 && !tutorialStartNudged) {
+    tutorialStartNudged = true;
+    render();
+    return;
+  }
+  playRound();
+}
+$('#done').addEventListener('click', onDoneClick);
 $('#tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
 $('#tutorial-skip')?.addEventListener('click', endTutorial);
