@@ -12,6 +12,7 @@ import {
   addCatToBench,
   addInventoryStack,
   availableCatCoatsForRound,
+  canTeleportDogTo,
   continueCombat,
   createCat,
   createDog,
@@ -181,19 +182,33 @@ test('drag validation reads prepOrigin from real engine cats, so highlights matc
   assert.equal(moveCat(game, melee.id, 10, 1), game, 'engine rejects the same drop the highlight rejects');
 });
 
-test('Frostpoint Witch freezes one dog for its next full action', () => {
+test('Frosty freezes a dog through the current round and the following round', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.FROST, 13, 0);
   game.dogs = [createDog(3, 5, 5)];
   game.phase = 'tactics';
+  game.section = 1;
   const dogId = game.dogs[0].id;
   game = useActiveAbility(game, game.cats[0].id, { dogId });
-  assert.equal(game.dogs[0].frozenActions, 1);
+  assert.equal(game.dogs[0].frozenActions, 3);
+
   game = continueCombat(game);
   game = resolveSection(game);
   assert.equal(game.dogs[0].row, 5);
+  assert.equal(game.dogs[0].frozenActions, 2);
+  assert.equal(game.events.at(-1).remainingActions, 2);
+
+  game = finishRound(game);
+  game = startRound(game);
+  game = resolveSection(game);
+  assert.equal(game.dogs.find((dog) => dog.id === dogId).row, 5);
+  assert.equal(game.dogs.find((dog) => dog.id === dogId).frozenActions, 1);
+  game = resolveSection(game);
+  assert.equal(game.dogs.find((dog) => dog.id === dogId).row, 5);
   assert.equal(game.dogs[0].frozenActions, 0);
-  assert.equal(game.events.some((event) => event.type === 'freeze-skip'), true);
+
+  game = resolveSection(game);
+  assert.notEqual(game.dogs.find((dog) => dog.id === dogId).row, 5, 'the dog acts again after two rounds of freeze');
 });
 
 test('Rift Walker teleports an ally anywhere and grants its level bonus', () => {
@@ -210,6 +225,42 @@ test('Rift Walker teleports an ally anywhere and grants its level bonus', () => 
   const target = game.cats[1];
   assert.deepEqual([target.row, target.col], [10, 5]);
   assert.equal(target.guard, 2);
+});
+
+test('Purrtal teleports an enemy up to two grid steps onto a square with one dog', () => {
+  let game = createGame(() => 0.5);
+  game.cats = [createCat(1, CAT_COAT.RIFT)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  const target = createDog(2, 5, 3);
+  const waitingDog = createDog(1, 4, 2);
+  game.dogs = [target, waitingDog];
+  game.phase = 'tactics';
+
+  assert.equal(canTeleportDogTo(game, target.id, 4, 2), true, 'one vertical and one horizontal step is legal');
+  game = useActiveAbility(game, game.cats[0].id, { targetDogId: target.id, row: 4, col: 2 });
+
+  assert.deepEqual([game.dogs.find((dog) => dog.id === target.id).row, game.dogs.find((dog) => dog.id === target.id).col], [4, 2]);
+  assert.equal(game.dogs.filter((dog) => dog.row === 4 && dog.col === 2).length, 2);
+  assert.equal(game.cats[0].activeUsed, true);
+  assert.deepEqual(game.events.find((event) => event.type === 'teleport' && event.to === target.id), {
+    type: 'teleport', unitType: 'dog', from: game.cats[0].id, to: target.id,
+    fromRow: 5, fromCol: 3, row: 4, col: 2,
+  });
+});
+
+test('Purrtal rejects enemy destinations beyond two steps or already holding two dogs', () => {
+  const game = createGame(() => 0.5);
+  game.cats = [createCat(1, CAT_COAT.RIFT), createCat(1, CAT_COAT.GREY)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  game.cats[1].row = 4; game.cats[1].col = 2;
+  const target = createDog(2, 5, 3);
+  game.dogs = [target, createDog(1, 3, 3), createDog(1, 3, 3)];
+  game.phase = 'tactics';
+
+  assert.equal(canTeleportDogTo(game, target.id, 2, 3), false, 'three steps is too far');
+  assert.equal(canTeleportDogTo(game, target.id, 3, 3), false, 'a full two-dog stack is blocked');
+  assert.equal(canTeleportDogTo(game, target.id, 4, 2), false, 'cats still block dog destinations');
+  assert.equal(useActiveAbility(game, game.cats[0].id, { targetDogId: target.id, row: 3, col: 3 }), game);
 });
 
 function summonPhantom(level, row = 11, col = 3) {

@@ -111,13 +111,13 @@ export const CAT_COAT_INFO = {
   },
   6: {
     name: 'Frosty Paws', shortName: 'Frosty', ability: 'homing', activeAbility: 'freeze',
-    role: 'Freeze-control specialist', strength: 'Cancels one chosen dog action', weakness: 'Very low normal damage',
-    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog during a Tactics Window.', shopTier: 3, unlockRound: 4,
+    role: 'Freeze-control specialist', strength: 'Freezes one chosen dog for two rounds', weakness: 'Very low normal damage',
+    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog for the rest of the current round and all of the next round.', shopTier: 3, unlockRound: 4,
   },
   7: {
     name: 'Purrtal', shortName: 'Purrtal', ability: 'homing', activeAbility: 'teleport',
-    role: 'Positioning specialist', strength: 'Teleports one ally to any empty cat square', weakness: 'Low normal damage',
-    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square.', shopTier: 3, unlockRound: 4,
+    role: 'Positioning specialist', strength: 'Teleports an ally anywhere or shifts one enemy up to two squares', weakness: 'Low normal damage',
+    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square, or move one enemy up to two squares onto a square holding at most one dog.', shopTier: 3, unlockRound: 4,
   },
   8: {
     name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
@@ -441,9 +441,10 @@ export function dogTooltipInfo(dog) {
     });
   }
   if ((dog.frozenActions ?? 0) > 0) {
+    const frozenRounds = dog.frozenRoundsRemaining ?? Math.ceil(dog.frozenActions / ACTIONS_PER_ROUND);
     effects.push({
-      kind: 'frozen', label: 'FROZEN', value: `${dog.frozenActions} SKIP`,
-      detail: `Skips the next ${dog.frozenActions} full action${dog.frozenActions === 1 ? '' : 's'}.`,
+      kind: 'frozen', label: 'FROZEN', value: `${frozenRounds} ROUND${frozenRounds === 1 ? '' : 'S'}`,
+      detail: `Cannot act for ${frozenRounds} more round${frozenRounds === 1 ? '' : 's'} (${dog.frozenActions} combat exchange${dog.frozenActions === 1 ? '' : 's'} remaining).`,
     });
   }
   if (dog.tangled) {
@@ -1058,6 +1059,17 @@ function resolveEncore(next, caster, target, random) {
   next.dogs = next.dogs.filter((dog) => dog.hp > 0);
 }
 
+export function canTeleportDogTo(game, dogId, row, col) {
+  const dog = game.dogs.find((unit) => unit.id === dogId && unit.hp > 0);
+  if (!dog || !Number.isInteger(row) || !Number.isInteger(col)
+    || row < 0 || row >= ROWS || col < 0 || col >= COLS) return false;
+  const distance = Math.abs(row - dog.row) + Math.abs(col - dog.col);
+  return distance >= 1 && distance <= 2
+    && !game.cats.some((cat) => cat.hp > 0 && cat.row === row && cat.col === col)
+    && !game.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === row && decoy.col === col)
+    && dogCountAt(game.dogs, row, col, dog.id) < DOG_CELL_CAPACITY;
+}
+
 export function useActiveAbility(game, casterId, target = {}) {
   if (game.phase !== 'tactics') return game;
   const source = game.cats.find((cat) => cat.id === casterId);
@@ -1070,24 +1082,36 @@ export function useActiveAbility(game, casterId, target = {}) {
   if (active === 'freeze') {
     const dog = next.dogs.find((unit) => unit.id === target.dogId && unit.hp > 0 && !unit.frozenActions);
     if (dog) {
-      dog.frozenActions = 1;
+      const actionsLeftThisRound = Math.max(0, ACTIONS_PER_ROUND - game.section);
+      dog.frozenActions = actionsLeftThisRound + ACTIONS_PER_ROUND;
+      dog.frozenRoundsRemaining = 2;
       dog.shatterDamage = caster.level === 1 ? 0 : caster.level === 2 ? 2 : 4;
       next.events.push({ type: 'freeze-cast', from: caster.id, to: dog.id, row: dog.row, col: dog.col });
       used = true;
     }
   } else if (active === 'teleport') {
     const ally = next.cats.find((cat) => cat.id === target.targetCatId);
-    const legal = Number.isInteger(target.row) && Number.isInteger(target.col)
+    const enemy = next.dogs.find((dog) => dog.id === target.targetDogId && dog.hp > 0);
+    const allyDestinationIsLegal = Number.isInteger(target.row) && Number.isInteger(target.col)
       && target.row >= CAT_ZONE_START && target.row < ROWS && target.col >= 0 && target.col < COLS
       && !next.cats.some((cat) => cat.id !== ally?.id && cat.row === target.row && cat.col === target.col)
-      && !next.decoys.some((decoy) => decoy.row === target.row && decoy.col === target.col);
-    if (ally && legal) {
+      && !next.dogs.some((dog) => dog.hp > 0 && dog.row === target.row && dog.col === target.col)
+      && !next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === target.row && decoy.col === target.col);
+    if (ally && allyDestinationIsLegal) {
       const fromRow = ally.row; const fromCol = ally.col;
       ally.row = target.row; ally.col = target.col;
       if (!ally.tacticsMoved) ally.tacticsOrigin = { row: ally.row, col: ally.col };
       if (caster.level >= 2) ally.guard = Math.max(ally.guard ?? 0, 2);
       if (caster.level >= 3) ally.nextAttackBonus = Math.max(ally.nextAttackBonus ?? 0, 2);
-      next.events.push({ type: 'teleport', from: caster.id, to: ally.id, fromRow, fromCol, row: ally.row, col: ally.col });
+      next.events.push({ type: 'teleport', unitType: 'cat', from: caster.id, to: ally.id, fromRow, fromCol, row: ally.row, col: ally.col });
+      used = true;
+    } else if (enemy && canTeleportDogTo(next, enemy.id, target.row, target.col)) {
+      const fromRow = enemy.row; const fromCol = enemy.col;
+      enemy.row = target.row; enemy.col = target.col;
+      next.events.push({
+        type: 'teleport', unitType: 'dog', from: caster.id, to: enemy.id,
+        fromRow, fromCol, row: enemy.row, col: enemy.col,
+      });
       used = true;
     }
   } else if (active === 'decoy') {
@@ -1937,7 +1961,11 @@ export function resolveSection(game) {
   for (const dog of actingDogs) {
     if (dog.frozenActions > 0) {
       dog.frozenActions -= 1;
-      next.events.push({ type: 'freeze-skip', id: dog.id, row: dog.row, col: dog.col });
+      dog.frozenRoundsRemaining = Math.ceil(dog.frozenActions / ACTIONS_PER_ROUND);
+      next.events.push({
+        type: 'freeze-skip', id: dog.id, row: dog.row, col: dog.col,
+        remainingActions: dog.frozenActions, remainingRounds: dog.frozenRoundsRemaining,
+      });
       continue;
     }
     if (dog.role === DOG_ROLE.HOWLER && !dog.howlUsed) {

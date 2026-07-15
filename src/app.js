@@ -3,7 +3,7 @@ import {
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
-  openTacticsWindow, continueCombat, useActiveAbility,
+  openTacticsWindow, continueCombat, useActiveAbility, canTeleportDogTo,
   plusCells,
   purchaseShopFighterToBench, purchaseShopFighterToBoard,
   purchaseShopFighterOnto, purchaseShopWorker, purchaseShopWorkerToBench,
@@ -12,10 +12,10 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
-import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
+import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
@@ -271,6 +271,18 @@ function showShopPurchaseDenied(button, reason) {
   }, 560);
 }
 
+function clearShopMatchTargets() {
+  document.querySelectorAll('.shop-match-target')
+    .forEach((unit) => unit.classList.remove('shop-match-target'));
+}
+
+function showShopMatchTargets(slot) {
+  clearShopMatchTargets();
+  shopOfferMatchingFieldCatIds(slot, game.cats).forEach((id) => {
+    findUnitElement(id)?.classList.add('shop-match-target');
+  });
+}
+
 function renderShop() {
   shopEl.innerHTML = '';
   shopEl.dataset.count = String(game.shop.length);
@@ -296,13 +308,18 @@ function renderShop() {
       <strong>${summary.name}</strong>
       <span class="price">● ${summary.cost}</span>`);
     if (hasOwnedMatch) {
-      const match = document.createElement('span');
-      match.className = 'shop-match';
-      match.textContent = 'MATCH';
-      match.setAttribute('aria-hidden', 'true');
-      button.append(match);
       button.title = 'Matching cat owned — drag this shop cat onto it to stack.';
       button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Matching cat owned; drag onto it to stack.`);
+    }
+    if (shopOfferMatchingFieldCatIds(slot, game.cats).length) {
+      button.addEventListener('pointerenter', () => showShopMatchTargets(slot));
+      button.addEventListener('pointerleave', () => {
+        if (dragState?.sourceElement !== button || !dragState.started) clearShopMatchTargets();
+      });
+      button.addEventListener('focus', () => showShopMatchTargets(slot));
+      button.addEventListener('blur', () => {
+        if (dragState?.sourceElement !== button || !dragState.started) clearShopMatchTargets();
+      });
     }
     button.addEventListener('click', () => {
       if (!canBuy) {
@@ -650,6 +667,7 @@ function clearDragHighlights() {
       'drag-valid', 'drag-over', 'drag-invalid-hover', 'drag-origin', 'move-path-valid', 'move-path-invalid',
     ));
   dragHoverElement = null;
+  clearShopMatchTargets();
 }
 
 function showMovementPath(source, descriptor) {
@@ -722,6 +740,7 @@ function startDragVisual(event) {
   }
   positionDragVisual(event.clientX, event.clientY);
   showValidDropTargets(dragState.source);
+  if (dragState.source.type === 'shop-fighter') showShopMatchTargets(dragState.cat);
   requestAnimationFrame(() => dragState?.ghost?.classList.add('is-lifted'));
 }
 
@@ -948,7 +967,7 @@ async function finishDrag(event, cancelled = false) {
         : action.type === 'purchase-bench'
         ? 'Cat reserved on the Cat Workbench.'
         : 'Cat deployed!';
-    playCatDrop();
+    if (isBattlefieldDropAction(action)) playCatDrop();
   }
   render();
   if (changed && action.type === 'sell') showAdoptionFeedback(state.cat, action.value);
@@ -1230,12 +1249,22 @@ function renderDogPreview() {
 
 const ACTIVE_COPY = {
   'bomb-cross': ['PLUS BOMB', 'Aim on the battlefield. The five blue squares show the plus-shaped blast.'],
-  freeze: ['FREEZE', 'Choose a dog to skip its next action.'],
-  teleport: ['PORTAL', 'Choose an ally, then any empty cat square.'],
+  freeze: ['FREEZE', 'Choose a dog to freeze through this round and the next round.'],
+  teleport: ['PORTAL', 'Choose one of your cats or a dog. Allies can go to any empty cat square; dogs can move up to 2 squares.'],
   decoy: ['DECOY', 'Choose an empty cat square. The phantom persists and blocks one attack per Faux Paw level.'],
   storm: ['STORM', 'Choose a dog column to strike.'],
   encore: ['ENCORE', 'Choose another cat for an immediate attack.'],
 };
+
+function activeTargetingInstruction(targeting) {
+  if (targeting?.mode === 'teleport' && targeting.targetCatId) {
+    return 'Choose any empty cat-territory square for your cat.';
+  }
+  if (targeting?.mode === 'teleport' && targeting.targetDogId) {
+    return 'Choose a square up to 2 steps away with room for one more dog.';
+  }
+  return ACTIVE_COPY[targeting?.mode]?.[1] ?? 'Choose a target.';
+}
 
 function clearBombTargetPreview() {
   gridEl.querySelectorAll('.bomb-footprint, .bomb-footprint-centre')
@@ -1270,7 +1299,9 @@ function renderTacticsPanel() {
     button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
     button.title = copy[1];
     button.addEventListener('click', () => {
-      activeTargeting = { casterId: cat.id, mode: cat.activeAbility, targetCatId: null };
+      activeTargeting = {
+        casterId: cat.id, mode: cat.activeAbility, targetCatId: null, targetDogId: null,
+      };
       game.message = copy[1];
       render();
     });
@@ -1278,7 +1309,7 @@ function renderTacticsPanel() {
   });
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
   $('#tactics-help').textContent = activeTargeting
-    ? (ACTIVE_COPY[activeTargeting.mode]?.[1] ?? 'Choose a target.')
+    ? activeTargetingInstruction(activeTargeting)
     : 'Move each cat once, drag supplies onto a cat, or cast one available ability.';
 }
 
@@ -1296,16 +1327,27 @@ function tryActiveTarget(row, col, cat, dog) {
   else if (targeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat) payload = { row, col };
   else if (targeting.mode === 'encore' && cat && cat.id !== targeting.casterId) payload = { targetCatId: cat.id };
   else if (targeting.mode === 'teleport') {
-    if (!targeting.targetCatId && cat) {
+    if (!targeting.targetCatId && !targeting.targetDogId && cat) {
       activeTargeting = { ...targeting, targetCatId: cat.id };
-      game.message = 'Now choose any empty cat-territory square.';
+      game.message = activeTargetingInstruction(activeTargeting);
       render();
       return true;
     }
-    if (targeting.targetCatId && row >= CAT_ZONE_START && !cat) payload = { targetCatId: targeting.targetCatId, row, col };
+    if (!targeting.targetCatId && !targeting.targetDogId && dog) {
+      activeTargeting = { ...targeting, targetDogId: dog.id };
+      game.message = activeTargetingInstruction(activeTargeting);
+      render();
+      return true;
+    }
+    if (targeting.targetCatId && row >= CAT_ZONE_START && !cat && !dog) {
+      payload = { targetCatId: targeting.targetCatId, row, col };
+    }
+    if (targeting.targetDogId && canTeleportDogTo(game, targeting.targetDogId, row, col)) {
+      payload = { targetDogId: targeting.targetDogId, row, col };
+    }
   }
   if (!payload) {
-    game.message = ACTIVE_COPY[targeting.mode]?.[1] ?? 'That is not a valid target.';
+    game.message = activeTargetingInstruction(targeting);
     renderHud();
     return true;
   }
@@ -1465,8 +1507,10 @@ function renderBoard() {
           || (activeTargeting.mode === 'storm' && dog)
           || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat && !decoy)
           || (activeTargeting.mode === 'encore' && cat && cat.id !== activeTargeting.casterId)
-          || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && cat)
-          || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !decoy);
+          || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && !activeTargeting.targetDogId && (cat || dog))
+          || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !dog && !decoy)
+          || (activeTargeting.mode === 'teleport' && activeTargeting.targetDogId
+            && canTeleportDogTo(game, activeTargeting.targetDogId, row, col));
         if (bombAiming) {
           cell.classList.add('bomb-aim');
           cell.addEventListener('pointerenter', () => showBombTargetPreview(row, col));
@@ -2144,8 +2188,10 @@ async function animateFreezeSkip(event) {
   dog.classList.add('freeze-skipping');
   await wait(Math.round(440 / combatSpeed));
   dog.classList.remove('freeze-skipping');
-  dog.classList.add('ice-thawing');
-  await wait(Math.round(220 / combatSpeed));
+  if (event.remainingActions <= 0) {
+    dog.classList.add('ice-thawing');
+    await wait(Math.round(220 / combatSpeed));
+  }
   cue.remove();
 }
 

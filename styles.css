@@ -701,7 +701,6 @@ h1 span { color: var(--orange); font-size: .75em; }
 .shop-slot.saved .shop-card { background: #dff3ff; box-shadow: 2px 2px 0 #4f7f9a, inset 0 0 0 2px #6eb6df; }
 .shop-card { position: relative; min-width: 0; padding: 6px 3px; border: 2px solid var(--ink); background: #f6e9bd; text-align: center; cursor: pointer; box-shadow: 2px 2px 0 #8b7756; }
 .shop-slot.has-owned-match .shop-card { border-color: #185b31; box-shadow: 3px 3px 0 #163f28, inset 0 0 0 3px #62c96d, 0 0 0 2px #baf2a2; }
-.shop-match { position: absolute; z-index: 2; top: 4px; right: 4px; padding: 2px 3px; border: 2px solid #185b31; background: #62c96d; color: #102e1e; font-family: var(--px); font-size: 6px; line-height: 1; box-shadow: 1px 1px 0 #163f28; }
 .shop-card:hover:not(:disabled) { transform: translateY(-2px); }
 .shop-card:disabled { filter: grayscale(.8); opacity: .5; cursor: not-allowed; }
 .shop-card canvas { display: block; width: 50px; height: 50px; margin: 0 auto; image-rendering: pixelated; }
@@ -1773,6 +1772,23 @@ h1 span { color: var(--orange); font-size: .75em; }
 .pet-draggable:active { cursor: grabbing !important; }
 .pet-dragging, .pet-dragging * { cursor: grabbing !important; }
 .drag-origin .unit, .drag-origin > canvas { opacity: .24; transform: scale(.78); filter: saturate(.5); }
+.unit.shop-match-target { z-index: 7; }
+.unit.shop-match-target::after {
+  content: '';
+  position: absolute;
+  inset: 5%;
+  border: 3px solid #ff9a32;
+  border-radius: 50%;
+  box-shadow: 0 0 7px 3px #ff9a32, inset 0 0 7px 2px rgba(255, 193, 74, .8);
+  animation: shop-match-glow .68s steps(3) infinite alternate;
+}
+.unit.shop-match-target > canvas {
+  filter: brightness(1.18) drop-shadow(0 0 4px #ff9a32) drop-shadow(0 0 9px #ff7b22);
+}
+@keyframes shop-match-glow {
+  from { opacity: .7; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1.08); }
+}
 .cell.drag-valid, .worker-slot.drag-valid, .bench-slot.drag-valid {
   background: rgba(139, 242, 116, .2);
   box-shadow: inset 0 0 0 2px rgba(219, 255, 162, .82);
@@ -2269,7 +2285,7 @@ h1 span { color: var(--orange); font-size: .75em; }
   .cell.drag-valid, .worker-slot.drag-valid, .bench-slot.drag-valid, .drag-floor-shadow, .wave-banner, .icon-button.confirming,
   .board.board-drop-thump, .board.board-shake, .board.upgrade-board-pulse, .board.storm-recoil,
   .unit.storm-casting canvas, .work-action > i, .worker-slot.is-working > canvas,
-  .freeze-shell, .freeze-skip-cue { animation: none; }
+  .freeze-shell, .freeze-skip-cue, .unit.shop-match-target::after { animation: none; }
   .hp-bar { transition: none; }
   /* Deaths keep their flash and fade — that is the part that says the unit is gone —
      but drop the acrobatics and the props. The JS skips the flip to match. */

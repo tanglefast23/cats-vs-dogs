@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
-import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
+import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
@@ -42,6 +42,21 @@ test('sold and max-level shop cats never advertise an unusable match', () => {
   const ownedCats = [{ kind: 'alley-cat', coat: 2, level: 3 }];
   assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 3 }, ownedCats), false);
   assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 3, sold: true }, ownedCats), false);
+});
+
+test('shop hover identifies every matching battlefield cat and no invalid targets', () => {
+  const fieldCats = [
+    { id: 'white-one', kind: 'alley-cat', coat: 2, level: 1 },
+    { id: 'white-two', kind: 'alley-cat', coat: 2, level: 1 },
+    { id: 'white-level-two', kind: 'alley-cat', coat: 2, level: 2 },
+    { id: 'orange-one', kind: 'alley-cat', coat: 0, level: 1 },
+  ];
+  const offer = { category: 'fighter', coat: 2, level: 1 };
+
+  assert.deepEqual(shopOfferMatchingFieldCatIds(offer, fieldCats), ['white-one', 'white-two']);
+  assert.deepEqual(shopOfferMatchingFieldCatIds({ ...offer, sold: true }, fieldCats), []);
+  assert.deepEqual(shopOfferMatchingFieldCatIds({ ...offer, level: 3 }, fieldCats), []);
+  assert.deepEqual(shopOfferMatchingFieldCatIds({ category: 'worker', role: 'cook', level: 1 }, fieldCats), []);
 });
 
 test('next-wave dogs fill from top-left in chronological and left-to-right order', () => {
@@ -126,9 +141,12 @@ test('temporary cat and dog statuses provide large-marker values and plain-langu
     { kind: 'attack-down', value: '-1', label: 'Next attack loses 1 damage' },
   ]);
   assert.deepEqual(dogStatusMarkers({ frozenActions: 1, tangled: true, attackBoost: 4 }), [
-    { kind: 'frozen', value: '1', label: 'Skips 1 action' },
+    { kind: 'frozen', value: '1', label: 'Frozen for 1 round' },
     { kind: 'tangled', value: '1', label: 'Next movement is skipped' },
     { kind: 'attack-up', value: '+4', label: 'Next damaging attack gains 4 damage' },
+  ]);
+  assert.deepEqual(dogStatusMarkers({ frozenActions: 3 }), [
+    { kind: 'frozen', value: '2', label: 'Frozen for 2 rounds' },
   ]);
 });
 
@@ -551,12 +569,22 @@ test('only sellable owned cats route into the adoption box during prep', () => {
   }), { type: 'invalid' });
 });
 
-test('successful placement feedback keeps only forty percent of its former impact', () => {
+test('successful placement feedback stays visually gentle while its sound remains audible', () => {
   assert.equal(DROP_IMPACT.intensity, 0.4);
   assert.equal(DROP_IMPACT.boardShakePx, 1.2);
   assert.equal(DROP_IMPACT.landingLiftPercent, 11.2);
   assert.equal(DROP_IMPACT.ghostSettleScale, 0.928);
   assert.equal(DROP_IMPACT.ringEndScale, 1.68);
+  assert.equal(DROP_IMPACT.soundGain, 0.9);
+});
+
+test('landing sound plays only for successful battlefield drops and moves', () => {
+  for (const type of ['purchase-place', 'place', 'move', 'tactics-move']) {
+    assert.equal(isBattlefieldDropAction({ type }), true, `${type} should play the landing sound`);
+  }
+  for (const type of ['purchase-bench', 'purchase-worker', 'equip', 'merge', 'return', 'sell', 'invalid']) {
+    assert.equal(isBattlefieldDropAction({ type }), false, `${type} should stay silent`);
+  }
 });
 
 test('a two-copy merge gets a polished stack reveal without claiming a level-up', () => {

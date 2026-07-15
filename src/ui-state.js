@@ -28,6 +28,15 @@ export function shopOfferHasOwnedMatch(slot, ownedCats = []) {
   return offerKey != null && ownedCats.some((cat) => petMergeKey(cat) === offerKey);
 }
 
+export function shopOfferMatchingFieldCatIds(slot, fieldCats = []) {
+  if (!slot || slot.sold || slot.category === 'worker') return [];
+  const offerKey = petMergeKey(slot);
+  if (offerKey == null) return [];
+  return fieldCats
+    .filter((cat) => petMergeKey(cat) === offerKey)
+    .map((cat) => cat.id);
+}
+
 /** Health color band for unit HP bars: green above half, amber to a quarter, red below. */
 export function hpTone(hp, maxHp) {
   const pct = maxHp > 0 ? hp / maxHp : 0;
@@ -70,7 +79,8 @@ export function catStatusMarkers(cat = {}) {
 export function dogStatusMarkers(dog = {}) {
   const markers = [];
   if ((dog.frozenActions ?? 0) > 0) {
-    markers.push({ kind: 'frozen', value: String(dog.frozenActions), label: `Skips ${dog.frozenActions} action${dog.frozenActions === 1 ? '' : 's'}` });
+    const rounds = dog.frozenRoundsRemaining ?? Math.ceil(dog.frozenActions / 2);
+    markers.push({ kind: 'frozen', value: String(rounds), label: `Frozen for ${rounds} round${rounds === 1 ? '' : 's'}` });
   }
   if (dog.tangled) {
     markers.push({ kind: 'tangled', value: '1', label: 'Next movement is skipped' });

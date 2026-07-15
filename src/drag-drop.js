@@ -11,17 +11,21 @@ export const DRAG_FEEDBACK = Object.freeze({
 
 export const FIELD_CAP_MESSAGE = 'Elite Squad full (5/5). Merge, workbench, or sell a cat before deploying another.';
 
-// Placement feedback retains 40% of the original landing force (a 60% cut).
+// Placement motion stays gentle, while the audio cue remains loud enough to register.
 export const DROP_IMPACT = Object.freeze({
   intensity: 0.4,
   boardShakePx: 1.2,
   landingLiftPercent: 11.2,
   ghostSettleScale: 0.928,
   ringEndScale: 1.68,
-  soundGain: 0.4,
+  soundGain: 0.9,
 });
 
 const invalid = (reason = null) => ({ type: 'invalid', ...(reason ? { reason } : {}) });
+
+export function isBattlefieldDropAction(action) {
+  return ['purchase-place', 'place', 'move', 'tactics-move'].includes(action?.type);
+}
 
 function sameCatKind(source, occupied) {
   if (!occupied || occupied.unitType === 'worker' || source.id === occupied.id) return false;
