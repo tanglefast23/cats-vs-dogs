@@ -2306,6 +2306,8 @@ h1 span { color: var(--orange); font-size: .75em; }
   box-shadow: 0 0 0 4px #ffd24a, 0 0 0 9999px rgba(6, 10, 20, 0.72);
   transition: all 180ms ease; pointer-events: none;
 }
+/* Interactive steps skip the dark mask so nothing you need is hidden. */
+.tutorial-spotlight.no-dim { box-shadow: 0 0 0 4px #ffd24a; }
 .tutorial-bubble {
   position: absolute; max-width: 300px; padding: 16px 20px; border-radius: 16px;
   background: #12203a; color: #eaf1ff; border: 1px solid #2c4066;
@@ -2327,6 +2329,17 @@ h1 span { color: var(--orange); font-size: .75em; }
   animation: tutorial-target-pulse 1.4s ease-in-out infinite;
 }
 .tutorial-drop-target[hidden] { display: none; }
+/* Source of the drag (shop card / storage item) — amber to read as "grab this". */
+.tutorial-source-highlight {
+  position: absolute; border-radius: 10px;
+  border: 3px solid #ffd24a; pointer-events: none;
+  animation: tutorial-source-pulse 1.4s ease-in-out infinite;
+}
+.tutorial-source-highlight[hidden] { display: none; }
+@keyframes tutorial-source-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 210, 74, 0.28), inset 0 0 12px rgba(255, 210, 74, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 210, 74, 0.45), inset 0 0 20px rgba(255, 210, 74, 0.70); }
+}
 @keyframes tutorial-target-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(90, 209, 122, 0.30), inset 0 0 12px rgba(90, 209, 122, 0.50); }
   50%      { box-shadow: 0 0 0 7px rgba(90, 209, 122, 0.50), inset 0 0 22px rgba(90, 209, 122, 0.80); }
@@ -2353,4 +2366,5 @@ h1 span { color: var(--orange); font-size: .75em; }
 @media (prefers-reduced-motion: reduce) {
   .tutorial-spotlight { transition: none; }
   .tutorial-drop-target { animation: none; }
+  .tutorial-source-highlight { animation: none; }
 }

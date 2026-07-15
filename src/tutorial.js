@@ -104,7 +104,7 @@ export const CORE_STEPS = [
     text: "That's your setup — unspent gold is lost, so you spent it well. Start the round!",
     isDone: (g) => g.phase !== 'prep' },
   { id: 'r1-pause', round: 1, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'tactics',
-    text: "This is a breather between attacks. Nothing to spend yet — press Continue.",
+    text: "This is a breather between attacks. More actions to come here soon. Press continue.",
     isDone: (g) => g.phase !== 'tactics' },
 
   // Round 2 — collect + first merge
@@ -116,7 +116,7 @@ export const CORE_STEPS = [
     text: "Three matching cats merge into one powerhouse. Drag a Purrcy onto another, then buy the third and drop it on too.",
     isDone: (g) => catAtLevel(g, CAT_COAT.ORANGE, 2) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
-    text: "See the jump? One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
+    text: "Power spike! One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
   { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep',
     text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
 
@@ -131,16 +131,12 @@ export const CORE_STEPS = [
 ];
 
 // --- just-in-time tips: shown once each, one at a time, when `when` first holds ---
+// Note: the squad-full coaching (5/5 max → sell / combine / bench) fires
+// proactively from app.js the moment you hit the cap, not as a queued tip.
 export const TIPS = [
-  { id: 'tip-squad-full', spotlight: '#squad-count',
-    text: "Your Elite Squad maxes at 5. To add another cat you must merge, bench, or sell one.",
-    when: (g) => squadFull(g) },
-  { id: 'tip-sell', spotlight: '#adoption-box',
-    text: "Drag your weakest cat to the Adoption Box — you get gold back and a free slot.",
-    when: (g) => squadFull(g) },
-  { id: 'tip-workbench', spotlight: '#workbench',
-    text: "Or park a cat on the Workbench (3 slots) to hold it off the battlefield.",
-    when: (g) => squadFull(g) },
+  { id: 'tip-new-cats', spotlight: '#shop',
+    text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",
+    when: (g) => g.round >= 4 },
   { id: 'tip-coins', spotlight: '#production-grid',
     text: "Cashmere Cat's coins go straight to your gold — more coins, more cats.",
     when: (g) => ownsWorkerRole(g, WORKER_ROLE.TRADER) },
