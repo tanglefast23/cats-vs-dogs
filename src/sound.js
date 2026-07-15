@@ -2,10 +2,15 @@
 import { DROP_IMPACT } from './drag-drop.js';
 
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
+export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
+export const LEVEL_MUSIC_VOLUME = 0.18;
+export const UI_CLICK_VOLUME = 0.024;
 
 let audioCtx = null;
 let unlocked = false;
 let soundEnabled = true;
+let levelMusic = null;
+let levelMusicRequested = false;
 
 function getWindow() {
   return typeof globalThis !== 'undefined' && globalThis.window ? globalThis.window : null;
@@ -43,8 +48,47 @@ export function setSoundEnabled(enabled) {
       // Private mode / quota — keep in-memory only.
     }
   }
-  if (soundEnabled) unlockAudio();
+  if (soundEnabled) {
+    unlockAudio();
+    if (levelMusicRequested) startLevelMusic();
+  } else if (levelMusic) {
+    levelMusic.pause();
+  }
   return soundEnabled;
+}
+
+function musicPlayer() {
+  const win = getWindow();
+  if (levelMusic) return levelMusic;
+  if (typeof win?.Audio !== 'function') return null;
+  levelMusic = new win.Audio(LEVEL_MUSIC_URL);
+  levelMusic.loop = true;
+  levelMusic.preload = 'auto';
+  levelMusic.volume = LEVEL_MUSIC_VOLUME;
+  return levelMusic;
+}
+
+/** Start the original Level 1 loop after a user gesture permits playback. */
+export function startLevelMusic() {
+  levelMusicRequested = true;
+  if (!soundEnabled) return false;
+  const player = musicPlayer();
+  if (!player) return false;
+  const playback = player.play();
+  if (playback?.catch) void playback.catch(() => {});
+  return true;
+}
+
+/** Stop the level loop at victory/game over and rewind it for the next run. */
+export function stopLevelMusic() {
+  levelMusicRequested = false;
+  if (!levelMusic) return;
+  levelMusic.pause();
+  try {
+    levelMusic.currentTime = 0;
+  } catch {
+    // Some browsers reject seeks before metadata is loaded; pausing is enough.
+  }
 }
 
 function context() {
@@ -134,6 +178,13 @@ function later(ms, fn) {
   const win = getWindow();
   if (!win) return;
   win.setTimeout(fn, ms);
+}
+
+/** Short, restrained UI tick. Quieter than placement, collection, and combat SFX. */
+export function playUiClick() {
+  if (!soundEnabled) return;
+  tone({ frequency: 620, slideTo: 430, duration: 0.055, type: 'square', volume: UI_CLICK_VOLUME, attack: 0.001, decay: 0.034 });
+  tone({ frequency: 1180, duration: 0.022, type: 'sine', volume: UI_CLICK_VOLUME * 0.42, attack: 0.001, decay: 0.014 });
 }
 
 /** Soft “plop” when a cat is placed or moved onto the board. */
