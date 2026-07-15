@@ -224,6 +224,20 @@ export function playItemUse(kind) {
   else playFoodUse();
 }
 
+/** Happy little fanfare when dogs break through and celebrate. */
+export function playCelebration() {
+  if (!soundEnabled) return;
+  const notes = [523, 659, 784, 1047]; // C-E-G-C major arpeggio
+  notes.forEach((freq, i) => later(i * 95, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.16, type: 'triangle', volume: 0.06, attack: 0.003, decay: 0.08 });
+  }));
+  later(440, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1047, slideTo: 1319, duration: 0.24, type: 'sine', volume: 0.05 });
+  });
+}
+
 export function isAudioUnlocked() {
   return unlocked && Boolean(audioCtx) && audioCtx.state === 'running';
 }

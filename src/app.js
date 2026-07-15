@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
-import { unlockAudio, playCatDrop, playHit, playCollection, playItemUse, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
+import { unlockAudio, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -2289,36 +2289,48 @@ async function animateHeal(event) {
   target?.classList.remove('healed');
 }
 
-async function animateSuperCat(event) {
-  const runner = document.createElement('div');
-  runner.className = 'super-effect';
-  runner.style.left = `${event.col * (100 / COLS)}%`;
-  const canvas = document.createElement('canvas');
-  drawCat(canvas, 3, 0, true);
-  runner.append(canvas);
-  effectsEl.append(runner);
-
-  // The super cat clears the whole breached column. The dogs in it are killed outright —
-  // the engine simply drops them — so they are flipped over here by position rather than
-  // by a damage event, and they go down as the cat runs through them.
-  const flattened = [...fxUnits]
+async function animateBreachParty(event) {
+  // The dogs reached the yard — they throw a little party and trot off happy,
+  // rather than getting wiped out. (It still costs the player a life.)
+  const dancers = [...fxUnits]
     .filter(([id, unit]) => unit.kind === 'dog' && findUnitElement(id))
     .map(([id]) => id)
-    .filter((id) => {
-      const cell = findUnitElement(id)?.closest('.cell');
-      return Number(cell?.dataset.col) === event.col;
-    });
+    .filter((id) => Number(findUnitElement(id)?.closest('.cell')?.dataset.col) === event.col);
+  if (!dancers.length) return;
 
-  await wait(Math.round(260 / combatSpeed));
-  await Promise.all(flattened.map((id) => {
-    const cell = findUnitElement(id)?.closest('.cell');
-    const row = Number(cell?.dataset.row ?? 0);
-    // Struck from below by a cat charging up the board.
-    return playDeath(id, { to: id, toRow: row, col: event.col, fromRow: row + 1, fromCol: event.col });
+  playCelebration();
+  await Promise.all(dancers.map((id) => {
+    const el = findUnitElement(id);
+    if (!el) return Promise.resolve();
+    const cell = el.closest('.cell');
+    partyBurst(Number(cell?.dataset.row ?? 0), Number(cell?.dataset.col ?? 0));
+    const dance = el.animate([
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-10px) rotate(-16deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-10px) rotate(16deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-8px) rotate(-11deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+    ], { duration: Math.round(1000 / combatSpeed), composite: 'add', easing: 'ease-in-out' });
+    return dance.finished.catch(() => {});
   }));
+  await wait(Math.round(220 / combatSpeed));
+}
 
-  await wait(Math.round(460 / combatSpeed));
-  runner.remove();
+function partyBurst(row, col) {
+  const emoji = document.createElement('div');
+  emoji.className = 'breach-party';
+  emoji.textContent = ['🎉', '💛', '♪', '★'][Math.floor(Math.random() * 4)];
+  emoji.style.left = `${(col + 0.5) * (100 / COLS)}%`;
+  emoji.style.top = `${(row + 0.2) * (100 / ROWS)}%`;
+  effectsEl.append(emoji);
+  const anim = emoji.animate([
+    { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 },
+    { transform: 'translate(-50%, -150%) scale(1.1)', opacity: 1, offset: 0.35 },
+    { transform: 'translate(-50%, -340%) scale(0.9)', opacity: 0 },
+  ], { duration: Math.round(1100 / combatSpeed), easing: 'ease-out' });
+  anim.finished.then(() => emoji.remove()).catch(() => emoji.remove());
 }
 
 async function animateStorm(events) {
@@ -2406,7 +2418,7 @@ async function animateEvents(events) {
   const dogHeals = events.filter((event) => event.type === 'dog-heal');
   const fears = events.filter((event) => event.type === 'dog-fear');
   const freezeSkips = events.filter((event) => event.type === 'freeze-skip');
-  const superCats = events.filter((event) => event.type === 'super-cat');
+  const breaches = events.filter((event) => event.type === 'breach');
 
   // --- The cats act. Every dog they kill goes down before the dogs get their turn. ---
   if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
@@ -2431,8 +2443,8 @@ async function animateEvents(events) {
   await Promise.all(melee.map((event) => animateMelee(event, 'down')));
   await playDeaths([...dogShots, ...melee]);
 
-  // The super cat mows down the whole column that broke through — they all go with it.
-  for (const event of superCats) await animateSuperCat(event);
+  // Dogs that reached the yard celebrate and trot off happy.
+  for (const event of breaches) await animateBreachParty(event);
 
   setTurnTag(null);
   effectsEl.innerHTML = '';
@@ -2782,7 +2794,8 @@ function applyTutorialWave() {
 
 // Set the scripted shop when a new prep round begins; graduate after round 4.
 function applyTutorialRound() {
-  if (game.round > 4) { endTutorial(); return; }
+  // Coaching stays on for the whole run (sparse just-in-time tips after the
+  // core R1-3 lessons) — no hard graduation, so late reminders can still fire.
   tutorialStartNudged = false;
   const shop = tutorialShop(game.round);
   if (shop) game.shop = shop;
@@ -2797,6 +2810,7 @@ function applyTutorialRound() {
 // Called at the tail of every render() while the tutorial is active.
 function syncTutorial() {
   if (playing) { hideTutorialOverlay(); return; } // never cover a live animation
+  if (game.phase === 'gameover' || game.phase === 'victory') { hideTutorialOverlay(); return; }
   // Nudge: don't start a round with gold still to spend.
   if (tutorialStartNudged && game.phase === 'prep' && game.gold >= 3) {
     hideDragHint();
