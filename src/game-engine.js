@@ -87,12 +87,13 @@ export const CAT_COAT_INFO = {
   4: {
     name: 'Bombay Boom',
     shortName: 'Bombay',
-    ability: 'splash',
-    role: 'Crowd-damage specialist',
-    strength: 'Damages a target and dogs beside it in adjacent columns',
-    weakness: 'Fragile and has the lowest damage against one dog',
-    blurb: 'Wide splash · weak impact',
-    attackDetail: 'Unlocked on round 4. Fires a weak homing bomb that damages the target and dogs beside it in adjacent columns. Excellent into groups, poor against one dog.',
+    ability: 'bomb',
+    activeAbility: 'bomb-cross',
+    role: 'Lane bomber and crowd-damage specialist',
+    strength: 'Medium lane damage plus a five-square Tactics bomb',
+    weakness: 'Fragile and cannot normally attack outside its lane',
+    blurb: 'Medium lane bomb · plus spell',
+    attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits every dog in a five-square plus for half normal damage.',
     shopTier: 3,
     unlockRound: 4,
   },
@@ -121,7 +122,7 @@ export const CAT_COAT_INFO = {
   8: {
     name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
     role: 'Defensive-utility specialist', strength: 'Summons a blocker anywhere in cat territory', weakness: 'Fragile with low normal damage',
-    blurb: 'Free blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a temporary phantom blocker.', shopTier: 3, unlockRound: 4,
+    blurb: 'Persistent blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a persistent phantom that blocks one attack per Faux Paw level.', shopTier: 3, unlockRound: 4,
   },
   9: {
     name: 'Thunderpaws', shortName: 'Thunder', ability: 'homing', activeAbility: 'storm',
@@ -148,7 +149,7 @@ const COAT_ATTACK = {
   1: { 1: 1, 2: 4, 3: 13 },
   2: { 1: 2, 2: 7, 3: 22 },
   3: { 1: 1, 2: 4, 3: 13 },
-  4: { 1: 1, 2: 4, 3: 13 },
+  4: { 1: 2, 2: 7, 3: 22 },
   5: { 1: 3, 2: 10, 3: 31 },
   6: { 1: 1, 2: 4, 3: 13 },
   7: { 1: 1, 2: 4, 3: 13 },
@@ -322,6 +323,54 @@ export function catStatsFor(level = 1, coat = 0) {
   };
 }
 
+function catTooltipEffects(cat, info) {
+  const effects = [];
+  const weapon = cat.equipment?.weapon;
+  const armour = cat.equipment?.armour;
+  if (weapon) {
+    const attack = weapon.attack ?? WEAPON_INFO[weapon.tier]?.attack ?? 0;
+    effects.push({
+      kind: 'weapon', label: `T${weapon.tier ?? 1} HOUSE WEAPON`, value: `+${attack} ATK`,
+      detail: 'Permanently adds to every attack while equipped; replacing the weapon returns the old one to House Storage.',
+    });
+  }
+  if (armour) {
+    const block = armour.block ?? ARMOUR_INFO[armour.tier]?.block ?? 0;
+    const uses = armour.uses ?? 0;
+    const maxUses = armour.maxUses ?? ARMOUR_INFO[armour.tier]?.uses ?? uses;
+    effects.push({
+      kind: 'armour', label: `T${armour.tier ?? 1} HOUSE ARMOUR`, value: `${block} BLOCK`,
+      detail: `${uses}/${maxUses} protected hits remain. It reduces each hit by ${block}, but at least 1 damage always gets through.`,
+    });
+  }
+  if ((cat.guard ?? 0) > 0) {
+    effects.push({
+      kind: 'guard', label: 'PORTAL GUARD', value: `${cat.guard} BLOCK`,
+      detail: `Blocks ${cat.guard} additional damage from the next hit, then expires.`,
+    });
+  }
+  if ((cat.nextAttackBonus ?? 0) > 0) {
+    effects.push({
+      kind: 'attack-up', label: 'NEXT ATTACK', value: `+${cat.nextAttackBonus} ATK`,
+      detail: 'Added once when this cat next attacks, then expires.',
+    });
+  }
+  if ((cat.nextAttackPenalty ?? 0) > 0) {
+    effects.push({
+      kind: 'attack-down', label: 'FRIGHTENED', value: `-${cat.nextAttackPenalty} ATK`,
+      detail: 'Subtracted once when this cat next attacks, then expires; attack cannot fall below 1.',
+    });
+  }
+  const activeAbility = cat.activeAbility ?? info.activeAbility;
+  if (activeAbility) {
+    effects.push({
+      kind: 'ability', label: 'TACTICS SPECIAL', value: cat.activeUsed ? 'USED' : 'READY',
+      detail: cat.activeUsed ? 'Already used in this battle.' : 'Available once this battle during a Tactics Window.',
+    });
+  }
+  return effects;
+}
+
 export function catTooltipInfo(cat) {
   const level = cat.level ?? 1;
   const coat = normalizeCoat(cat.coat);
@@ -333,9 +382,10 @@ export function catTooltipInfo(cat) {
   return {
     kind: 'cat',
     title: `L${level} ${info.name}`,
-    stats: `Health ${hp}/${maxHp} · ${attack * ACTIONS_PER_ROUND} damage/round if attacks hit`,
+    stats: `Health ${hp}/${maxHp} · Attack ${attack}/action · ${attack * ACTIONS_PER_ROUND}/round`,
     attack: info.attackDetail,
     note: `${info.role} · Strength: ${info.strength} · Weakness: ${info.weakness}`,
+    effects: catTooltipEffects(cat, info),
   };
 }
 
@@ -383,12 +433,32 @@ export function dogTooltipInfo(dog) {
   const hp = dog.hp ?? stats.hp;
   const maxHp = dog.maxHp ?? stats.hp;
   const attack = dog.attack ?? stats.attack;
+  const effects = [];
+  if ((dog.attackBoost ?? 0) > 0) {
+    effects.push({
+      kind: 'attack-up', label: 'HOWL BOOST', value: `+${dog.attackBoost} ATK`,
+      detail: 'Added to this dog’s next damaging attack, then expires.',
+    });
+  }
+  if ((dog.frozenActions ?? 0) > 0) {
+    effects.push({
+      kind: 'frozen', label: 'FROZEN', value: `${dog.frozenActions} SKIP`,
+      detail: `Skips the next ${dog.frozenActions} full action${dog.frozenActions === 1 ? '' : 's'}.`,
+    });
+  }
+  if (dog.tangled) {
+    effects.push({
+      kind: 'tangled', label: 'TANGLED', value: '1 MOVE',
+      detail: 'The next movement path is skipped; the yarn is then removed.',
+    });
+  }
   return {
     kind: 'dog',
     title: `T${tier} ${roleInfo.name}`,
     stats: `Health ${hp}/${maxHp} · ${dogRoleStats(role, attack, stats)}`,
     attack: `${roleInfo.attackDetail} Otherwise it advances up to ${dogMoveDistance(dog)} squares, moving only left, right, or down, and attacks as soon as it reaches a defender.`,
     note: `${roleInfo.role} · Strength: ${roleInfo.strength} · Weakness: ${roleInfo.weakness}. ${tierInfo.blurb}`,
+    effects,
   };
 }
 
@@ -443,6 +513,17 @@ export function createGame(random = Math.random) {
     random,
     message: 'Build your team, then start the round.',
   };
+}
+
+/** The centre square plus its four orthogonal neighbours, clipped to the battlefield. */
+export function plusCells(row, col, rows = ROWS, cols = COLS) {
+  return [
+    { row, col },
+    { row: row - 1, col },
+    { row: row + 1, col },
+    { row, col: col - 1 },
+    { row, col: col + 1 },
+  ].filter((cell) => cell.row >= 0 && cell.row < rows && cell.col >= 0 && cell.col < cols);
 }
 
 function copy(game) {
@@ -535,14 +616,22 @@ export function makeShopSlot(random = Math.random, round = 1, forcedCategory = n
 }
 
 export function makeShop(random = Math.random, previous = null, round = 1) {
-  return Array.from({ length: shopSizeForRound(round) }, (_, index) => {
+  const shopSize = shopSizeForRound(round);
+  const houseCatCap = Math.max(1, shopSize - 2);
+  let houseCatCount = Array.from({ length: shopSize }, (_, index) => previous?.[index])
+    .filter((slot) => slot?.saved && !slot.sold && slot.category === 'worker').length;
+
+  return Array.from({ length: shopSize }, (_, index) => {
     const prior = previous?.[index];
     // Saved, still-available pets stay put through refresh and into the next round.
     if (prior && prior.saved && !prior.sold) {
       return { ...prior, saved: true, sold: false };
     }
     const openingGuarantee = round === 1 && !previous && index < 2 ? 'fighter' : null;
-    return makeShopSlot(random, round, openingGuarantee);
+    const cappedCategory = houseCatCount >= houseCatCap ? 'fighter' : openingGuarantee;
+    const slot = makeShopSlot(random, round, cappedCategory);
+    if (slot.category === 'worker') houseCatCount += 1;
+    return slot;
   });
 }
 
@@ -952,7 +1041,7 @@ function resolveEncore(next, caster, target, random) {
   } else if (ability === 'piercing') {
     targets = livingDogs(next.dogs).filter((dog) => dog.col === target.col && dog.row < target.row)
       .sort((a, b) => b.row - a.row).slice(0, 3);
-  } else if (ability === 'column-shot') {
+  } else if (ability === 'column-shot' || ability === 'bomb' || ability === 'splash') {
     const dog = nearestDogInColumn(target, next.dogs);
     if (dog) targets = [dog];
   } else if (ability === 'homing') {
@@ -1007,8 +1096,11 @@ export function useActiveAbility(game, casterId, target = {}) {
       && !next.cats.some((cat) => cat.row === target.row && cat.col === target.col)
       && !next.decoys.some((decoy) => decoy.row === target.row && decoy.col === target.col);
     if (legal) {
-      const hp = [0, 3, 6, 9][caster.level] ?? 3;
-      next.decoys.push({ id: id('decoy'), kind: 'phantom-cat', row: target.row, col: target.col, hp, maxHp: hp });
+      const blocks = Math.max(1, Math.min(3, caster.level ?? 1));
+      next.decoys.push({
+        id: id('decoy'), kind: 'phantom-cat', row: target.row, col: target.col,
+        blocks, maxBlocks: blocks,
+      });
       next.events.push({ type: 'decoy-cast', from: caster.id, row: target.row, col: target.col });
       used = true;
     }
@@ -1020,6 +1112,25 @@ export function useActiveAbility(game, casterId, target = {}) {
       next.dogs = next.dogs.filter((dog) => dog.hp > 0);
       used = true;
     }
+  } else if (active === 'bomb-cross') {
+    const legal = Number.isInteger(target.row) && Number.isInteger(target.col)
+      && target.row >= 0 && target.row < ROWS && target.col >= 0 && target.col < COLS;
+    if (legal) {
+      const footprint = plusCells(target.row, target.col);
+      const victims = next.dogs.filter((dog) => dog.hp > 0
+        && footprint.some((cell) => cell.row === dog.row && cell.col === dog.col));
+      if (victims.length) {
+        const damage = Math.max(1, caster.attack / 2);
+        victims.forEach((dog, index) => pushDamageEvent(next, 'spell', caster, dog, {
+          damage,
+          style: index === 0 ? 'bomb-cross' : 'bomb-cross-secondary',
+          aimRow: target.row,
+          aimCol: target.col,
+        }));
+        next.dogs = next.dogs.filter((dog) => dog.hp > 0);
+        used = true;
+      }
+    }
   } else if (active === 'encore') {
     const ally = next.cats.find((cat) => cat.id === target.targetCatId && cat.id !== caster.id);
     if (ally) {
@@ -1030,7 +1141,8 @@ export function useActiveAbility(game, casterId, target = {}) {
 
   if (!used) return game;
   caster.activeUsed = true;
-  next.message = `${CAT_COAT_INFO[normalizeCoat(caster.coat)].name} cast ${active.toUpperCase()}!`;
+  const castName = active === 'bomb-cross' ? 'PLUS BOMB' : active.toUpperCase();
+  next.message = `${CAT_COAT_INFO[normalizeCoat(caster.coat)].name} cast ${castName}!`;
   return next;
 }
 
@@ -1274,7 +1386,6 @@ export function startRound(game) {
   const next = copy(game);
   next.phase = 'combat';
   next.section = 0;
-  next.decoys = [];
   next.tacticsMoveUsed = false;
   next.cats.forEach((cat) => {
     cat.hasEnteredBattle = true;
@@ -1405,7 +1516,7 @@ function panicSidestep(next, dog, attacker) {
     .filter((col) => col >= 0 && col < COLS)
     .filter((col) => dogCountAt(next.dogs, dog.row, col, dog.id) < DOG_CELL_CAPACITY)
     .filter((col) => !next.cats.some((cat) => cat.hp > 0 && cat.row === dog.row && cat.col === col))
-    .filter((col) => !next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === dog.row && decoy.col === col));
+    .filter((col) => !next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === dog.row && decoy.col === col));
   if (!candidates.length) return;
 
   const greatestDistance = Math.max(...candidates.map((col) => Math.abs(col - attacker.col)));
@@ -1478,11 +1589,33 @@ function pushMissEvent(events, type, from, extra = {}) {
 }
 
 function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
+  const attack = extra.damage ?? (dog.attack + (dog.attackBoost ?? 0));
+  if (target.kind === 'phantom-cat') {
+    const blocksBefore = target.blocks ?? 0;
+    target.blocks = Math.max(0, blocksBefore - 1);
+    dog.attackBoost = 0;
+    next.events.push({
+      type,
+      from: dog.id,
+      to: target.id,
+      col: target.col,
+      fromCol: dog.col,
+      fromRow: dog.row,
+      toRow: target.row,
+      blocked: attack,
+      blocksBefore,
+      blocksAfter: target.blocks,
+      maxBlocks: target.maxBlocks,
+      decoyBlock: true,
+      ...extra,
+      damage: 0,
+    });
+    return;
+  }
   const hpBefore = target.hp;
   const armour = target.equipment?.armour;
   const armourBlocked = armour?.block ?? 0;
   const guardBlocked = target.guard ?? 0;
-  const attack = extra.damage ?? (dog.attack + (dog.attackBoost ?? 0));
   const blocked = Math.min(armourBlocked + guardBlocked, Math.max(0, attack - 1));
   const damage = Math.max(1, attack - blocked);
   let armourBroken = false;
@@ -1518,6 +1651,14 @@ function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
   });
 }
 
+function decoyIsActive(decoy) {
+  return (decoy?.blocks ?? 0) > 0;
+}
+
+function defenderIsActive(target) {
+  return target?.kind === 'phantom-cat' ? decoyIsActive(target) : (target?.hp ?? 0) > 0;
+}
+
 function dogCountAt(dogs, row, col, exceptId = null) {
   return dogs.filter((dog) => dog.hp > 0
     && dog.id !== exceptId
@@ -1527,7 +1668,7 @@ function dogCountAt(dogs, row, col, exceptId = null) {
 
 function defenderAhead(next, dog) {
   return next.cats.find((cat) => cat.hp > 0 && cat.col === dog.col && cat.row === dog.row + 1)
-    ?? next.decoys.find((decoy) => decoy.hp > 0 && decoy.col === dog.col && decoy.row === dog.row + 1)
+    ?? next.decoys.find((decoy) => decoyIsActive(decoy) && decoy.col === dog.col && decoy.row === dog.row + 1)
     ?? null;
 }
 
@@ -1544,7 +1685,7 @@ function meetDefender(next, dog, target, fromRow, fromCol, path = []) {
   const landingBlocked = landingRow >= ROWS
     || dogCountAt(next.dogs, landingRow, dog.col, dog.id) >= DOG_CELL_CAPACITY
     || next.cats.some((cat) => cat.hp > 0 && cat.col === dog.col && cat.row === landingRow)
-    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.col === dog.col && decoy.row === landingRow);
+    || next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.col === dog.col && decoy.row === landingRow);
   if (dog.role === DOG_ROLE.JUMPER && !dog.jumped && !landingBlocked) {
     dog.row = landingRow;
     dog.jumped = true;
@@ -1568,7 +1709,7 @@ const DOG_DIRECTIONS = Object.freeze({
 
 function defenderAheadFrom(next, row, col) {
   return next.cats.some((cat) => cat.hp > 0 && cat.row === row + 1 && cat.col === col)
-    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === row + 1 && decoy.col === col);
+    || next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === row + 1 && decoy.col === col);
 }
 
 function dogCellBlocked(next, dog, row, col) {
@@ -1576,7 +1717,7 @@ function dogCellBlocked(next, dog, row, col) {
   if (row === ROWS) return false;
   return dogCountAt(next.dogs, row, col, dog.id) >= DOG_CELL_CAPACITY
     || next.cats.some((cat) => cat.hp > 0 && cat.row === row && cat.col === col)
-    || next.decoys.some((decoy) => decoy.hp > 0 && decoy.row === row && decoy.col === col);
+    || next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === row && decoy.col === col);
 }
 
 function dogDirectionOptions(next, dog, position, lastDirection, horizontalDirection) {
@@ -1703,26 +1844,16 @@ export function resolveSection(game) {
       continue;
     }
 
-    if (ability === 'splash') {
-      const target = closestDogByColumnPriority(cat, next.dogs, game.random);
+    if (ability === 'bomb' || ability === 'splash') {
+      const target = nearestDogInColumn(cat, next.dogs);
       if (target) {
-        const impactRow = target.row;
-        const impactCol = target.col;
         pushDamageEvent(next, 'shot', cat, target, {
           fromCol: cat.col,
           col: target.col,
-          style: 'splash',
+          style: 'bomb',
         });
-        const splashTargets = livingDogs(next.dogs)
-          .filter((dog) => dog.row === impactRow && Math.abs(dog.col - impactCol) === 1);
-        splashTargets.forEach((dog) => pushDamageEvent(next, 'shot', cat, dog, {
-          fromCol: impactCol,
-          col: dog.col,
-          style: 'splash-secondary',
-          damage: cat.attack,
-        }));
       } else {
-        pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'splash' });
+        pushMissEvent(next.events, 'shot', cat, { fromCol: cat.col, col: cat.col, toRow: 0, style: 'bomb' });
       }
       continue;
     }
@@ -1869,7 +2000,7 @@ export function resolveSection(game) {
     }
     if (dog.role === DOG_ROLE.FRISBEE) {
       const rangedTarget = [...next.cats, ...next.decoys]
-        .filter((target) => target.hp > 0
+        .filter((target) => defenderIsActive(target)
           && Math.abs(target.col - dog.col) <= 1
           && target.row - dog.row >= 2
           && target.row - dog.row <= 4)
@@ -1883,7 +2014,7 @@ export function resolveSection(game) {
     }
     if (dog.role === DOG_ROLE.TENNIS) {
       const rangedTarget = [...next.cats, ...next.decoys]
-        .filter((target) => target.hp > 0
+        .filter((target) => defenderIsActive(target)
           && target.col === dog.col
           && target.row - dog.row >= 2
           && target.row - dog.row <= 3)
@@ -1896,7 +2027,7 @@ export function resolveSection(game) {
     }
     if (dog.role === DOG_ROLE.LOBBER) {
       const rangedTarget = [...next.cats, ...next.decoys]
-        .filter((target) => target.hp > 0
+        .filter((target) => defenderIsActive(target)
           && target.col === dog.col
           && target.row - dog.row >= 2
           && target.row - dog.row <= 5)
@@ -1906,7 +2037,7 @@ export function resolveSection(game) {
         applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'bone-bomb', damage: bombDamage });
         const splashTargets = [...next.cats, ...next.decoys]
           .filter((target) => target.id !== rangedTarget.id
-            && target.hp > 0
+            && defenderIsActive(target)
             && target.row === rangedTarget.row
             && Math.abs(target.col - rangedTarget.col) === 1);
         splashTargets.forEach((target) => applyDogDamage(next, dog, target, 'dog-shot', {
@@ -1918,7 +2049,7 @@ export function resolveSection(game) {
     advanceDog(next, dog);
   }
   next.cats = next.cats.filter((cat) => cat.hp > 0);
-  next.decoys = next.decoys.filter((decoy) => decoy.hp > 0);
+  next.decoys = next.decoys.filter(decoyIsActive);
 
   const breachedCols = [...new Set(next.dogs.filter((dog) => dog.row >= ROWS).map((dog) => dog.col))];
   for (const col of breachedCols) {
@@ -1973,7 +2104,6 @@ export function finishRound(game) {
     cat.guard = 0;
     cat.nextAttackBonus = 0;
   });
-  next.decoys = [];
   next.workers.forEach((worker) => {
     if (!worker) return;
     const productionRounds = WORKER_INFO[worker.role]?.productionRounds ?? 1;

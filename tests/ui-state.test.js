@@ -1,17 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, combatTiming, homingShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
+import { COMBAT_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
+
+test('cat pickup advice explains free placement before its first battle', () => {
+  assert.equal(
+    catSelectionAdvice(
+      { level: 1, hasEnteredBattle: false },
+      { name: 'Purrcy Pew-Pew', blurb: 'Hits hard' },
+      'prep',
+    ),
+    'Level 1 Purrcy Pew-Pew selected. Before its first battle, you can freely place or reposition this cat anywhere in cat territory.',
+  );
+});
+
+test('shop offers flag mergeable cats owned across the field, Production House, and workbench', () => {
+  const ownedCats = [
+    { kind: 'alley-cat', coat: 2, level: 1 },
+    { kind: 'production-cat', role: 'cook', level: 1 },
+    { kind: 'alley-cat', coat: 5, level: 2 },
+  ];
+
+  assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 1 }, ownedCats), true);
+  assert.equal(shopOfferHasOwnedMatch({ category: 'worker', role: 'cook', level: 1 }, ownedCats), true);
+  assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 5, level: 2 }, ownedCats), true);
+  assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 2 }, ownedCats), false);
+  assert.equal(shopOfferHasOwnedMatch({ category: 'worker', role: 'trader', level: 1 }, ownedCats), false);
+});
+
+test('sold and max-level shop cats never advertise an unusable match', () => {
+  const ownedCats = [{ kind: 'alley-cat', coat: 2, level: 3 }];
+  assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 3 }, ownedCats), false);
+  assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 3, sold: true }, ownedCats), false);
+});
 
 test('next-wave dogs fill from top-left in chronological and left-to-right order', () => {
   const laterLeft = { id: 'later-left', appearanceIndex: 1, col: 0 };
@@ -75,17 +106,30 @@ test('every multi-battle production cat exposes the same completion countdown', 
   ]);
 });
 
-test('deployed cat equipment markers show weapon then armour with their tiers', () => {
+test('cat equipment plates expose actual attack, block, and remaining-hit values', () => {
   assert.deepEqual(equippedItemMarkers({
     equipment: {
       weapon: { tier: 1, attack: 1 },
-      armour: { tier: 3, block: 4, uses: 2 },
+      armour: { tier: 3, block: 4, uses: 2, maxUses: 3 },
     },
   }), [
-    { kind: 'weapon', tier: 1 },
-    { kind: 'armour', tier: 3 },
+    { kind: 'weapon', tier: 1, value: 1, uses: null, maxUses: null },
+    { kind: 'armour', tier: 3, value: 4, uses: 2, maxUses: 3 },
   ]);
   assert.deepEqual(equippedItemMarkers({ equipment: { weapon: null, armour: null } }), []);
+});
+
+test('temporary cat and dog statuses provide large-marker values and plain-language labels', () => {
+  assert.deepEqual(catStatusMarkers({ guard: 2, nextAttackBonus: 3, nextAttackPenalty: 1 }), [
+    { kind: 'guard', value: '2', label: 'Guard blocks 2 damage from the next hit' },
+    { kind: 'attack-up', value: '+3', label: 'Next attack gains 3 damage' },
+    { kind: 'attack-down', value: '-1', label: 'Next attack loses 1 damage' },
+  ]);
+  assert.deepEqual(dogStatusMarkers({ frozenActions: 1, tangled: true, attackBoost: 4 }), [
+    { kind: 'frozen', value: '1', label: 'Skips 1 action' },
+    { kind: 'tangled', value: '1', label: 'Next movement is skipped' },
+    { kind: 'attack-up', value: '+4', label: 'Next damaging attack gains 4 damage' },
+  ]);
 });
 
 test('Cat Cart summaries contain only badge, name, and cost', () => {
@@ -665,6 +709,21 @@ test('homing shot path uses a sine wave while ending on the target', () => {
     maxOff = Math.max(maxOff, Math.hypot(x - straightX, y - straightY));
   }
   assert.ok(maxOff > 1.2, `expected a sine offset off the line, maxOff=${maxOff}`);
+});
+
+test('a bomb thrown within one lane follows a visibly curved path', () => {
+  const frames = lobShotKeyframes(
+    { xPercent: 40, yPercent: 90 },
+    { xPercent: 40, yPercent: 35 },
+    { steps: 20, arcPercent: 12 },
+  );
+  const firstX = Number(frames[0].left.replace('%', ''));
+  const middleX = Number(frames[Math.floor(frames.length / 2)].left.replace('%', ''));
+  const lastX = Number(frames.at(-1).left.replace('%', ''));
+
+  assert.equal(firstX, 40);
+  assert.ok(middleX >= 45, `same-lane bomb should bow sideways, middle x=${middleX}`);
+  assert.ok(Math.abs(lastX - 40) < 1e-9);
 });
 
 test('orange burst bullets use exactly double their prior travel time', () => {

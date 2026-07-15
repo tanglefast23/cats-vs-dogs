@@ -22,7 +22,7 @@ under `src/` stays browser-pure (no Electron/Node imports).
   - **Clawdius** — extreme HP, but tiny front-only melee damage
   - **Hissiletoe** — balanced health and medium homing damage
   - **Knotty Kitty** — very low damage; tangles each dog once
-  - **Bombay Boom** (R4) — weak single hit with strong adjacent-column splash
+  - **Bombay Boom** (R4) — medium lane bomb; once per battle, aims a half-damage five-square plus blast
   - **Laserpaw** (R7) — fragile beam that pierces up to three dogs in one lane
   - **Frosty, Purrtal, Faux Paw, Thunderpaws, and Meowstro** (R4) — low normal stats traded for one specialized Tactics ability
 - Dog roles are equally specialized: **Chomps McGraw** bites hardest; **Fetch Armstrong**, **Bark McEnroe**, and **Bone Jovi** attack at range; **Howl Pacino** buffs the pack; **Barkour Bandit** moves 3 squares and vaults over a defender but takes +1 damage per hit; **Sir Flinches-a-Lot** panic-steps sideways after surviving a hit; **Dr. Droolittle** heals allies; and **Growl Gadot** weakens a cat's next attack

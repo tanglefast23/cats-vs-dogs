@@ -7,6 +7,7 @@ import {
   CAT_COAT_INFO,
   CAT_ZONE_START,
   COLS,
+  DOG_ROLE,
   ROWS,
   addCatToBench,
   addInventoryStack,
@@ -21,6 +22,7 @@ import {
   moveCatInTactics,
   openTacticsWindow,
   placeCat,
+  plusCells,
   resolveSection,
   startRound,
   useActiveAbility,
@@ -33,15 +35,16 @@ function placeCoat(game, coat, row, col) {
   return placeCat(game, game.bench.length - 1, row, col);
 }
 
-test('five active Tier 3 cats unlock on round four', () => {
+test('six active Tier 3 cats unlock on round four', () => {
   const activeCoats = [
+    CAT_COAT.BLACK,
     CAT_COAT.FROST,
     CAT_COAT.RIFT,
     CAT_COAT.MIRAGE,
     CAT_COAT.STORM,
     CAT_COAT.ENCORE,
   ];
-  assert.deepEqual(activeCoats, [6, 7, 8, 9, 10]);
+  assert.deepEqual(activeCoats, [4, 6, 7, 8, 9, 10]);
   assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].shopTier === 3), true);
   assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].activeAbility), true);
   assert.equal(activeCoats.every((coat) => !availableCatCoatsForRound(3).includes(coat)), true);
@@ -209,17 +212,95 @@ test('Rift Walker teleports an ally anywhere and grants its level bonus', () => 
   assert.equal(target.guard, 2);
 });
 
-test('Mirage Maker creates a temporary blocker that absorbs dog bites', () => {
+function summonPhantom(level, row = 11, col = 3) {
   let game = createGame(() => 0.5);
-  game = placeCoat(game, CAT_COAT.MIRAGE, 13, 0);
+  game.cats = [createCat(level, CAT_COAT.MIRAGE)];
+  game.cats[0].row = 13;
+  game.cats[0].col = 0;
   game.phase = 'tactics';
-  game = useActiveAbility(game, game.cats[0].id, { row: 11, col: 3 });
-  assert.equal(game.decoys.length, 1);
-  game.dogs = [createDog(2, 10, 3)];
-  game = continueCombat(game);
-  game = resolveSection(game);
+  return useActiveAbility(game, game.cats[0].id, { row, col });
+}
+
+test('Faux Paw phantom has one attack block per level and no HP', () => {
+  for (const level of [1, 2, 3]) {
+    const game = summonPhantom(level);
+    assert.equal(game.decoys.length, 1);
+    assert.equal(game.decoys[0].blocks, level);
+    assert.equal(game.decoys[0].maxBlocks, level);
+    assert.equal('hp' in game.decoys[0], false);
+    assert.equal('maxHp' in game.decoys[0], false);
+  }
+});
+
+test('Faux Paw phantom spends exactly one block on every damaging dog attack kind', () => {
+  const attacks = [
+    { role: DOG_ROLE.SCRUFFY, row: 10, style: undefined },
+    { role: DOG_ROLE.FRISBEE, row: 8, style: 'frisbee' },
+    { role: DOG_ROLE.TENNIS, row: 8, style: 'tennis' },
+    { role: DOG_ROLE.LOBBER, row: 8, style: 'bone-bomb' },
+  ];
+
+  for (const attack of attacks) {
+    let game = summonPhantom(1);
+    const decoyId = game.decoys[0].id;
+    game.cats = [];
+    const dog = createDog(4, attack.row, 3, attack.role);
+    dog.hp = 100;
+    dog.maxHp = 100;
+    game.dogs = [dog];
+    game = resolveSection(continueCombat(game));
+
+    const block = game.events.find((event) => event.to === decoyId);
+    assert.ok(block, `${attack.role} should hit the phantom`);
+    assert.equal(block.style, attack.style);
+    assert.equal(block.decoyBlock, true);
+    assert.equal(block.damage, 0);
+    assert.equal(block.blocksBefore, 1);
+    assert.equal(block.blocksAfter, 0);
+    assert.ok(block.blocked > 0);
+    assert.equal(game.decoys.length, 0);
+  }
+});
+
+test('Faux Paw phantom also blocks bone bomb splash damage', () => {
+  let game = summonPhantom(1, 11, 4);
+  const decoyId = game.decoys[0].id;
+  const tank = createCat(3, CAT_COAT.GREY);
+  tank.row = 11;
+  tank.col = 3;
+  game.cats = [tank];
+  const dog = createDog(4, 8, 3, DOG_ROLE.LOBBER);
+  dog.hp = 100;
+  dog.maxHp = 100;
+  game.dogs = [dog];
+  game = resolveSection(continueCombat(game));
+
+  const block = game.events.find((event) => event.to === decoyId);
+  assert.equal(block?.style, 'bone-bomb-secondary');
+  assert.equal(block?.decoyBlock, true);
+  assert.equal(block?.blocksAfter, 0);
   assert.equal(game.decoys.length, 0);
-  assert.equal(game.dogs[0].row, 10);
+});
+
+test('Faux Paw phantom keeps unused blocks through round end and the next round start', () => {
+  let game = summonPhantom(3);
+  const decoyId = game.decoys[0].id;
+  game.cats = [];
+  const dog = createDog(4, 10, 3, DOG_ROLE.SCRUFFY);
+  dog.hp = 100;
+  dog.maxHp = 100;
+  game.dogs = [dog];
+  game = resolveSection(continueCombat(game));
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
+
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.phase, 'prep');
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
+
+  game = startRound(game);
+  assert.equal(game.phase, 'combat');
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
 });
 
 test('Stormcaller damages every living dog in one selected column', () => {
@@ -234,6 +315,39 @@ test('Stormcaller damages every living dog in one selected column', () => {
   const strikes = game.events.filter((event) => event.type === 'spell' && event.style === 'lightning');
   assert.deepEqual(strikes.map((event) => event.to), struckDogIds);
   assert.deepEqual(strikes.map((event) => [event.toRow, event.col]), [[2, 4], [5, 4]]);
+});
+
+test('Bombay Boom special hits every dog in a five-square plus for half normal damage', () => {
+  let game = createGame(() => 0.5);
+  game.cats = [createCat(2, CAT_COAT.BLACK)];
+  game.cats[0].row = 12; game.cats[0].col = 2;
+  const occupiedPlus = plusCells(5, 2);
+  game.dogs = occupiedPlus.map(({ row, col }) => createDog(1, row, col));
+  game.dogs.push(createDog(1, 5, 2)); // A sixth dog stacked on the centre square.
+  const outside = createDog(1, 4, 1);
+  game.dogs.push(outside);
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+  const hits = game.events.filter((event) => event.type === 'spell' && event.style.startsWith('bomb-cross'));
+  assert.equal(hits.length, 6);
+  assert.equal(hits.filter((event) => event.style === 'bomb-cross').length, 1);
+  assert.equal(hits.filter((event) => event.style === 'bomb-cross-secondary').length, 5);
+  assert.equal(hits.every((event) => event.damage === 3.5), true);
+  assert.equal(hits.reduce((total, event) => total + event.damage, 0), game.cats[0].attack * 3);
+  assert.equal(hits.every((event) => event.aimRow === 5 && event.aimCol === 2), true);
+  assert.equal(game.dogs.find((dog) => dog.id === outside.id).hp, 8);
+  assert.equal(game.cats[0].activeUsed, true);
+});
+
+test('Bombay Boom plus footprint clips cleanly at battlefield edges', () => {
+  assert.deepEqual(plusCells(0, 0), [
+    { row: 0, col: 0 },
+    { row: 1, col: 0 },
+    { row: 0, col: 1 },
+  ]);
+  assert.equal(plusCells(5, 2).length, 5);
 });
 
 test('Encore Maestro grants one reduced-strength immediate allied attack', () => {
@@ -301,7 +415,7 @@ test('tactics movement cannot enter a cat, dog, or decoy tile', () => {
   const catId = game.cats[0].id;
   game.cats.push({ ...createCat(1, CAT_COAT.GREY), row: 12, col: 3 });
   game.dogs = [createDog(1, 11, 2)];
-  game.decoys = [{ id: 'decoy-1', row: 13, col: 2, hp: 3, maxHp: 3 }];
+  game.decoys = [{ id: 'decoy-1', kind: 'phantom-cat', row: 13, col: 2, blocks: 1, maxBlocks: 1 }];
 
   assert.equal(moveCatInTactics(game, catId, 12, 3), game);
   assert.equal(moveCatInTactics(game, catId, 11, 2), game);

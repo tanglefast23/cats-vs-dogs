@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ATTACK_FX, HURT_FX, ENGINE_ATTACK_STYLES,
-  attackSignature, blastCells, contactVector, isKill, attackGroupKey,
+  attackSignature, blastCells, blastFootprint, contactVector, isKill, attackGroupKey,
 } from '../src/battle-fx.js';
 import { COLS } from '../src/game-engine.js';
 
@@ -51,26 +51,36 @@ test('an unknown caster falls back without throwing', () => {
   assert.ok(ATTACK_FX[attackSignature({ type: 'shot' }, null)]);
 });
 
-// The heart of the bomb fix: secondary damage is a victim of one blast, never its own
-// projectile. If these ever grow a projectile again, the sideways-pellets bug is back.
-test('splash secondaries are absorbed into the parent blast, not fired separately', () => {
-  for (const [secondary, parent] of [['splash-secondary', 'splash'], ['bone-bomb-secondary', 'bone-bomb']]) {
+// Secondary damage is a victim of one blast, never its own projectile.
+test('bomb secondaries are absorbed into the parent blast, not fired separately', () => {
+  for (const [secondary, parent] of [['bomb-cross-secondary', 'bomb-cross'], ['bone-bomb-secondary', 'bone-bomb']]) {
     assert.equal(ATTACK_FX[secondary].projectile, null, `${secondary} must not fire a projectile`);
     assert.equal(ATTACK_FX[secondary].absorbedBy, parent);
-    assert.equal(ATTACK_FX[parent].blast, 'row-neighbours', `${parent} must draw a blast`);
+    assert.ok(ATTACK_FX[parent].blast, `${parent} must draw a blast`);
   }
 });
 
 test('area attacks group with their secondaries into one attack', () => {
-  const primary = { type: 'shot', from: 'cat1', style: 'splash', col: 2, toRow: 4 };
-  const secondary = { type: 'shot', from: 'cat1', style: 'splash-secondary', col: 3, toRow: 4 };
+  const primary = { type: 'spell', from: 'cat1', style: 'bomb-cross', col: 2, toRow: 4 };
+  const secondary = { type: 'spell', from: 'cat1', style: 'bomb-cross-secondary', col: 3, toRow: 4 };
   assert.equal(attackGroupKey(primary, { coat: 4 }), attackGroupKey(secondary, { coat: 4 }));
 });
 
 test('two different cats firing the same style stay separate attacks', () => {
-  const a = { type: 'shot', from: 'cat1', style: 'splash', col: 2, toRow: 4 };
-  const b = { type: 'shot', from: 'cat2', style: 'splash', col: 2, toRow: 4 };
+  const a = { type: 'spell', from: 'cat1', style: 'bomb-cross', col: 2, toRow: 4 };
+  const b = { type: 'spell', from: 'cat2', style: 'bomb-cross', col: 2, toRow: 4 };
   assert.notEqual(attackGroupKey(a, { coat: 4 }), attackGroupKey(b, { coat: 4 }));
+});
+
+test('Bombay regular and special blast footprints match their damage areas', () => {
+  assert.deepEqual(blastFootprint('single-cell', 5, 2), [{ row: 5, col: 2 }]);
+  assert.deepEqual(blastFootprint('plus', 5, 2), [
+    { row: 5, col: 2 },
+    { row: 4, col: 2 },
+    { row: 6, col: 2 },
+    { row: 5, col: 1 },
+    { row: 5, col: 3 },
+  ]);
 });
 
 // blastCells must mirror the engine's own splash rule exactly, or fire lands on squares
@@ -128,5 +138,7 @@ test('isKill spots the killing blow and nothing else', () => {
   assert.equal(isKill({ to: 'dog3', hpBefore: 9, hpAfter: 4 }), false);
   assert.equal(isKill({ to: 'dog3', hpBefore: 0, hpAfter: 0 }), false, 'already dead is not a fresh kill');
   assert.equal(isKill({ miss: true, hpBefore: 4, hpAfter: 0, to: null }), false, 'a miss kills nobody');
+  assert.equal(isKill({ to: 'decoy1', blocksBefore: 1, blocksAfter: 0 }), true, 'last decoy block destroys it');
+  assert.equal(isKill({ to: 'decoy1', blocksBefore: 3, blocksAfter: 2 }), false, 'unused blocks keep it alive');
   assert.equal(isKill({}), false);
 });

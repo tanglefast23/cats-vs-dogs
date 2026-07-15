@@ -59,14 +59,21 @@ export function stormColumnPosition(col, cols = COLS) {
  */
 export function lobShotKeyframes(start, end, { steps = 26, arcPercent = 13, spin = 540 } = {}) {
   const frames = [];
+  // Most bombs travel within one vertical lane. A pure vertical height hump changes the
+  // timing but still draws a straight line, so bow the flight sideways toward board
+  // centre as well. It starts and ends exactly on the units, but reads as a real curve.
+  const curveDirection = start.xPercent > 50 ? -1 : 1;
+  const sidePercent = arcPercent * 0.5;
   for (let step = 0; step <= steps; step += 1) {
     const t = step / steps;
-    const x = start.xPercent + (end.xPercent - start.xPercent) * t;
+    const hump = Math.sin(Math.PI * t);
+    const x = start.xPercent + (end.xPercent - start.xPercent) * t
+      + hump * sidePercent * curveDirection;
     const flat = start.yPercent + (end.yPercent - start.yPercent) * t;
     // Up the board is negative, so subtracting the hump lifts the bomb.
-    const y = flat - Math.sin(Math.PI * t) * arcPercent;
+    const y = flat - hump * arcPercent;
     // Grows slightly as it comes down at the board — it is coming toward the viewer.
-    const scale = 0.78 + Math.sin(Math.PI * t) * 0.3 + t * 0.16;
+    const scale = 0.78 + hump * 0.3 + t * 0.16;
     frames.push({
       left: `${x}%`,
       top: `${y}%`,

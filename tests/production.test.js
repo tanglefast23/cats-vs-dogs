@@ -62,14 +62,32 @@ test('round-one shared shop pool contains unlocked fighters and every worker def
   assert.equal(new Set(entries.map((entry) => `${entry.category}:${entry.coat ?? entry.role}`)).size, 8);
 });
 
-test('ordinary shops can roll all workers while the opening shop guarantees two fighters', () => {
-  const workerShop = makeShop(() => 0.999, null, 2);
-  assert.equal(workerShop.length, 3);
-  assert.equal(workerShop.every((slot) => slot.category === 'worker'), true);
-  assert.equal(workerShop.every((slot) => slot.role === WORKER_ROLE.ARMOURER), true);
+test('shop refreshes cap house cats as the shop expands', () => {
+  for (const [round, size, maxHouseCats] of [[2, 3, 1], [5, 4, 2], [9, 5, 3]]) {
+    const shop = makeShop(() => 0.999, null, round);
+    assert.equal(shop.length, size);
+    assert.equal(
+      shop.filter((slot) => slot.category === 'worker').length,
+      maxHouseCats,
+      `round ${round} should show at most ${maxHouseCats} house cat${maxHouseCats === 1 ? '' : 's'}`,
+    );
+  }
 
   const opening = makeShop(() => 0.999, null, 1);
   assert.equal(opening.filter((slot) => slot.category === 'fighter').length, 2);
+  assert.equal(opening.filter((slot) => slot.category === 'worker').length, 1);
+});
+
+test('saved house cats count toward the refresh cap', () => {
+  const previous = makeShop(() => 0.999, null, 5);
+  previous[0].saved = true;
+  previous[1].saved = true;
+
+  const refreshed = makeShop(() => 0.999, previous, 5);
+
+  assert.equal(refreshed.filter((slot) => slot.category === 'worker').length, 2);
+  assert.equal(refreshed[0].id, previous[0].id);
+  assert.equal(refreshed[1].id, previous[1].id);
 });
 
 test('new games start with two active house slots, a three-cat workbench, and two full-size storage squares', () => {

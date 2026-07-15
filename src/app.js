@@ -4,6 +4,7 @@ import {
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility,
+  plusCells,
   purchaseShopFighterToBench, purchaseShopFighterToBoard,
   purchaseShopFighterOnto, purchaseShopWorker, purchaseShopWorkerToBench,
   moveWorker, mergeWorkerOnto, moveBenchWorkerToHouse, returnWorkerToBench, mergeBenchWorkerOnto,
@@ -11,7 +12,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, shopPetAvailability, hpTone, equippedItemMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
 import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction } from './drag-drop.js';
@@ -19,7 +20,7 @@ import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage }
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
-  ATTACK_FX, HURT_FX, attackSignature, attackGroupKey, blastCells, contactVector, isKill,
+  ATTACK_FX, HURT_FX, attackSignature, attackGroupKey, blastFootprint, contactVector, isKill,
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
 
@@ -147,12 +148,24 @@ function hideUnitTooltip() {
 
 function showUnitTooltip(anchor, info, clientX, clientY) {
   if (!info) return;
+  const effects = info.effects ?? [];
+  const effectsMarkup = effects.length
+    ? `<section class="tooltip-effects">
+        <span class="tooltip-effects-title">STATUS &amp; EQUIPMENT</span>
+        ${effects.map((effect) => `<div class="tooltip-effect effect-${effect.kind}">
+          <span class="tooltip-effect-name">${effect.label}</span>
+          <b class="tooltip-effect-value">${effect.value}</b>
+          <small>${effect.detail}</small>
+        </div>`).join('')}
+      </section>`
+    : '';
   tooltipEl.className = `unit-tooltip kind-${info.kind} is-visible`;
   tooltipEl.hidden = false;
   tooltipEl.innerHTML = `
     <strong>${info.title}</strong>
     <span class="tooltip-stats">${info.stats}</span>
     <p class="tooltip-attack"><b>${info.detailLabel ?? 'Attack'}</b> ${info.attack}</p>
+    ${effectsMarkup}
     <small class="tooltip-note">${info.note}</small>
   `;
   const pad = 12;
@@ -172,19 +185,28 @@ function showUnitTooltip(anchor, info, clientX, clientY) {
 
 function bindTooltip(anchor, infoFactory) {
   const resolveInfo = () => (typeof infoFactory === 'function' ? infoFactory() : infoFactory);
+  const bombIsAiming = () => activeTargeting?.mode === 'bomb-cross';
 
   const scheduleShow = (event) => {
     clearTooltipTimer();
+    if (bombIsAiming()) {
+      hideUnitTooltip();
+      return;
+    }
     tooltipPointer = { x: event.clientX, y: event.clientY };
     tooltipTimer = window.setTimeout(() => {
       tooltipTimer = null;
       // Only open if the pointer is still over this anchor.
-      if (!anchor.matches(':hover') && document.activeElement !== anchor) return;
+      if (bombIsAiming() || (!anchor.matches(':hover') && document.activeElement !== anchor)) return;
       showUnitTooltip(anchor, resolveInfo(), tooltipPointer.x, tooltipPointer.y);
     }, TOOLTIP_HOVER_DELAY_MS);
   };
 
   const move = (event) => {
+    if (bombIsAiming()) {
+      hideUnitTooltip();
+      return;
+    }
     tooltipPointer = { x: event.clientX, y: event.clientY };
     if (tooltipEl.hidden) return;
     showUnitTooltip(anchor, resolveInfo(), event.clientX, event.clientY);
@@ -198,7 +220,7 @@ function bindTooltip(anchor, infoFactory) {
     clearTooltipTimer();
     tooltipTimer = window.setTimeout(() => {
       tooltipTimer = null;
-      if (document.activeElement !== anchor) return;
+      if (bombIsAiming() || document.activeElement !== anchor) return;
       showUnitTooltip(anchor, resolveInfo());
     }, TOOLTIP_HOVER_DELAY_MS);
   });
@@ -252,15 +274,17 @@ function showShopPurchaseDenied(button, reason) {
 function renderShop() {
   shopEl.innerHTML = '';
   shopEl.dataset.count = String(game.shop.length);
+  const ownedCats = [...game.cats, ...game.workers.filter(Boolean), ...game.bench];
   game.shop.forEach((slot, index) => {
     const isWorker = slot.category === 'worker';
     const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
     const summary = shopCardSummary(slot, info);
+    const hasOwnedMatch = shopOfferHasOwnedMatch(slot, ownedCats);
     const interactive = !slot.sold && game.phase === 'prep' && !playing;
     const canBuy = interactive && game.gold >= 3;
     const reason = slot.sold ? 'sold' : game.gold < 3 ? 'gold' : 'ready';
     const wrap = document.createElement('div');
-    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
+    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${hasOwnedMatch ? 'has-owned-match' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
 
     const button = document.createElement('button');
     button.className = 'shop-card';
@@ -271,6 +295,15 @@ function renderShop() {
       <span class="shop-tier">${summary.badge}</span>
       <strong>${summary.name}</strong>
       <span class="price">● ${summary.cost}</span>`);
+    if (hasOwnedMatch) {
+      const match = document.createElement('span');
+      match.className = 'shop-match';
+      match.textContent = 'MATCH';
+      match.setAttribute('aria-hidden', 'true');
+      button.append(match);
+      button.title = 'Matching cat owned — drag this shop cat onto it to stack.';
+      button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Matching cat owned; drag onto it to stack.`);
+    }
     button.addEventListener('click', () => {
       if (!canBuy) {
         showShopPurchaseDenied(button, reason);
@@ -304,6 +337,31 @@ function renderShop() {
   });
 }
 
+function appendUnitStatusOverlays(unit, statuses) {
+  if (!statuses.length) return;
+  unit.classList.add('has-status-overlays');
+  const overlays = document.createElement('span');
+  overlays.className = 'unit-status-overlays';
+  overlays.setAttribute('aria-hidden', 'true');
+  let cornerSlot = 0;
+  statuses.forEach((status) => {
+    const marker = document.createElement('span');
+    marker.className = `unit-status unit-status-${status.kind}`;
+    marker.title = status.label;
+    if (['attack-up', 'attack-down', 'frozen'].includes(status.kind)) {
+      marker.style.setProperty('--status-slot', String(cornerSlot));
+      cornerSlot += 1;
+    }
+    const glyph = document.createElement('i');
+    glyph.className = 'unit-status-glyph';
+    const value = document.createElement('b');
+    value.textContent = status.value;
+    marker.append(glyph, value);
+    overlays.append(marker);
+  });
+  unit.append(overlays);
+}
+
 function catMarkup(cat) {
   const unit = document.createElement('div');
   unit.className = 'unit';
@@ -319,13 +377,20 @@ function catMarkup(cat) {
       const marker = document.createElement('span');
       marker.className = `equipment-marker equipment-${item.kind}`;
       marker.append(unitCanvas('item', item));
-      const tier = document.createElement('b');
-      tier.textContent = String(item.tier);
-      marker.append(tier);
+      const value = document.createElement('b');
+      value.textContent = item.kind === 'weapon' ? `+${item.value}` : String(item.value);
+      marker.append(value);
+      if (item.kind === 'armour') {
+        const uses = document.createElement('span');
+        uses.className = 'equipment-uses';
+        uses.textContent = `×${item.uses}`;
+        marker.append(uses);
+      }
       markers.append(marker);
     });
     unit.append(markers);
   }
+  appendUnitStatusOverlays(unit, catStatusMarkers(cat));
   const copies = cat.copies ?? 1;
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">L${cat.level}</span>
@@ -351,6 +416,7 @@ function dogMarkup(dog, stackIndex = 0, stackSize = 1) {
     ice.innerHTML = '<i class="ice-shard ice-shard-left"></i><i class="ice-shard ice-shard-right"></i><i class="ice-shard ice-shard-top"></i>';
     unit.append(ice);
   }
+  appendUnitStatusOverlays(unit, dogStatusMarkers(dog));
   unit.insertAdjacentHTML('beforeend', `
     <span class="unit-badge">T${dog.tier}</span>
     <span class="hp-wrap"><span class="hp-bar hp-${hpTone(dog.hp, dog.maxHp)}" style="width:${Math.max(0, dog.hp / dog.maxHp * 100)}%"></span></span>`);
@@ -368,6 +434,22 @@ function dogStackTooltipInfo(dogs) {
     stats: `${back.title} ${backDog.hp}/${backDog.maxHp} HP · ${front.title} ${frontDog.hp}/${frontDog.maxHp} HP`,
     attack: 'Both dogs act separately. The slightly raised dog is behind the front dog.',
     note: 'This square is full; a third dog must stop behind it.',
+    effects: dogs.flatMap((dog) => (dogTooltipInfo(dog).effects ?? []).map((effect) => ({
+      ...effect,
+      label: `${dogTooltipInfo(dog).title}: ${effect.label}`,
+    }))),
+  };
+}
+
+function decoyTooltipInfo(decoy) {
+  const blocks = decoy.blocks ?? 0;
+  return {
+    kind: 'cat',
+    title: 'PHANTOM DECOY',
+    stats: `${blocks}/${decoy.maxBlocks ?? blocks} ATTACK BLOCKS`,
+    detailLabel: 'Defence',
+    attack: 'Blocks one damaging dog attack of any kind, regardless of its damage.',
+    note: 'Persists between rounds until every block is used.',
   };
 }
 
@@ -454,14 +536,15 @@ function tryMerge(targetType, targetId) {
   return true;
 }
 
+function showCatSelectionAdvice(cat) {
+  const info = CAT_COAT_INFO[normalizeCoat(cat.coat)];
+  game.message = catSelectionAdvice(cat, info, game.phase);
+  $('#message').textContent = game.message;
+}
+
 function selectCat(type, cat) {
   selected = { type, id: cat.id };
-  const info = CAT_COAT_INFO[normalizeCoat(cat.coat)];
-  game.message = game.phase === 'tactics'
-    ? `Level ${cat.level} ${info.name} selected. Move it to an empty glowing tile for its battle-break movement.`
-    : !cat.hasEnteredBattle
-    ? `Level ${cat.level} ${info.name} selected. Place or reposition it anywhere in cat territory until its first battle starts.`
-    : `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
+  showCatSelectionAdvice(cat);
 }
 
 function dragSource(type, cat) {
@@ -520,7 +603,7 @@ function targetFromElement(element) {
         occupied: occupied
           ? { id: occupied.id, level: occupied.level, coat: normalizeCoat(occupied.coat) }
           : game.dogs.find((dog) => dog.hp > 0 && dog.row === row && dog.col === col)
-            ?? game.decoys.find((decoy) => decoy.hp > 0 && decoy.row === row && decoy.col === col)
+            ?? game.decoys.find((decoy) => decoy.blocks > 0 && decoy.row === row && decoy.col === col)
             ?? null,
       },
     };
@@ -620,6 +703,9 @@ function startDragVisual(event) {
   dragState.started = true;
   suppressNextPetClick = true;
   hideUnitTooltip();
+  if (dragState.source.type === 'cat' || dragState.source.type === 'bench') {
+    showCatSelectionAdvice(dragState.cat);
+  }
   dragState.sourceElement.classList.add('drag-origin');
   const visuals = makeDragGhost(dragState.cat, dragState.sourceRect, dragState.source);
   dragState.ghost = visuals.ghost;
@@ -1143,12 +1229,30 @@ function renderDogPreview() {
 }
 
 const ACTIVE_COPY = {
+  'bomb-cross': ['PLUS BOMB', 'Aim on the battlefield. The five blue squares show the plus-shaped blast.'],
   freeze: ['FREEZE', 'Choose a dog to skip its next action.'],
   teleport: ['PORTAL', 'Choose an ally, then any empty cat square.'],
-  decoy: ['DECOY', 'Choose an empty cat square for a phantom blocker.'],
+  decoy: ['DECOY', 'Choose an empty cat square. The phantom persists and blocks one attack per Faux Paw level.'],
   storm: ['STORM', 'Choose a dog column to strike.'],
   encore: ['ENCORE', 'Choose another cat for an immediate attack.'],
 };
+
+function clearBombTargetPreview() {
+  gridEl.querySelectorAll('.bomb-footprint, .bomb-footprint-centre')
+    .forEach((cell) => cell.classList.remove('bomb-footprint', 'bomb-footprint-centre'));
+}
+
+function showBombTargetPreview(row, col) {
+  clearBombTargetPreview();
+  if (activeTargeting?.mode !== 'bomb-cross') return;
+  for (const cell of plusCells(row, col)) {
+    const element = gridEl.querySelector(`.cell[data-row="${cell.row}"][data-col="${cell.col}"]`);
+    element?.classList.add('bomb-footprint');
+    if (cell.row === row && cell.col === col) element?.classList.add('bomb-footprint-centre');
+  }
+}
+
+gridEl.addEventListener('pointerleave', clearBombTargetPreview);
 
 function renderTacticsPanel() {
   const panel = $('#tactics-panel');
@@ -1182,7 +1286,12 @@ function tryActiveTarget(row, col, cat, dog) {
   if (playing || game.phase !== 'tactics' || !activeTargeting) return false;
   const targeting = activeTargeting;
   let payload = null;
-  if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
+  if (targeting.mode === 'bomb-cross') {
+    const catchesDog = plusCells(row, col).some((cell) => game.dogs.some((unit) => (
+      unit.hp > 0 && unit.row === cell.row && unit.col === cell.col
+    )));
+    if (catchesDog) payload = { row, col };
+  } else if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
   else if (targeting.mode === 'storm' && dog) payload = { col };
   else if (targeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat) payload = { row, col };
   else if (targeting.mode === 'encore' && cat && cat.id !== targeting.casterId) payload = { targetCatId: cat.id };
@@ -1204,6 +1313,12 @@ function tryActiveTarget(row, col, cat, dog) {
   const nextGame = useActiveAbility(game, targeting.casterId, payload);
   if (nextGame !== before) {
     activeTargeting = null;
+    clearBombTargetPreview();
+    gridEl.querySelectorAll('.bomb-aim').forEach((cell) => cell.classList.remove('bomb-aim'));
+    if (targeting.mode === 'bomb-cross') {
+      void playBombAbility(nextGame);
+      return true;
+    }
     if (targeting.mode === 'storm') {
       void playStormAbility(nextGame);
       return true;
@@ -1218,6 +1333,25 @@ function tryActiveTarget(row, col, cat, dog) {
   }
   render();
   return true;
+}
+
+async function playBombAbility(nextGame) {
+  playing = true;
+  snapshotUnits(game);
+  game = nextGame;
+  renderHud();
+  renderTacticsPanel();
+  try {
+    const blasts = nextGame.events.filter((event) => event.type === 'spell' && event.style?.startsWith('bomb-cross'));
+    await Promise.all(groupAttacks(blasts).map((group, index) => animateAttack(group, index)));
+    await playDeaths(blasts);
+    for (const event of nextGame.events.filter((item) => item.type === 'panic-sidestep')) {
+      await animateMove(event);
+    }
+  } finally {
+    playing = false;
+    render();
+  }
 }
 
 async function playStormAbility(nextGame) {
@@ -1280,14 +1414,21 @@ function renderBoard() {
         ? { id: cat.id, level: cat.level, coat: normalizeCoat(cat.coat) }
         : dog ?? decoy ?? null;
       const zone = row >= CAT_ZONE_START ? 'cat territory' : 'dog yard';
-      const equipmentLabel = cat
-        ? equippedItemMarkers(cat).map((item) => `tier ${item.tier} ${item.kind}`).join(' and ')
+      const catInfo = cat ? catTooltipInfo(cat) : null;
+      const catStatusLabel = catInfo?.effects?.length
+        ? catInfo.effects.map((effect) => `${effect.label.toLowerCase()} ${effect.value}`).join(', ')
         : '';
       cell.setAttribute('aria-label', cat
-        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP${equipmentLabel ? `, equipped with ${equipmentLabel}` : ''}, row ${row + 1} column ${col + 1}`
+        ? `Level ${cat.level} ${catLabel(cat)}, ${cat.hp} of ${cat.maxHp} HP${catStatusLabel ? `, ${catStatusLabel}` : ''}, row ${row + 1} column ${col + 1}`
         : dogs.length
-          ? `${dogs.map((unit) => `${dogTooltipInfo(unit).title}, ${unit.hp} of ${unit.maxHp} HP`).join('; ')}${dogs.length > 1 ? ', stacked together' : ''}, row ${row + 1} column ${col + 1}`
-          : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
+          ? `${dogs.map((unit) => {
+            const info = dogTooltipInfo(unit);
+            const status = info.effects?.map((effect) => `${effect.label.toLowerCase()} ${effect.value}`).join(', ');
+            return `${info.title}, ${unit.hp} of ${unit.maxHp} HP${status ? `, ${status}` : ''}`;
+          }).join('; ')}${dogs.length > 1 ? ', stacked together' : ''}, row ${row + 1} column ${col + 1}`
+          : decoy
+            ? `Faux Paw phantom, ${decoy.blocks} attack block${decoy.blocks === 1 ? '' : 's'} remaining, row ${row + 1} column ${col + 1}`
+            : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
       if (cat) {
         cell.append(catMarkup(cat));
         if (selectedMatches('cat', cat.id)) cell.classList.add('selected');
@@ -1300,23 +1441,37 @@ function renderBoard() {
         if (dogs.length > 1) cell.classList.add('has-dog-stack');
         bindTooltip(cell, () => dogStackTooltipInfo(dogs));
       } else if (decoy) {
-        // A real unit, not a loose canvas: the phantom blocker takes hits and dies like
-        // anything else on the board, so it needs an id the effects layer can find.
+        // A real unit, not a loose canvas: the phantom blocker spends one block per hit
+        // and needs an id so the effects layer can show the block and eventual shatter.
         const phantom = document.createElement('div');
         phantom.className = 'unit decoy-unit';
         phantom.dataset.unitId = decoy.id;
         phantom.append(unitCanvas('cat', { level: 1, coat: 8 }));
+        const shield = document.createElement('span');
+        shield.className = 'decoy-shield';
+        shield.setAttribute('aria-hidden', 'true');
+        const blockCount = document.createElement('span');
+        blockCount.className = 'decoy-blocks';
+        blockCount.textContent = String(decoy.blocks);
+        shield.append(blockCount);
+        phantom.append(shield);
         cell.append(phantom);
         cell.classList.add('has-unit', 'has-decoy');
+        bindTooltip(cell, () => decoyTooltipInfo(decoy));
       }
       if (activeTargeting) {
+        const bombAiming = activeTargeting.mode === 'bomb-cross';
         const validActiveTarget = (activeTargeting.mode === 'freeze' && dog)
           || (activeTargeting.mode === 'storm' && dog)
           || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat && !decoy)
           || (activeTargeting.mode === 'encore' && cat && cat.id !== activeTargeting.casterId)
           || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && cat)
           || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !decoy);
-        if (validActiveTarget) cell.classList.add('ability-target');
+        if (bombAiming) {
+          cell.classList.add('bomb-aim');
+          cell.addEventListener('pointerenter', () => showBombTargetPreview(row, col));
+          cell.addEventListener('focus', () => showBombTargetPreview(row, col));
+        } else if (validActiveTarget) cell.classList.add('ability-target');
       }
       // A click-selected cat lights the same targets, the same way, a drag would.
       if (!activeTargeting && selected && (game.phase === 'prep' || game.phase === 'tactics') && !playing) {
@@ -1506,26 +1661,38 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   const mark = effectAtPercent(`hurt-mark mark-${hurt.mark}`, contactX, contactY);
   mark.style.setProperty('--mark-angle', `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
 
+  const isDecoyBlock = Boolean(event.decoyBlock);
   const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
-  const damage = effectAt(`damage-number${tone}`, event.toRow, event.col, `-${event.damage}`);
+  const damage = effectAt(
+    `damage-number${tone}${isDecoyBlock ? ' block-number' : ''}`,
+    event.toRow,
+    event.col,
+    isDecoyBlock ? 'BLOCK!' : `-${event.damage}`,
+  );
 
   if (target) {
-    target.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle');
+    target.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
     void target.offsetWidth;
-    // The recoil is a real direction, not a generic wobble: away from whatever hit it.
-    target.style.setProperty('--hurt-dx', `${dx * hurt.recoil * 100}%`);
-    target.style.setProperty('--hurt-dy', `${dy * hurt.recoil * 100}%`);
-    target.classList.add('hurt', `shake-${hurt.shake}`);
-    const hpBar = target.querySelector('.hp-bar');
-    if (hpBar) {
-      hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
-      hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+    if (isDecoyBlock) {
+      target.classList.add('decoy-blocking');
+      const blockCount = target.querySelector('.decoy-blocks');
+      if (blockCount) blockCount.textContent = String(event.blocksAfter);
+    } else {
+      // The recoil is a real direction, not a generic wobble: away from whatever hit it.
+      target.style.setProperty('--hurt-dx', `${dx * hurt.recoil * 100}%`);
+      target.style.setProperty('--hurt-dy', `${dy * hurt.recoil * 100}%`);
+      target.classList.add('hurt', `shake-${hurt.shake}`);
+      const hpBar = target.querySelector('.hp-bar');
+      if (hpBar) {
+        hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
+        hpBar.className = `hp-bar hp-${hpTone(event.hpAfter, event.maxHp)}`;
+      }
     }
   }
   window.setTimeout(() => { burst.remove(); mark.remove(); }, timing.impactMs);
   window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
   window.setTimeout(() => {
-    target?.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle');
+    target?.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
   }, timing.impactMs);
 }
 
@@ -1584,19 +1751,33 @@ async function flyProjectile(event, signature, fx, { durationMs, arc = false }) 
   );
   if (fx.tether) projectile.classList.add('has-tether');
 
-  const flight = projectile.animate(
-    arc
-      ? lobShotKeyframes(start, end)
+  const keyframes = arc
+    ? lobShotKeyframes(start, end)
       : homing
         ? homingShotKeyframes(start, end)
         : [
           { left: `${start.xPercent}%`, top: `${start.yPercent}%`, transform: 'translate(-50%, -50%) scale(.7) rotate(0deg)' },
           { left: `${end.xPercent}%`, top: `${end.yPercent}%`, transform: `translate(-50%, -50%) scale(${event.burst ? 0.95 : 1.15}) rotate(360deg)` },
-        ],
+        ];
+  const arcDots = arc ? keyframes.flatMap((frame, frameIndex) => {
+    if (frameIndex === 0 || frameIndex === keyframes.length - 1 || frameIndex % 4 !== 0) return [];
+    const dot = effectAtPercent(
+      'bomb-arc-dot',
+      Number(frame.left.replace('%', '')),
+      Number(frame.top.replace('%', '')),
+    );
+    dot.style.setProperty('--arc-delay', `${Math.round(durationMs * frameIndex / (keyframes.length - 1))}ms`);
+    dot.style.setProperty('--arc-dot-ms', `${Math.max(180, Math.round(timing.impactMs * 0.8))}ms`);
+    return [dot];
+  }) : [];
+
+  const flight = projectile.animate(
+    keyframes,
     { duration: durationMs, easing: 'linear', fill: 'forwards' },
   );
   await flight.finished.catch(() => {});
   projectile.remove();
+  window.setTimeout(() => arcDots.forEach((dot) => dot.remove()), timing.impactMs);
 }
 
 /** Straight shots and homing shots, including Purrcy's three-pellet volley. */
@@ -1632,31 +1813,38 @@ function showTether(event) {
 }
 
 /**
- * Bombay Boom's bomb and Bone Jovi's mortar: lob it, then blow it up across the whole
- * blast footprint — the square it landed on and the squares either side of it. The fire
- * is drawn on every square the blast covers, and everything standing in it reacts.
+ * Lobbed bombs visibly arc to their aim square, then paint their exact damage footprint:
+ * one cell for Bombay's regular attack, a five-cell plus for his Tactics spell, or the
+ * three side-by-side cells of Bone Jovi's mortar.
  */
 async function animateLobbedBlast(group, primary, signature, fx, index) {
   await wait(index * timing.shotStaggerMs);
   showMuzzle(fx, primary.fromRow, primary.fromCol ?? primary.col);
+  const aimRow = primary.aimRow ?? primary.toRow;
+  const aimCol = primary.aimCol ?? primary.col;
+  const aimedProjectile = { ...primary, toRow: aimRow, col: aimCol };
 
   if (primary.miss || !primary.to) {
-    await flyProjectile(primary, signature, fx, { durationMs: timing.lobMs, arc: true });
-    const dud = effectAt('impact-burst miss-fizzle', primary.toRow, primary.col);
+    await flyProjectile(aimedProjectile, signature, fx, { durationMs: timing.lobMs, arc: true });
+    const dud = effectAt('impact-burst miss-fizzle', aimRow, aimCol);
     window.setTimeout(() => dud.remove(), timing.impactMs);
     await wait(Math.floor(timing.impactMs * 0.55));
     return;
   }
 
-  await flyProjectile(primary, signature, fx, { durationMs: timing.lobMs, arc: true });
+  await flyProjectile(aimedProjectile, signature, fx, { durationMs: timing.lobMs, arc: true });
 
-  // The explosion. blastCells mirrors the engine's own splash rule, so the fire lands on
-  // exactly the squares the bomb damages — never one square off.
-  const footprint = blastCells(primary.toRow, primary.col);
-  const centre = cellCenter(primary.toRow, primary.col);
+  const footprint = blastFootprint(fx.blast, aimRow, aimCol);
+  const centre = cellCenter(aimRow, aimCol);
   const fireball = effectAtPercent('blast-fireball', centre.xPercent, centre.yPercent);
   const shockwave = effectAtPercent('blast-shockwave', centre.xPercent, centre.yPercent);
-  shockwave.style.setProperty('--blast-width', `${footprint.length * (100 / COLS)}%`);
+  const footprintCols = footprint.map((cell) => cell.col);
+  const footprintRows = footprint.map((cell) => cell.row);
+  const colSpan = Math.max(...footprintCols) - Math.min(...footprintCols) + 1;
+  const rowSpan = Math.max(...footprintRows) - Math.min(...footprintRows) + 1;
+  shockwave.style.setProperty('--blast-width', `${colSpan * (100 / COLS)}%`);
+  shockwave.style.setProperty('--blast-height', `${rowSpan * (100 / ROWS)}%`);
+  if (fx.blast === 'plus') shockwave.classList.add('blast-plus');
 
   const scorches = footprint.map(({ row, col }) => {
     const scorch = effectAt('blast-scorch', row, col);
@@ -1667,10 +1855,10 @@ async function animateLobbedBlast(group, primary, signature, fx, index) {
   $('#board')?.classList.add('board-blast-shake');
   playHit({ heavy: true });
 
-  // Everything caught in the blast reacts — the dog under it first, then outward.
+  // Everything caught in the blast reacts from the aim square outward.
   group.events.forEach((event) => {
     if (event.miss || !event.to) return;
-    const distance = Math.abs(event.col - primary.col);
+    const distance = Math.abs(event.col - aimCol) + Math.abs(event.toRow - aimRow);
     window.setTimeout(
       () => showImpact(event, attackSignature(event, group.caster), { sound: false }),
       distance * 70,
@@ -2166,11 +2354,11 @@ const COAT_ROLE_WORDS = {
   1: 'extreme HP · tiny front melee',
   2: 'balanced stats · homing shot',
   3: 'one-time tangle · low damage',
-  4: 'wide splash · weak single hit',
+  4: 'medium lane bomb · plus spell',
   5: 'pierces 3 · fragile & lane-locked',
   6: 'hard freeze · weak normal attack',
   7: 'best mobility · low attack',
-  8: 'free blocker · fragile caster',
+  8: 'persistent blocks · fragile caster',
   9: 'huge spell · weakest normal attack',
   10: 'ally encore · tiny personal attack',
 };
@@ -2517,7 +2705,7 @@ drawBackyard($('#yard-art'));
 render();
 
 // Dev-only QA hook. Vite strips this from production builds. Combat effects are hard to
-// reach by clicking — Bombay Boom's bomb needs round 4 and a row of dogs to blow up — so
+// reach by clicking — Bombay Boom's bomb needs round 4 and a useful dog formation — so
 // this allows a board to be set up directly and one exchange to be run against it.
 if (import.meta.env?.DEV) {
   window.__cvd = {

@@ -2,6 +2,32 @@ export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
 }
 
+export function catSelectionAdvice(cat, info, phase) {
+  if (phase === 'tactics') {
+    return `Level ${cat.level} ${info.name} selected. Move it to an empty glowing tile for its battle-break movement.`;
+  }
+  if (!cat.hasEnteredBattle) {
+    return `Level ${cat.level} ${info.name} selected. Before its first battle, you can freely place or reposition this cat anywhere in cat territory.`;
+  }
+  return `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
+}
+
+function petMergeKey(pet) {
+  if (!pet) return null;
+  const level = Number(pet.level ?? 1);
+  if (level >= 3) return null;
+  if (pet.category === 'worker' || pet.kind === 'production-cat') {
+    return pet.role ? `worker:${pet.role}:${level}` : null;
+  }
+  return `fighter:${Number(pet.coat ?? 0)}:${level}`;
+}
+
+export function shopOfferHasOwnedMatch(slot, ownedCats = []) {
+  if (!slot || slot.sold) return false;
+  const offerKey = petMergeKey(slot);
+  return offerKey != null && ownedCats.some((cat) => petMergeKey(cat) === offerKey);
+}
+
 /** Health color band for unit HP bars: green above half, amber to a quarter, red below. */
 export function hpTone(hp, maxHp) {
   const pct = maxHp > 0 ? hp / maxHp : 0;
@@ -10,12 +36,49 @@ export function hpTone(hp, maxHp) {
   return 'low';
 }
 
-/** Equipment badges shown on a deployed cat, ordered weapon then armour. */
+/** Large equipment plates shown on a cat, ordered weapon then armour. */
 export function equippedItemMarkers(cat = {}) {
   return ['weapon', 'armour'].flatMap((kind) => {
     const item = cat.equipment?.[kind];
-    return item ? [{ kind, tier: item.tier ?? 1 }] : [];
+    if (!item) return [];
+    return [{
+      kind,
+      tier: item.tier ?? 1,
+      value: kind === 'weapon' ? item.attack ?? 0 : item.block ?? 0,
+      uses: kind === 'armour' ? item.uses ?? 0 : null,
+      maxUses: kind === 'armour' ? item.maxUses ?? item.uses ?? 0 : null,
+    }];
   });
+}
+
+/** Temporary cat effects that need to remain readable after their cast animation ends. */
+export function catStatusMarkers(cat = {}) {
+  const markers = [];
+  if ((cat.guard ?? 0) > 0) {
+    markers.push({ kind: 'guard', value: String(cat.guard), label: `Guard blocks ${cat.guard} damage from the next hit` });
+  }
+  if ((cat.nextAttackBonus ?? 0) > 0) {
+    markers.push({ kind: 'attack-up', value: `+${cat.nextAttackBonus}`, label: `Next attack gains ${cat.nextAttackBonus} damage` });
+  }
+  if ((cat.nextAttackPenalty ?? 0) > 0) {
+    markers.push({ kind: 'attack-down', value: `-${cat.nextAttackPenalty}`, label: `Next attack loses ${cat.nextAttackPenalty} damage` });
+  }
+  return markers;
+}
+
+/** Persistent dog effects that otherwise disappear after their one-off animation. */
+export function dogStatusMarkers(dog = {}) {
+  const markers = [];
+  if ((dog.frozenActions ?? 0) > 0) {
+    markers.push({ kind: 'frozen', value: String(dog.frozenActions), label: `Skips ${dog.frozenActions} action${dog.frozenActions === 1 ? '' : 's'}` });
+  }
+  if (dog.tangled) {
+    markers.push({ kind: 'tangled', value: '1', label: 'Next movement is skipped' });
+  }
+  if ((dog.attackBoost ?? 0) > 0) {
+    markers.push({ kind: 'attack-up', value: `+${dog.attackBoost}`, label: `Next damaging attack gains ${dog.attackBoost} damage` });
+  }
+  return markers;
 }
 
 const PRODUCTION_ROLE_COPY = Object.freeze({

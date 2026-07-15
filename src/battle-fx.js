@@ -1,4 +1,4 @@
-import { COLS } from './game-engine.js';
+import { COLS, plusCells } from './game-engine.js';
 
 /**
  * The graphics registry for every attack in the game, and for the mark each attack
@@ -6,7 +6,7 @@ import { COLS } from './game-engine.js';
  *
  * The engine speaks in damage events — one per victim. Graphics have to speak in
  * attacks — one bomb, one blast, several victims. Rendering an event per projectile is
- * what turned Bombay Boom's explosion into a few pellets squirting sideways. So the
+ * what can turn Bombay Boom's plus explosion into several stray bombs. So the
  * renderer groups events into attacks (attackGroupKey), looks the attack up here, and
  * draws it once.
  */
@@ -14,7 +14,7 @@ import { COLS } from './game-engine.js';
 /** Every style the engine can stamp on a damage event. Guarded by a test. */
 export const ENGINE_ATTACK_STYLES = Object.freeze([
   // Cats
-  'column', 'melee', 'homing', 'tangle', 'splash', 'splash-secondary',
+  'column', 'melee', 'homing', 'tangle', 'bomb', 'bomb-cross', 'bomb-cross-secondary',
   'piercing', 'encore', 'lightning',
   // The five homing cats that split off their own skins
   'frost', 'rift', 'mirage', 'spark', 'note',
@@ -83,15 +83,20 @@ export const ATTACK_FX = Object.freeze({
   tangle: {
     projectile: 'yarn', path: 'homing', muzzle: null, impact: 'wrap', tether: true, heavy: false,
   },
-  // Bombay Boom: a lobbed bomb that explodes across three squares.
-  splash: {
+  // Bombay Boom's regular attack: one lobbed bomb, one target square.
+  bomb: {
     projectile: 'bomb', path: 'lob', muzzle: 'fuse-spark',
-    impact: 'scorch', blast: 'row-neighbours', heavy: true,
+    impact: 'scorch', blast: 'single-cell', heavy: true,
   },
-  // Dogs beside the target. Caught in the blast above — never their own projectile.
-  'splash-secondary': {
+  // His once-per-battle plus bomb: centre + four orthogonal neighbours.
+  'bomb-cross': {
+    projectile: 'bomb', path: 'lob', muzzle: 'fuse-spark',
+    impact: 'scorch', blast: 'plus', heavy: true,
+  },
+  // Every dog after the first is caught in the same plus blast — never a new bomb.
+  'bomb-cross-secondary': {
     projectile: null, path: null, muzzle: null,
-    impact: 'scorch', absorbedBy: 'splash', heavy: false,
+    impact: 'scorch', absorbedBy: 'bomb-cross', heavy: false,
   },
   // Laserpaw: one beam through up to three dogs, not three separate shots.
   piercing: {
@@ -168,7 +173,7 @@ export function attackSignature(event, caster = null) {
 /**
  * Events that belong to the same attack share this key, so the renderer draws one bomb
  * and one blast rather than one projectile per victim. Secondary damage folds into its
- * parent (splash-secondary → splash), which is what stops the sideways-pellets bug.
+ * parent (bomb-cross-secondary → bomb-cross), which keeps the special to one bomb.
  */
 export function attackGroupKey(event, caster = null) {
   const signature = attackSignature(event, caster);
@@ -191,6 +196,13 @@ export function blastCells(row, col, cols = COLS) {
   return cells;
 }
 
+/** The visible fire footprint for each kind of lobbed blast. */
+export function blastFootprint(kind, row, col) {
+  if (kind === 'single-cell') return [{ row, col }];
+  if (kind === 'plus') return plusCells(row, col);
+  return blastCells(row, col);
+}
+
 /** Unit vector from the attacker to the victim: which way the victim gets thrown. */
 export function contactVector(fromRow, fromCol, toRow, toCol) {
   const dx = toCol - fromCol;
@@ -203,5 +215,8 @@ export function contactVector(fromRow, fromCol, toRow, toCol) {
 /** A death is simply the blow that took a living unit to zero. */
 export function isKill(event) {
   if (!event || event.miss || !event.to) return false;
+  if (typeof event.blocksAfter === 'number') {
+    return event.blocksAfter === 0 && event.blocksBefore > 0;
+  }
   return event.hpAfter === 0 && event.hpBefore > 0;
 }

@@ -135,7 +135,7 @@ test('every cat has one explicit strength and a real weakness at every level', (
       .map((coat) => catStatsFor(level, Number(coat)));
 
     assert.ok(purrcy.attack >= hissiletoe.attack * 2, `L${level} straight damage pays for lane lock`);
-    assert.ok(hissiletoe.attack > bombay.attack, `L${level} balanced homing beats splash against one dog`);
+    assert.equal(bombay.attack, hissiletoe.attack, `L${level} Bombay's lane bomb has medium damage`);
     assert.ok(clawdius.hp > Math.max(...nonTankStats.map((stats) => stats.hp)));
     assert.ok(clawdius.attack < hissiletoe.attack, `L${level} tank damage stays below the generalist`);
   }
@@ -413,20 +413,23 @@ test('Calico Tangler marks a dog to skip its next unblocked move without healing
   assert.equal(game.dogs[0].row, 7, 'the same dog cannot be locked by yarn forever');
 });
 
-test('Black Bombardier shot splashes dogs in adjacent columns', () => {
+test('Bombay Boom lobs one medium bomb at the nearest dog in his own lane', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.BLACK });
   game = placeCat(game, 0, 12, 2);
-  const left = createDog(1, 7, 1);
-  const center = createDog(1, 7, 2);
-  const right = createDog(1, 7, 3);
-  game.dogs = [left, center, right];
+  const far = createDog(1, 4, 2);
+  const nearest = createDog(1, 7, 2);
+  const otherLane = createDog(1, 8, 3);
+  game.dogs = [far, nearest, otherLane];
 
   game = resolveSection(game);
 
-  assert.equal(game.dogs.find((dog) => dog.id === center.id).hp, 7);
-  assert.equal(game.dogs.find((dog) => dog.id === left.id).hp, 7);
-  assert.equal(game.dogs.find((dog) => dog.id === right.id).hp, 7);
+  assert.equal(game.dogs.find((dog) => dog.id === nearest.id).hp, 6);
+  assert.equal(game.dogs.find((dog) => dog.id === far.id).hp, 8);
+  assert.equal(game.dogs.find((dog) => dog.id === otherLane.id).hp, 8);
+  const bombs = game.events.filter((event) => event.type === 'shot' && event.style === 'bomb');
+  assert.equal(bombs.length, 1);
+  assert.equal(bombs[0].to, nearest.id);
 });
 
 test('Prism Sphinx beam pierces up to three dogs in its column', () => {
@@ -1066,14 +1069,46 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
-  assert.equal(brawler.stats, 'Health 12/12 · 2 damage/round if attacks hit');
-  assert.equal(armedBrawler.stats, 'Health 9/12 · 14 damage/round if attacks hit');
+  assert.equal(brawler.stats, 'Health 12/12 · Attack 1/action · 2/round');
+  assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7/action · 14/round');
+});
+
+test('cat tooltips fully explain equipment, temporary buffs, and active ability state', () => {
+  const tooltip = catTooltipInfo({
+    level: 2,
+    coat: CAT_COAT.RIFT,
+    hp: 15,
+    maxHp: 19,
+    attack: 6,
+    equipment: {
+      weapon: { tier: 2, attack: 2 },
+      armour: { tier: 1, block: 2, uses: 2, maxUses: 3 },
+    },
+    guard: 2,
+    nextAttackBonus: 2,
+    activeUsed: false,
+  });
+
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'weapon').detail, /every attack/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'armour').detail, /2\/3 protected hits.*at least 1 damage/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'guard').detail, /next hit/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'attack-up').detail, /next attacks/i);
+  assert.deepEqual(tooltip.effects.find((effect) => effect.kind === 'ability'), {
+    kind: 'ability',
+    label: 'TACTICS SPECIAL',
+    value: 'READY',
+    detail: 'Available once this battle during a Tactics Window.',
+  });
 });
 
 test('dog tooltips explain march and bite behavior', () => {
-  const dog = dogTooltipInfo({ tier: 1, hp: 7, maxHp: 7, attack: 3 });
+  const dog = dogTooltipInfo({
+    tier: 1, hp: 7, maxHp: 7, attack: 3,
+    attackBoost: 2, frozenActions: 1, tangled: true,
+  });
   assert.match(dog.attack, /porch|ahead|bites|steps/i);
   assert.match(dog.stats, /7/);
+  assert.deepEqual(dog.effects.map((effect) => effect.kind), ['attack-up', 'frozen', 'tangled']);
 });
 
 test('cats still act with miss events when no dogs are in range', () => {
