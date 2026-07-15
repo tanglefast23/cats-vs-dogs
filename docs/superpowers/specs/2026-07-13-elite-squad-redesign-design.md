@@ -11,7 +11,7 @@
 The strategy feels flat right now. Two root causes, both measurable:
 
 **1. The battlefield is never a real limit.**
-The cat zone is 4 rows × 6 columns = **24 squares** (`CAT_ZONE_START = 10`, `ROWS = 14`). You earn 10 gold a round and cats cost 3, so you buy ~3 cats a round — about **21 cats across all 7 rounds**, and only if you spend every coin on cats. 21 < 24, so you can never buy enough cats to run out of room. *(In plain terms: the board is a limit that never bites, so the game never forces the question "which cats make the team?")*
+The cat zone is 4 rows × 6 columns = **24 squares** (`CAT_ZONE_START = 10`, `ROWS = 14`). You earn 10 gold a round and cats cost 3, so you buy ~3 cats a round — about **30 cats across all 10 rounds**, and only if you spend every coin on cats. The board doesn't fill until the last few rounds (~round 8 of 10), and even a packed 24-square board is nothing like an "elite squad". *(In plain terms: the board barely bites, and only at the very end, so the game almost never forces the question "which cats make the team?")*
 
 **2. Merging currently makes your army weaker.**
 Compare three level-1 orange cats to the single level-2 they merge into:
@@ -33,9 +33,9 @@ Merging **halves** your total HP and damage and drops your lane coverage. So spr
 
 You may **deploy at most 5 cats on the battlefield**, in every round (flat, no ramp).
 
-- The bench (6) and the shop are **unchanged** — you still buy freely. The squeeze is purely on *deployment*.
+- The bench (3) and the shop are **unchanged** — you still buy freely. The squeeze is purely on *deployment*.
 - Why this works: once slots are scarce, the comparison that matters flips from "3 level-1s vs 1 level-2" (where spreading wins) to **"1 level-2 vs 1 level-1 in the same slot"** (where the level-2 clearly wins). Scarcity is what makes merging correct.
-- Consequence, by design: the whole progression becomes **"upgrade your 6 slots"** rather than "add more bodies." You hold pairs on the bench hoping for the third copy, and benching/selling a weak cat becomes a real decision.
+- Consequence, by design: the whole progression becomes **"upgrade your 5 slots"** rather than "add more bodies." You hold pairs on the bench hoping for the third copy, and benching/selling a weak cat becomes a real decision.
 
 ### 2. Merges become real power spikes
 
@@ -75,7 +75,7 @@ Today `moveCat` only runs in the `prep` phase; this adds a limited move path to 
 
 The player observed the game feels "too easy / no fear of approaching doom / too vertical" — but this was seen in the **current uncapped build**, where you can field a whole boardful of cats.
 
-- **Do the cap first, then judge.** The flat-6 cap cuts firepower from ~20 cats down to 6, which by itself lets dogs march much deeper before dying. Much of the "no doom" feeling should fix itself. Implement the cap, playtest a few rounds, *then* decide whether pacing still needs work — so we don't stack two big difficulty changes at once and overshoot into "too hard, no time to react."
+- **Do the cap first, then judge.** The flat-5 cap cuts firepower from ~20 cats down to 5, which by itself lets dogs march much deeper before dying. Much of the "no doom" feeling should fix itself. Implement the cap, playtest a few rounds, *then* decide whether pacing still needs work — so we don't stack two big difficulty changes at once and overshoot into "too hard, no time to react."
 - **If it's still too easy after the cap:** prefer **shrinking the vertical approach** over speeding dogs up.
   - Trim the empty approach so dogs cross ~5–6 rows to reach the front line instead of ~10, and shrink the cat zone to ~2–3 rows (5 cats don't need 4 rows of depth).
   - *Not* "every dog moves 3 rows/turn": normal dogs advance 2 squares, while T2+ Barkour Bandit is the readable 3-square speed specialist. Its Light Gear makes every damaging hit deal +1 damage, paying for that speed without slowing the rest of the pack.
@@ -112,7 +112,7 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 
 Likely touch points (from the current engine):
 
-- **Field cap:** gate placement/deployment on a count of on-board cats < 6. Affects `placeCat`, `purchaseShopFighterToBoard`, and any path that adds a cat to `game.cats`. Surface the cap (e.g. "5 / 6") in the UI.
+- **Field cap:** gate placement/deployment on a count of on-board cats < 5. Affects `placeCat`, `purchaseShopFighterToBoard`, and any path that adds a cat to `game.cats`. Surface the cap (e.g. "5 / 5") in the UI.
 - **Merge stats:** rescale `COAT_HP` / `COAT_ATTACK` (and the shared `CAT_STATS` shell if used) for levels 2 and 3.
 - **In-pause movement:** add a limited move action to the `tactics` phase mirroring `moveCat`'s prep rules, with a per-combat "used" flag.
 - **Surface between-round movement:** UI affordance for the existing `prepOrigin`/`prepMoved` one-step move.

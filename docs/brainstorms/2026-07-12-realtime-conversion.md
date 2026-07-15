@@ -5,6 +5,8 @@ topic: realtime-conversion
 
 # Real-Time Conversion
 
+> **Status: not in the current build (as of 2026-07-15).** This real-time direction is **not** reflected in the code — the game is still button-stepped **prep → combat → tactics** rounds (the Tactics Window and the Done/Continue button remain, and `ACTIONS_PER_ROUND` is still in use). Kept as a design record: read the below as a proposal, not current behavior.
+
 ## Decision
 
 Convert the game from button-stepped rounds to one continuous real-time level. Keep the grid, the pure-state engine, the event-list animation contract, and every targeting/damage rule. Change *when* rules fire: each unit carries its own timer, and the player manages the fight live.
