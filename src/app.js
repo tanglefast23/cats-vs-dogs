@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
-import { unlockAudio, playUiClick, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -874,6 +874,63 @@ function applyDropAction(action, source) {
   return game !== before;
 }
 
+// Per-item flourish when a production item is used on a cat.
+function itemUseKeyframes(kind) {
+  if (kind === 'armour') {
+    return { frames: [
+      { offset: 0,    opacity: 0, transform: 'translateY(-34px) scale(0.9)' },
+      { offset: 0.22, opacity: 1, transform: 'translateY(-34px) scale(1.18)' },
+      { offset: 0.46, opacity: 1, transform: 'translateY(-30px) scale(1.30)' },
+      { offset: 0.60, opacity: 1, transform: 'translateY(2px) scale(1.0)' },   // slam down
+      { offset: 0.70, opacity: 1, transform: 'translateY(4px) scale(0.9)' },   // impact squash
+      { offset: 0.85, opacity: 0.8, transform: 'translateY(0) scale(1.06)' },
+      { offset: 1,    opacity: 0, transform: 'translateY(0) scale(1.14)' },    // merge into the cat
+    ], opts: { duration: 780, easing: 'cubic-bezier(.3,.1,.3,1.4)' } };
+  }
+  if (kind === 'weapon') {
+    return { frames: [
+      { offset: 0,    opacity: 0, transform: 'translate(8px,-12px) rotate(-48deg) scale(0.85)' },
+      { offset: 0.12, opacity: 1, transform: 'translate(8px,-12px) rotate(-48deg) scale(1)' },
+      { offset: 0.28, opacity: 1, transform: 'translate(6px,-10px) rotate(38deg)' },   // swing
+      { offset: 0.44, opacity: 1, transform: 'translate(6px,-10px) rotate(-30deg)' },  // swing
+      { offset: 0.60, opacity: 1, transform: 'translate(6px,-10px) rotate(30deg)' },   // swing
+      { offset: 0.74, opacity: 1, transform: 'translate(0,4px) rotate(0deg) scale(1.12)' }, // slam into paw
+      { offset: 0.86, opacity: 1, transform: 'translate(0,4px) rotate(0deg) scale(0.98)' },
+      { offset: 1,    opacity: 0, transform: 'translate(0,2px) rotate(0deg) scale(0.85)' },
+    ], opts: { duration: 820, easing: 'ease-in-out' } };
+  }
+  // food: chomps that eat the treat away from the right, then a crumb poof.
+  return { frames: [
+    { offset: 0,    opacity: 0, transform: 'translateY(-6px) scale(0.6)',  clipPath: 'inset(0 0 0 0)' },
+    { offset: 0.12, opacity: 1, transform: 'translateY(-6px) scale(1.1)',  clipPath: 'inset(0 0 0 0)' },
+    { offset: 0.32, opacity: 1, transform: 'translateY(-4px) scale(0.9)',  clipPath: 'inset(0 34% 0 0)' },
+    { offset: 0.48, opacity: 1, transform: 'translateY(-4px) scale(1.02)', clipPath: 'inset(0 34% 0 0)' },
+    { offset: 0.64, opacity: 1, transform: 'translateY(-3px) scale(0.86)', clipPath: 'inset(0 66% 0 0)' },
+    { offset: 0.82, opacity: 0.9, transform: 'translateY(-8px) scale(0.9)', clipPath: 'inset(0 84% 0 0)' },
+    { offset: 1,    opacity: 0, transform: 'translateY(-18px) scale(0.8)', clipPath: 'inset(0 100% 0 0)' },
+  ], opts: { duration: 900, easing: 'ease-in-out' } };
+}
+
+function playItemUseEffect(kind, targetId, tier) {
+  playItemUse(kind);
+  if (prefersReducedMotion) return;
+  const catEl = findUnitElement(targetId);
+  if (!catEl) return;
+  const r = catEl.getBoundingClientRect();
+  const wrap = document.createElement('div');
+  wrap.className = 'item-use-fx';
+  wrap.style.left = `${r.left + r.width / 2}px`;
+  wrap.style.top = `${r.top + r.height / 2}px`;
+  const inner = document.createElement('div');
+  inner.className = 'item-use-fx-inner';
+  inner.append(unitCanvas('item', { kind, tier }));
+  wrap.append(inner);
+  document.body.append(wrap);
+  const { frames, opts } = itemUseKeyframes(kind);
+  const animation = inner.animate(frames, opts);
+  animation.finished.then(() => wrap.remove()).catch(() => wrap.remove());
+}
+
 function showDropWeight(action, descriptor) {
   if (action.type === 'equip') {
     const cell = upgradeAnchor('cat', action.targetId);
@@ -989,6 +1046,10 @@ async function finishDrag(event, cancelled = false) {
     if (isBattlefieldDropAction(action)) playCatDrop();
   }
   render();
+  if (changed && (action.type === 'use-food' || action.type === 'equip')) {
+    playItemUseEffect(action.type === 'use-food' ? 'food' : state.source.itemKind,
+      action.targetId, state.source.tier ?? 1);
+  }
   if (changed && action.type === 'sell') showAdoptionFeedback(state.cat, action.value);
   else if (changed && action.type !== 'merge') showDropWeight(action, target.descriptor);
 }
@@ -2228,36 +2289,48 @@ async function animateHeal(event) {
   target?.classList.remove('healed');
 }
 
-async function animateSuperCat(event) {
-  const runner = document.createElement('div');
-  runner.className = 'super-effect';
-  runner.style.left = `${event.col * (100 / COLS)}%`;
-  const canvas = document.createElement('canvas');
-  drawCat(canvas, 3, 0, true);
-  runner.append(canvas);
-  effectsEl.append(runner);
-
-  // The super cat clears the whole breached column. The dogs in it are killed outright —
-  // the engine simply drops them — so they are flipped over here by position rather than
-  // by a damage event, and they go down as the cat runs through them.
-  const flattened = [...fxUnits]
+async function animateBreachParty(event) {
+  // The dogs reached the yard — they throw a little party and trot off happy,
+  // rather than getting wiped out. (It still costs the player a life.)
+  const dancers = [...fxUnits]
     .filter(([id, unit]) => unit.kind === 'dog' && findUnitElement(id))
     .map(([id]) => id)
-    .filter((id) => {
-      const cell = findUnitElement(id)?.closest('.cell');
-      return Number(cell?.dataset.col) === event.col;
-    });
+    .filter((id) => Number(findUnitElement(id)?.closest('.cell')?.dataset.col) === event.col);
+  if (!dancers.length) return;
 
-  await wait(Math.round(260 / combatSpeed));
-  await Promise.all(flattened.map((id) => {
-    const cell = findUnitElement(id)?.closest('.cell');
-    const row = Number(cell?.dataset.row ?? 0);
-    // Struck from below by a cat charging up the board.
-    return playDeath(id, { to: id, toRow: row, col: event.col, fromRow: row + 1, fromCol: event.col });
+  playCelebration();
+  await Promise.all(dancers.map((id) => {
+    const el = findUnitElement(id);
+    if (!el) return Promise.resolve();
+    const cell = el.closest('.cell');
+    partyBurst(Number(cell?.dataset.row ?? 0), Number(cell?.dataset.col ?? 0));
+    const dance = el.animate([
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-10px) rotate(-16deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-10px) rotate(16deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+      { transform: 'translateY(-8px) rotate(-11deg)' },
+      { transform: 'translateY(0) rotate(0deg)' },
+    ], { duration: Math.round(1000 / combatSpeed), composite: 'add', easing: 'ease-in-out' });
+    return dance.finished.catch(() => {});
   }));
+  await wait(Math.round(220 / combatSpeed));
+}
 
-  await wait(Math.round(460 / combatSpeed));
-  runner.remove();
+function partyBurst(row, col) {
+  const emoji = document.createElement('div');
+  emoji.className = 'breach-party';
+  emoji.textContent = ['🎉', '💛', '♪', '★'][Math.floor(Math.random() * 4)];
+  emoji.style.left = `${(col + 0.5) * (100 / COLS)}%`;
+  emoji.style.top = `${(row + 0.2) * (100 / ROWS)}%`;
+  effectsEl.append(emoji);
+  const anim = emoji.animate([
+    { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 },
+    { transform: 'translate(-50%, -150%) scale(1.1)', opacity: 1, offset: 0.35 },
+    { transform: 'translate(-50%, -340%) scale(0.9)', opacity: 0 },
+  ], { duration: Math.round(1100 / combatSpeed), easing: 'ease-out' });
+  anim.finished.then(() => emoji.remove()).catch(() => emoji.remove());
 }
 
 async function animateStorm(events) {
@@ -2345,7 +2418,7 @@ async function animateEvents(events) {
   const dogHeals = events.filter((event) => event.type === 'dog-heal');
   const fears = events.filter((event) => event.type === 'dog-fear');
   const freezeSkips = events.filter((event) => event.type === 'freeze-skip');
-  const superCats = events.filter((event) => event.type === 'super-cat');
+  const breaches = events.filter((event) => event.type === 'breach');
 
   // --- The cats act. Every dog they kill goes down before the dogs get their turn. ---
   if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
@@ -2370,8 +2443,8 @@ async function animateEvents(events) {
   await Promise.all(melee.map((event) => animateMelee(event, 'down')));
   await playDeaths([...dogShots, ...melee]);
 
-  // The super cat mows down the whole column that broke through — they all go with it.
-  for (const event of superCats) await animateSuperCat(event);
+  // Dogs that reached the yard celebrate and trot off happy.
+  for (const event of breaches) await animateBreachParty(event);
 
   setTurnTag(null);
   effectsEl.innerHTML = '';
@@ -2723,7 +2796,8 @@ function applyTutorialWave() {
 
 // Set the scripted shop when a new prep round begins; graduate after round 4.
 function applyTutorialRound() {
-  if (game.round > 4) { endTutorial(); return; }
+  // Coaching stays on for the whole run (sparse just-in-time tips after the
+  // core R1-3 lessons) — no hard graduation, so late reminders can still fire.
   tutorialStartNudged = false;
   const shop = tutorialShop(game.round);
   if (shop) game.shop = shop;
@@ -2738,6 +2812,7 @@ function applyTutorialRound() {
 // Called at the tail of every render() while the tutorial is active.
 function syncTutorial() {
   if (playing) { hideTutorialOverlay(); return; } // never cover a live animation
+  if (game.phase === 'gameover' || game.phase === 'victory') { hideTutorialOverlay(); return; }
   // Nudge: don't start a round with gold still to spend.
   if (tutorialStartNudged && game.phase === 'prep' && game.gold >= 3) {
     hideDragHint();

@@ -1349,7 +1349,7 @@ export function availableDogRolesForRound(round = 1) {
 }
 
 export function waveCountForRound(round = 1) {
-  const counts = [2, 3, 3, 4, 4, 5, 5, 6, 7, 8];
+  const counts = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7];
   const safeRound = Math.max(1, Math.floor(Number(round) || 1));
   return counts[Math.min(safeRound - 1, counts.length - 1)];
 }
@@ -2087,7 +2087,7 @@ export function resolveSection(game) {
   for (const col of breachedCols) {
     next.lives = Math.max(0, next.lives - 1);
     next.dogs = next.dogs.filter((dog) => dog.col !== col);
-    next.events.push({ type: 'super-cat', col });
+    next.events.push({ type: 'breach', col });
   }
   if (next.lives <= 0) {
     next.phase = 'gameover';

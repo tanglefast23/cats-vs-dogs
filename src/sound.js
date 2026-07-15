@@ -225,6 +225,70 @@ export function playCollection(kind = 'item') {
   });
 }
 
+/** Crunchy bite when a cat eats a food treat. */
+export function playFoodUse() {
+  if (!soundEnabled) return;
+  noiseBurst({ duration: 0.06, volume: 0.05, filterFreq: 2600 });
+  tone({ frequency: 240, slideTo: 150, duration: 0.07, type: 'triangle', volume: 0.04 });
+  later(150, () => {
+    if (!soundEnabled) return;
+    noiseBurst({ duration: 0.05, volume: 0.04, filterFreq: 2200 });
+    tone({ frequency: 200, slideTo: 130, duration: 0.06, type: 'triangle', volume: 0.035 });
+  });
+  later(320, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 320, slideTo: 560, duration: 0.1, type: 'sine', volume: 0.04 });
+  });
+}
+
+/** A couple of metallic swings, then a slam, when a cat equips a weapon. */
+export function playWeaponUse() {
+  if (!soundEnabled) return;
+  const swing = (freq) => {
+    tone({ frequency: freq, slideTo: freq * 2.4, duration: 0.06, type: 'square', volume: 0.03 });
+    noiseBurst({ duration: 0.04, volume: 0.02, filterFreq: 5000 });
+  };
+  swing(620);
+  later(160, () => { if (soundEnabled) swing(760); });
+  later(340, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 940, slideTo: 300, duration: 0.12, type: 'square', volume: 0.06 });
+    noiseBurst({ duration: 0.1, volume: 0.06, filterFreq: 2200 });
+  });
+}
+
+/** Heavy thunk when a cat dons armour. */
+export function playArmourUse() {
+  if (!soundEnabled) return;
+  tone({ frequency: 170, slideTo: 60, duration: 0.16, type: 'square', volume: 0.07 });
+  noiseBurst({ duration: 0.12, volume: 0.06, filterFreq: 700 });
+  later(90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 95, slideTo: 55, duration: 0.14, type: 'sine', volume: 0.05 });
+  });
+}
+
+/** Route a used production item to its sound. */
+export function playItemUse(kind) {
+  if (kind === 'weapon') playWeaponUse();
+  else if (kind === 'armour') playArmourUse();
+  else playFoodUse();
+}
+
+/** Happy little fanfare when dogs break through and celebrate. */
+export function playCelebration() {
+  if (!soundEnabled) return;
+  const notes = [523, 659, 784, 1047]; // C-E-G-C major arpeggio
+  notes.forEach((freq, i) => later(i * 95, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.16, type: 'triangle', volume: 0.06, attack: 0.003, decay: 0.08 });
+  }));
+  later(440, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1047, slideTo: 1319, duration: 0.24, type: 'sine', volume: 0.05 });
+  });
+}
+
 export function isAudioUnlocked() {
   return unlocked && Boolean(audioCtx) && audioCtx.state === 'running';
 }

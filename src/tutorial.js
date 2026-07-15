@@ -134,6 +134,9 @@ export const CORE_STEPS = [
 // Note: the squad-full coaching (5/5 max → sell / combine / bench) fires
 // proactively from app.js the moment you hit the cap, not as a queued tip.
 export const TIPS = [
+  { id: 'tip-move', spotlight: '#board',
+    text: "You can reposition cats! Drag a placed cat up to 2 squares — during planning or in the pause between attacks. (Slower melee cats move just 1.)",
+    when: (g) => g.round >= 2 && g.phase === 'prep' && g.cats.length > 0 },
   { id: 'tip-new-cats', spotlight: '#shop',
     text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",
     when: (g) => g.round >= 4 },
@@ -143,4 +146,7 @@ export const TIPS = [
   { id: 'tip-ability', spotlight: '#board',
     text: "This new cat has a special move — it only fires in the pause. Open the Tactics window and use it.",
     when: (g) => ownsAbilityCat(g) },
+  { id: 'tip-fill-house', spotlight: '#production-grid',
+    text: "You've still got a free House slot — a second producer means more healing, coins, weapons, or armour. Grab one when it shows in the shop.",
+    when: (g) => g.round >= 7 && g.workers.some((w) => !w) },
 ];

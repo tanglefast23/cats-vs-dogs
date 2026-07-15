@@ -457,7 +457,7 @@ test('dog tiers scale through tier four while retaining their strategic role', (
 test('dog waves scale in count and stop rolling low tiers late', () => {
   assert.deepEqual(
     Array.from({ length: MAX_ROUNDS }, (_, index) => waveCountForRound(index + 1)),
-    [2, 3, 3, 4, 4, 5, 5, 6, 7, 8],
+    [2, 3, 3, 4, 4, 5, 5, 6, 6, 7],
   );
   assert.deepEqual(
     Array.from({ length: MAX_ROUNDS }, (_, index) => minimumDogTierForRound(index + 1)),
@@ -466,8 +466,8 @@ test('dog waves scale in count and stop rolling low tiers late', () => {
 
   const roundNine = generateWave(9, () => 0);
   const roundTen = generateWave(10, () => 0);
-  assert.equal(roundNine.length, 7);
-  assert.equal(roundTen.length, 8);
+  assert.equal(roundNine.length, 6);
+  assert.equal(roundTen.length, 7);
   for (const wave of [roundNine, roundTen]) {
     assert.ok(wave.every((dog) => dog.col >= 0 && dog.col < COLS));
     assert.ok(Array.from({ length: COLS }, (_, col) => wave.filter((dog) => dog.col === col).length)
@@ -868,7 +868,7 @@ test('a breach spends one life and Super Cat clears that column', () => {
 
   assert.equal(game.lives, 2);
   assert.deepEqual(game.dogs.map((dog) => dog.col), [1]);
-  assert.equal(game.events.some((event) => event.type === 'super-cat' && event.col === 3), true);
+  assert.equal(game.events.some((event) => event.type === 'breach' && event.col === 3), true);
 });
 
 test('surviving dogs persist and the next wave joins them', () => {
