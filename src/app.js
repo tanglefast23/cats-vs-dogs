@@ -23,6 +23,9 @@ import {
   ATTACK_FX, HURT_FX, attackSignature, attackGroupKey, blastFootprint, contactVector, isKill,
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
+import {
+  CORE_STEPS, TIPS, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
+} from './tutorial.js';
 
 let game = createGame();
 let selected = null;
@@ -38,6 +41,10 @@ let glossaryPaused = false;
 let pausedAnimations = [];
 let resumeWaiters = [];
 const collectingStations = new Set();
+let tutorialActive = false;
+let tutorialStepIndex = 0;
+const tutorialSeenTips = new Set();
+let tutorialCurrentTip = null;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -78,6 +85,11 @@ const modalEl = $('#result-modal');
 const settingsModalEl = $('#settings-modal');
 const glossaryModalEl = $('#glossary-modal');
 const soundToggleEl = $('#setting-sound');
+const tutorialOverlayEl = $('#tutorial-overlay');
+const tutorialSpotlightEl = $('#tutorial-spotlight');
+const tutorialBubbleEl = $('#tutorial-bubble');
+const tutorialTextEl = $('#tutorial-text');
+const tutorialNextEl = $('#tutorial-next');
 
 let tooltipEl = document.querySelector('.unit-tooltip');
 if (!tooltipEl) {
@@ -2517,6 +2529,124 @@ function closeGlossary() {
   $('#glossary-open')?.focus();
 }
 
+// --- Tutorial overlay: spotlight a target element + show a coach bubble. ---
+function positionTutorialOverlay(selector, showContinue) {
+  const target = selector ? document.querySelector(selector) : null;
+  const pad = 8;
+  if (target) {
+    const r = target.getBoundingClientRect();
+    tutorialSpotlightEl.style.display = 'block';
+    tutorialSpotlightEl.style.left = `${r.left - pad}px`;
+    tutorialSpotlightEl.style.top = `${r.top - pad}px`;
+    tutorialSpotlightEl.style.width = `${r.width + pad * 2}px`;
+    tutorialSpotlightEl.style.height = `${r.height + pad * 2}px`;
+    const bubbleTop = Math.min(r.bottom + 12, window.innerHeight - 176);
+    const bubbleLeft = Math.min(Math.max(12, r.left), window.innerWidth - 320);
+    tutorialBubbleEl.style.top = `${bubbleTop}px`;
+    tutorialBubbleEl.style.left = `${bubbleLeft}px`;
+    tutorialBubbleEl.style.transform = 'none';
+  } else {
+    tutorialSpotlightEl.style.display = 'none';
+    tutorialBubbleEl.style.top = '50%';
+    tutorialBubbleEl.style.left = '50%';
+    tutorialBubbleEl.style.transform = 'translate(-50%, -50%)';
+  }
+  tutorialNextEl.hidden = !showContinue;
+}
+
+function showTutorialBubble(text, selector, showContinue) {
+  tutorialTextEl.textContent = text;
+  tutorialOverlayEl.hidden = false;
+  positionTutorialOverlay(selector, showContinue);
+}
+
+function hideTutorialOverlay() {
+  tutorialOverlayEl.hidden = true;
+}
+
+function tutorialCatColumns(state) {
+  // Highest-level cat's column first (the merged Purrcy for the R3 biter), then the rest.
+  return [...state.cats]
+    .sort((a, b) => (b.level - a.level))
+    .map((cat) => cat.col)
+    .filter((col) => typeof col === 'number');
+}
+
+function startTutorial() {
+  game = createGame();
+  selected = null;
+  playing = false;
+  manualPaused = false;
+  glossaryPaused = false;
+  if (glossaryModalEl) glossaryModalEl.hidden = true;
+  if (modalEl) modalEl.hidden = true;
+  syncPauseState();
+  tutorialActive = true;
+  tutorialStepIndex = 0;
+  tutorialCurrentTip = null;
+  tutorialSeenTips.clear();
+  game.shop = tutorialShop(1) ?? game.shop;
+  game.message = 'Tutorial: follow the highlights.';
+  render();
+}
+
+function endTutorial() {
+  tutorialActive = false;
+  tutorialCurrentTip = null;
+  hideTutorialOverlay();
+}
+
+// Set the scripted wave for the round we are about to start (R1 in the player's
+// lanes; R3 one biter in the merged cat's lane). Called right before startRound.
+function applyTutorialWave() {
+  const wave = tutorialWave(game.round, tutorialCatColumns(game));
+  if (wave) game.nextWave = wave;
+}
+
+// Set the scripted shop when a new prep round begins; graduate after round 4.
+function applyTutorialRound() {
+  if (game.round > 4) { endTutorial(); return; }
+  const shop = tutorialShop(game.round);
+  if (shop) game.shop = shop;
+}
+
+// Called at the tail of every render() while the tutorial is active.
+function syncTutorial() {
+  if (playing) { hideTutorialOverlay(); return; } // never cover a live animation
+  while (tutorialStepIndex < CORE_STEPS.length) {
+    const step = CORE_STEPS[tutorialStepIndex];
+    if (step.mode === 'gate' && step.isDone(game)) { tutorialStepIndex += 1; continue; }
+    break;
+  }
+  if (tutorialStepIndex < CORE_STEPS.length) {
+    const step = CORE_STEPS[tutorialStepIndex];
+    if (!step.showWhen || step.showWhen(game)) {
+      showTutorialBubble(step.text, step.spotlight, step.mode === 'tap');
+      return;
+    }
+    hideTutorialOverlay();
+    return;
+  }
+  if (tutorialCurrentTip) {
+    showTutorialBubble(tutorialCurrentTip.text, tutorialCurrentTip.spotlight, true);
+    return;
+  }
+  const tip = TIPS.find((t) => !tutorialSeenTips.has(t.id) && t.when(game));
+  if (tip) { tutorialCurrentTip = tip; showTutorialBubble(tip.text, tip.spotlight, true); return; }
+  hideTutorialOverlay();
+}
+
+function advanceTutorialByTap() {
+  if (tutorialCurrentTip) {
+    tutorialSeenTips.add(tutorialCurrentTip.id);
+    tutorialCurrentTip = null;
+    syncTutorial();
+    return;
+  }
+  const step = CORE_STEPS[tutorialStepIndex];
+  if (step && step.mode === 'tap') { tutorialStepIndex += 1; syncTutorial(); }
+}
+
 function render() {
   hideUnitTooltip();
   renderShop();
@@ -2529,6 +2659,7 @@ function render() {
   renderProductionLegend();
   renderLegend();
   playPendingUpgrade();
+  if (tutorialActive) syncTutorial();
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2571,6 +2702,7 @@ async function playRound() {
   selected = null;
   activeTargeting = null;
   if (startingRound) {
+    if (tutorialActive) applyTutorialWave();
     game = startRound(game);
     render();
     announceWave();
@@ -2587,6 +2719,7 @@ async function playRound() {
     const needsAnotherExchange = game.dogs.length > 0
       && (game.round >= MAX_ROUNDS || game.section < ACTIONS_PER_ROUND);
     game = needsAnotherExchange ? openTacticsWindow(game) : finishRound(game);
+    if (tutorialActive && game.phase === 'prep') applyTutorialRound();
   }
   playing = false;
   render();
@@ -2620,6 +2753,8 @@ function resetGame() {
   if (glossaryModalEl) glossaryModalEl.hidden = true;
   syncPauseState();
   modalEl.hidden = true;
+  tutorialActive = false;
+  hideTutorialOverlay();
   render();
 }
 
@@ -2633,9 +2768,25 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
+window.addEventListener('resize', () => { if (tutorialActive) syncTutorial(); });
 
-$('#refresh').addEventListener('click', () => { game = refreshShop(game); selected = null; render(); });
+$('#refresh').addEventListener('click', () => {
+  if (tutorialActive) {
+    const before = game.gold;
+    game = refreshShop(game);
+    game.gold = before; // free reroll while learning
+    const scripted = tutorialShopAfterRefresh(game.round);
+    if (scripted) game.shop = scripted;
+  } else {
+    game = refreshShop(game);
+  }
+  selected = null;
+  render();
+});
 $('#done').addEventListener('click', playRound);
+$('#tutorial')?.addEventListener('click', startTutorial);
+tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
+$('#tutorial-skip')?.addEventListener('click', endTutorial);
 
 // Two-tap restart: a single stray click must not wipe a six-round run.
 const restartButton = $('#restart');
