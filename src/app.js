@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
-import { unlockAudio, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
+import { unlockAudio, playUiClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -2456,6 +2456,7 @@ function showResult() {
   $('#result-title').textContent = won ? 'Backyard Defended!' : 'The Dogs Broke Through';
   $('#result-copy').textContent = won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
   drawCat($('#result-cat'), won ? 3 : 1, won ? 0 : 1, won);
+  stopLevelMusic();
   modalEl.hidden = false;
 }
 
@@ -2761,6 +2762,7 @@ function tutorialCatColumns(state) {
 }
 
 function startTutorial() {
+  startLevelMusic();
   game = createGame();
   selected = null;
   playing = false;
@@ -2962,6 +2964,7 @@ function closeSettings() {
 }
 
 function resetGame() {
+  startLevelMusic();
   game = createGame();
   selected = null;
   playing = false;
@@ -2977,6 +2980,7 @@ function resetGame() {
 
 function armAudioOnce() {
   unlockAudio();
+  startLevelMusic();
   window.removeEventListener('pointerdown', armAudioOnce);
   window.removeEventListener('keydown', armAudioOnce);
 }
@@ -2986,6 +2990,11 @@ window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
 window.addEventListener('resize', () => { if (tutorialActive) { dragHintKey = null; syncTutorial(); } });
+window.addEventListener('click', (event) => {
+  const control = event.target?.closest?.('button, input[type="checkbox"], [role="button"]');
+  if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
+  playUiClick();
+});
 
 $('#refresh').addEventListener('click', () => {
   if (tutorialActive) {
@@ -3066,7 +3075,8 @@ settingsModalEl?.addEventListener('click', (event) => {
 soundToggleEl?.addEventListener('change', () => {
   unlockAudio();
   setSoundEnabled(soundToggleEl.checked);
-  game.message = soundToggleEl.checked ? 'Sound effects on.' : 'Sound effects muted.';
+  if (soundToggleEl.checked) playUiClick();
+  game.message = soundToggleEl.checked ? 'Sound and music on.' : 'Sound and music muted.';
   renderHud();
 });
 window.addEventListener('keydown', (event) => {

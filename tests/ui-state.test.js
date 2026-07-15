@@ -768,16 +768,28 @@ test('homing shots are slower than normal projectiles so the seek reads', () => 
   assert.ok(COMBAT_TIMING.homingMs >= 1200);
 });
 
+test('UI click sound stays quieter than gameplay feedback', async () => {
+  const sound = await import('../src/sound.js');
+  assert.equal(typeof sound.playUiClick, 'function');
+  assert.ok(sound.UI_CLICK_VOLUME > 0);
+  assert.ok(sound.UI_CLICK_VOLUME <= 0.03);
+  assert.doesNotThrow(() => sound.playUiClick());
+});
+
 test('sound helpers no-op safely without a browser audio context', async () => {
   const sound = await import('../src/sound.js');
   assert.equal(typeof sound.playCatDrop, 'function');
   assert.equal(typeof sound.playHit, 'function');
   assert.equal(typeof sound.playCollection, 'function');
+  assert.equal(typeof sound.startLevelMusic, 'function');
+  assert.equal(typeof sound.stopLevelMusic, 'function');
   assert.doesNotThrow(() => sound.playCatDrop());
   assert.doesNotThrow(() => sound.playHit());
   assert.doesNotThrow(() => sound.playHit({ heavy: true }));
   assert.doesNotThrow(() => sound.playCollection('coins'));
   assert.doesNotThrow(() => sound.unlockAudio());
+  assert.doesNotThrow(() => sound.startLevelMusic());
+  assert.doesNotThrow(() => sound.stopLevelMusic());
 });
 
 test('sound setting can be toggled and remembered', async () => {
@@ -803,6 +815,54 @@ test('sound setting can be toggled and remembered', async () => {
   assert.equal(sound.isSoundEnabled(), true);
   assert.equal(memory.get(sound.SOUND_SETTING_KEY), '1');
   assert.equal(sound.loadSoundEnabled(), true);
+
+  delete globalThis.window;
+});
+
+test('level music loops quietly and follows the shared sound setting', async () => {
+  const players = [];
+  class FakeAudio {
+    constructor(src) {
+      this.src = src;
+      this.currentTime = 9;
+      this.playCount = 0;
+      this.pauseCount = 0;
+      players.push(this);
+    }
+
+    play() {
+      this.playCount += 1;
+      return Promise.resolve();
+    }
+
+    pause() {
+      this.pauseCount += 1;
+    }
+  }
+
+  globalThis.window = {
+    Audio: FakeAudio,
+    AudioContext: undefined,
+    webkitAudioContext: undefined,
+    setTimeout: () => 0,
+  };
+
+  const sound = await import(`../src/sound.js?music=${Date.now()}`);
+  assert.equal(sound.startLevelMusic(), true);
+  assert.equal(players.length, 1);
+  assert.equal(players[0].loop, true);
+  assert.equal(players[0].preload, 'auto');
+  assert.equal(players[0].volume, sound.LEVEL_MUSIC_VOLUME);
+  assert.equal(players[0].playCount, 1);
+
+  sound.setSoundEnabled(false);
+  assert.equal(players[0].pauseCount, 1);
+  sound.setSoundEnabled(true);
+  assert.equal(players[0].playCount, 2);
+
+  sound.stopLevelMusic();
+  assert.equal(players[0].pauseCount, 2);
+  assert.equal(players[0].currentTime, 0);
 
   delete globalThis.window;
 });
