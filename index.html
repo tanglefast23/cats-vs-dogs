@@ -47,6 +47,7 @@
           <h1>CATS <span>VS</span> DOGS</h1>
         </div>
         <div class="titlebar-actions">
+          <button id="tutorial" class="icon-button tutorial-button" aria-label="Start the tutorial" title="Tutorial">TUTORIAL</button>
           <button id="settings" class="icon-button" aria-label="Open settings" title="Settings">⚙</button>
           <button id="restart" class="icon-button" aria-label="Restart game" title="Restart">↻</button>
         </div>
@@ -150,6 +151,15 @@
       <h2 id="result-title">Backyard Defended!</h2>
       <p id="result-copy">The porch is safe—for now.</p>
       <button id="play-again" class="done-button">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="tutorial-overlay" class="tutorial-overlay" hidden>
+    <div class="tutorial-spotlight" id="tutorial-spotlight"></div>
+    <div class="tutorial-bubble" id="tutorial-bubble" role="dialog" aria-live="polite">
+      <p id="tutorial-text"></p>
+      <button id="tutorial-next" type="button" class="tutorial-next" hidden>Continue</button>
+      <button id="tutorial-skip" type="button" class="tutorial-skip">Skip tutorial</button>
     </div>
   </div>
 
