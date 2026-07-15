@@ -93,7 +93,7 @@ export const CAT_COAT_INFO = {
     strength: 'Medium lane damage plus a five-square Tactics bomb',
     weakness: 'Fragile and cannot normally attack outside its lane',
     blurb: 'Medium lane bomb · plus spell',
-    attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits every dog in a five-square plus for half normal damage.',
+    attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits a five-square plus — full damage to the dog at the center, half to the four sides.',
     shopTier: 3,
     unlockRound: 4,
   },
@@ -1144,13 +1144,17 @@ export function useActiveAbility(game, casterId, target = {}) {
       const victims = next.dogs.filter((dog) => dog.hp > 0
         && footprint.some((cell) => cell.row === dog.row && cell.col === dog.col));
       if (victims.length) {
-        const damage = Math.max(1, caster.attack / 2);
-        victims.forEach((dog, index) => pushDamageEvent(next, 'spell', caster, dog, {
-          damage,
-          style: index === 0 ? 'bomb-cross' : 'bomb-cross-secondary',
-          aimRow: target.row,
-          aimCol: target.col,
-        }));
+        const centerDamage = Math.max(1, caster.attack);
+        const splashDamage = Math.max(1, caster.attack / 2);
+        victims.forEach((dog, index) => {
+          const isCenter = dog.row === target.row && dog.col === target.col;
+          pushDamageEvent(next, 'spell', caster, dog, {
+            damage: isCenter ? centerDamage : splashDamage,
+            style: index === 0 ? 'bomb-cross' : 'bomb-cross-secondary',
+            aimRow: target.row,
+            aimCol: target.col,
+          });
+        });
         next.dogs = next.dogs.filter((dog) => dog.hp > 0);
         used = true;
       }

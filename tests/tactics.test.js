@@ -368,7 +368,7 @@ test('Stormcaller damages every living dog in one selected column', () => {
   assert.deepEqual(strikes.map((event) => [event.toRow, event.col]), [[2, 4], [5, 4]]);
 });
 
-test('Bombay Boom special hits every dog in a five-square plus for half normal damage', () => {
+test('Bombay Boom special hits a five-square plus — full damage at the centre, half to the sides', () => {
   let game = createGame(() => 0.5);
   game.cats = [createCat(2, CAT_COAT.BLACK)];
   game.cats[0].row = 12; game.cats[0].col = 2;
@@ -381,12 +381,16 @@ test('Bombay Boom special hits every dog in a five-square plus for half normal d
 
   game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
 
+  const attack = game.cats[0].attack;
   const hits = game.events.filter((event) => event.type === 'spell' && event.style.startsWith('bomb-cross'));
   assert.equal(hits.length, 6);
+  // Visual stays one primary explosion + splash; damage varies by position.
   assert.equal(hits.filter((event) => event.style === 'bomb-cross').length, 1);
   assert.equal(hits.filter((event) => event.style === 'bomb-cross-secondary').length, 5);
-  assert.equal(hits.every((event) => event.damage === 3.5), true);
-  assert.equal(hits.reduce((total, event) => total + event.damage, 0), game.cats[0].attack * 3);
+  // Two dogs sit on the centre square → full damage; the four sides → half.
+  assert.equal(hits.filter((event) => event.damage === attack).length, 2);
+  assert.equal(hits.filter((event) => event.damage === attack / 2).length, 4);
+  assert.equal(hits.reduce((total, event) => total + event.damage, 0), attack * 4);
   assert.equal(hits.every((event) => event.aimRow === 5 && event.aimCol === 2), true);
   assert.equal(game.dogs.find((dog) => dog.id === outside.id).hp, 8);
   assert.equal(game.cats[0].activeUsed, true);
