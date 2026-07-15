@@ -45,6 +45,8 @@ let tutorialActive = false;
 let tutorialStepIndex = 0;
 const tutorialSeenTips = new Set();
 let tutorialCurrentTip = null;
+let dragHintKey = null;
+let dragHintAnim = null;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -90,6 +92,9 @@ const tutorialSpotlightEl = $('#tutorial-spotlight');
 const tutorialBubbleEl = $('#tutorial-bubble');
 const tutorialTextEl = $('#tutorial-text');
 const tutorialNextEl = $('#tutorial-next');
+const tutorialDropTargetEl = $('#tutorial-drop-target');
+const tutorialDragGhostEl = $('#tutorial-drag-ghost');
+const tutorialDragUnitEl = $('#tutorial-drag-unit');
 
 let tooltipEl = document.querySelector('.unit-tooltip');
 if (!tooltipEl) {
@@ -2614,6 +2619,47 @@ function showTutorialBubble(text, selector, showContinue) {
 
 function hideTutorialOverlay() {
   tutorialOverlayEl.hidden = true;
+  hideDragHint();
+}
+
+// Highlight the drop target and loop a ghost "drag" from source to target so the
+// player sees the exact gesture. from/to are CSS selectors resolved live.
+function showDragHint(fromSel, toSel) {
+  const from = document.querySelector(fromSel);
+  const to = document.querySelector(toSel);
+  if (!from || !to) { hideDragHint(); return; }
+  const tr = to.getBoundingClientRect();
+  const pad = 6;
+  tutorialDropTargetEl.hidden = false;
+  tutorialDropTargetEl.style.left = `${tr.left - pad}px`;
+  tutorialDropTargetEl.style.top = `${tr.top - pad}px`;
+  tutorialDropTargetEl.style.width = `${tr.width + pad * 2}px`;
+  tutorialDropTargetEl.style.height = `${tr.height + pad * 2}px`;
+  if (prefersReducedMotion) { tutorialDragGhostEl.hidden = true; return; }
+  const key = `${fromSel}=>${toSel}`;
+  if (dragHintKey === key && dragHintAnim) { tutorialDragGhostEl.hidden = false; return; }
+  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
+  dragHintKey = key;
+  const fr = from.getBoundingClientRect();
+  const srcCanvas = from.querySelector('canvas');
+  tutorialDragUnitEl.style.backgroundImage = srcCanvas ? `url(${srcCanvas.toDataURL()})` : 'none';
+  const fromX = fr.left + fr.width / 2, fromY = fr.top + fr.height / 2;
+  const toX = tr.left + tr.width / 2, toY = tr.top + tr.height / 2;
+  tutorialDragGhostEl.hidden = false;
+  dragHintAnim = tutorialDragGhostEl.animate([
+    { offset: 0,    left: `${fromX}px`, top: `${fromY}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(0.7)' },
+    { offset: 0.14, left: `${fromX}px`, top: `${fromY}px`, opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    { offset: 0.70, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    { offset: 0.86, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(0.88)' },
+    { offset: 1,    left: `${toX}px`,   top: `${toY}px`,   opacity: 0, transform: 'translate(-50%, -50%) scale(0.88)' },
+  ], { duration: 2200, iterations: Infinity, easing: 'ease-in-out' });
+}
+
+function hideDragHint() {
+  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
+  dragHintKey = null;
+  if (tutorialDropTargetEl) tutorialDropTargetEl.hidden = true;
+  if (tutorialDragGhostEl) tutorialDragGhostEl.hidden = true;
 }
 
 function tutorialCatColumns(state) {
@@ -2680,17 +2726,20 @@ function syncTutorial() {
     const step = CORE_STEPS[tutorialStepIndex];
     if (!step.showWhen || step.showWhen(game)) {
       showTutorialBubble(step.text, step.spotlight, step.mode === 'tap');
+      if (step.dragFrom && step.dragTo) showDragHint(step.dragFrom, step.dragTo);
+      else hideDragHint();
       return;
     }
     hideTutorialOverlay();
     return;
   }
   if (tutorialCurrentTip) {
+    hideDragHint();
     showTutorialBubble(tutorialCurrentTip.text, tutorialCurrentTip.spotlight, true);
     return;
   }
   const tip = TIPS.find((t) => !tutorialSeenTips.has(t.id) && t.when(game));
-  if (tip) { tutorialCurrentTip = tip; showTutorialBubble(tip.text, tip.spotlight, true); return; }
+  if (tip) { tutorialCurrentTip = tip; hideDragHint(); showTutorialBubble(tip.text, tip.spotlight, true); return; }
   hideTutorialOverlay();
 }
 
@@ -2826,7 +2875,7 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
-window.addEventListener('resize', () => { if (tutorialActive) syncTutorial(); });
+window.addEventListener('resize', () => { if (tutorialActive) { dragHintKey = null; syncTutorial(); } });
 
 $('#refresh').addEventListener('click', () => {
   if (tutorialActive) {
