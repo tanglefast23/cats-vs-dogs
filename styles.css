@@ -2278,3 +2278,28 @@ h1 span { color: var(--orange); font-size: .75em; }
   .cell.bomb-footprint, .unit.decoy-blocking::before { animation: none; }
   .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
 }
+
+/* --- Tutorial overlay: spotlight ring + coach bubble --- */
+.tutorial-button { width: auto; padding: 0 12px; font-size: 11px; letter-spacing: 0.08em; font-weight: 700; }
+
+.tutorial-overlay { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+.tutorial-overlay[hidden] { display: none; }
+/* Dim everything except the spotlight, using a huge ring shadow as the mask. */
+.tutorial-spotlight {
+  position: absolute; border-radius: 12px;
+  box-shadow: 0 0 0 4px #ffd24a, 0 0 0 9999px rgba(6, 10, 20, 0.72);
+  transition: all 180ms ease; pointer-events: none;
+}
+.tutorial-bubble {
+  position: absolute; max-width: 300px; padding: 16px 20px; border-radius: 16px;
+  background: #12203a; color: #eaf1ff; border: 1px solid #2c4066;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); pointer-events: auto;
+}
+.tutorial-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
+.tutorial-next, .tutorial-skip { font: inherit; cursor: pointer; border-radius: 8px; }
+.tutorial-next { padding: 8px 16px; background: #ffd24a; color: #12203a; border: 0; font-weight: 700; }
+.tutorial-skip { margin-left: 8px; padding: 8px 12px; background: transparent; color: #8fa6c9; border: 0; font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-spotlight { transition: none; }
+}
