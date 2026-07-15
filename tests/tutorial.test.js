@@ -6,7 +6,7 @@ import {
   fighterSlot, workerSlot, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
   catOnBoard, boardCatCount, producerInHouse, producerInShop, catAtLevel,
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole,
-  CORE_STEPS, TIPS,
+  tutorialShopFighterSelector, tutorialOpenLaneSelector, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
 test('fighterSlot builds a shop-shaped fighter for the coat', () => {
@@ -71,6 +71,37 @@ test('predicates read the game state they claim to', () => {
   assert.equal(ownsAbilityCat(game), true);
 });
 
+test('tutorial purchase hints follow the unused Purrcy shop card', () => {
+  const game = createGame();
+  game.shop = tutorialShop(1);
+
+  assert.equal(tutorialShopFighterSelector(game, CAT_COAT.ORANGE),
+    '#shop .shop-card[data-shop-index="0"]');
+
+  game.shop[0].sold = true;
+  assert.equal(tutorialShopFighterSelector(game, CAT_COAT.ORANGE),
+    '#shop .shop-card[data-shop-index="1"]');
+
+  game.shop[0].sold = false;
+  game.shop[1].sold = true;
+  assert.equal(tutorialShopFighterSelector(game, CAT_COAT.ORANGE),
+    '#shop .shop-card[data-shop-index="0"]');
+});
+
+test('tutorial purchase hints choose a lane the player has not used', () => {
+  const game = createGame();
+  assert.equal(tutorialOpenLaneSelector(game),
+    '#board .cell[data-row="13"][data-col="2"]');
+
+  game.cats.push({ ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 });
+  assert.equal(tutorialOpenLaneSelector(game),
+    '#board .cell[data-row="13"][data-col="3"]');
+
+  game.cats[0] = { ...game.cats[0], row: 11, col: 3 };
+  assert.equal(tutorialOpenLaneSelector(game),
+    '#board .cell[data-row="13"][data-col="2"]');
+});
+
 test('every core step is well-formed', () => {
   assert.ok(CORE_STEPS.length > 0);
   for (const step of CORE_STEPS) {
@@ -79,8 +110,16 @@ test('every core step is well-formed', () => {
     assert.ok(['tap', 'gate'].includes(step.mode));
     if (step.mode === 'gate') assert.equal(typeof step.isDone, 'function');
     if (step.spotlight !== null) assert.equal(typeof step.spotlight, 'string');
+    if (step.dragFrom) assert.ok(['string', 'function'].includes(typeof step.dragFrom));
+    if (step.dragTo) assert.ok(['string', 'function'].includes(typeof step.dragTo));
+    if (step.mutedRegion) assert.equal(typeof step.mutedRegion, 'string');
   }
   assert.equal(new Set(CORE_STEPS.map((s) => s.id)).size, CORE_STEPS.length);
+});
+
+test('the first placement lesson mutes the unrelated dog preview lane', () => {
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').mutedRegion,
+    '.dog-preview-wing');
 });
 
 test('every tip is well-formed with a trigger', () => {

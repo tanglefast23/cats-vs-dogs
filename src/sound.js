@@ -2,6 +2,7 @@
 import { DROP_IMPACT } from './drag-drop.js';
 
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
+export const MUSIC_OWNER_KEY = 'cvd-music-owner';
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
 export const LEVEL_MUSIC_VOLUME = 0.18;
 export const UI_CLICK_VOLUME = 0.024;
@@ -11,6 +12,7 @@ let unlocked = false;
 let soundEnabled = true;
 let levelMusic = null;
 let levelMusicRequested = false;
+let ownsMusic = false;
 
 function getWindow() {
   return typeof globalThis !== 'undefined' && globalThis.window ? globalThis.window : null;
@@ -23,6 +25,110 @@ function getStorage() {
   } catch {
     return null;
   }
+}
+
+function createMusicOwnerId() {
+  const win = getWindow();
+  try {
+    const id = win?.crypto?.randomUUID?.();
+    if (id) return id;
+  } catch {
+    // A random per-page fallback is enough to distinguish competing tabs.
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+const musicOwnerId = createMusicOwnerId();
+
+function isAutomatedBrowser() {
+  return getWindow()?.navigator?.webdriver === true;
+}
+
+function isPageVisible() {
+  const doc = getWindow()?.document;
+  if (!doc) return true;
+  if (doc.visibilityState === 'hidden' || doc.hidden === true) return false;
+  return typeof doc.hasFocus !== 'function' || doc.hasFocus();
+}
+
+function canUseAudioOutput() {
+  return soundEnabled && !isAutomatedBrowser() && isPageVisible();
+}
+
+function pauseLevelMusic() {
+  if (levelMusic) levelMusic.pause();
+}
+
+function claimMusicOwnership() {
+  if (!canUseAudioOutput()) return false;
+  const storage = getStorage();
+  if (!storage) {
+    ownsMusic = true;
+    return true;
+  }
+  try {
+    storage.setItem(MUSIC_OWNER_KEY, musicOwnerId);
+    ownsMusic = storage.getItem(MUSIC_OWNER_KEY) === musicOwnerId;
+  } catch {
+    // Private mode / quota — page visibility still prevents hidden audio.
+    ownsMusic = true;
+  }
+  return ownsMusic;
+}
+
+function releaseMusicOwnership() {
+  if (!ownsMusic) return;
+  ownsMusic = false;
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    if (storage.getItem(MUSIC_OWNER_KEY) === musicOwnerId) {
+      storage.removeItem(MUSIC_OWNER_KEY);
+    }
+  } catch {
+    // Ownership is already released in memory.
+  }
+}
+
+function onMusicOwnershipChange(event) {
+  if (event?.key !== MUSIC_OWNER_KEY || event.newValue === musicOwnerId) return;
+  ownsMusic = false;
+  pauseLevelMusic();
+  if (event.newValue === null && levelMusicRequested && canUseAudioOutput()) {
+    startLevelMusic();
+  }
+}
+
+function onAudioVisibilityChange() {
+  if (!isPageVisible()) {
+    releaseMusicOwnership();
+    pauseLevelMusic();
+    return;
+  }
+  if (levelMusicRequested) startLevelMusic();
+}
+
+function onPageHide() {
+  releaseMusicOwnership();
+  pauseLevelMusic();
+}
+
+function bindAudioFocusListeners() {
+  const win = getWindow();
+  win?.addEventListener?.('storage', onMusicOwnershipChange);
+  win?.addEventListener?.('focus', onAudioVisibilityChange);
+  win?.addEventListener?.('blur', onPageHide);
+  win?.addEventListener?.('pagehide', onPageHide);
+  win?.document?.addEventListener?.('visibilitychange', onAudioVisibilityChange);
+}
+
+function unbindAudioFocusListeners() {
+  const win = getWindow();
+  win?.removeEventListener?.('storage', onMusicOwnershipChange);
+  win?.removeEventListener?.('focus', onAudioVisibilityChange);
+  win?.removeEventListener?.('blur', onPageHide);
+  win?.removeEventListener?.('pagehide', onPageHide);
+  win?.document?.removeEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
 
 export function loadSoundEnabled() {
@@ -51,8 +157,9 @@ export function setSoundEnabled(enabled) {
   if (soundEnabled) {
     unlockAudio();
     if (levelMusicRequested) startLevelMusic();
-  } else if (levelMusic) {
-    levelMusic.pause();
+  } else {
+    releaseMusicOwnership();
+    pauseLevelMusic();
   }
   return soundEnabled;
 }
@@ -71,9 +178,12 @@ function musicPlayer() {
 /** Start the original Level 1 loop after a user gesture permits playback. */
 export function startLevelMusic() {
   levelMusicRequested = true;
-  if (!soundEnabled) return false;
+  if (!claimMusicOwnership()) return false;
   const player = musicPlayer();
-  if (!player) return false;
+  if (!player) {
+    releaseMusicOwnership();
+    return false;
+  }
   const playback = player.play();
   if (playback?.catch) void playback.catch(() => {});
   return true;
@@ -82,8 +192,9 @@ export function startLevelMusic() {
 /** Stop the level loop at victory/game over and rewind it for the next run. */
 export function stopLevelMusic() {
   levelMusicRequested = false;
+  releaseMusicOwnership();
   if (!levelMusic) return;
-  levelMusic.pause();
+  pauseLevelMusic();
   try {
     levelMusic.currentTime = 0;
   } catch {
@@ -93,7 +204,7 @@ export function stopLevelMusic() {
 
 function context() {
   const win = getWindow();
-  if (!win) return null;
+  if (!win || !canUseAudioOutput()) return null;
   const AC = win.AudioContext || win.webkitAudioContext;
   if (!AC) return null;
   if (!audioCtx) audioCtx = new AC();
@@ -185,6 +296,17 @@ export function playUiClick() {
   if (!soundEnabled) return;
   tone({ frequency: 620, slideTo: 430, duration: 0.055, type: 'square', volume: UI_CLICK_VOLUME, attack: 0.001, decay: 0.034 });
   tone({ frequency: 1180, duration: 0.022, type: 'sine', volume: UI_CLICK_VOLUME * 0.42, attack: 0.001, decay: 0.014 });
+}
+
+/** Crisp two-stage mechanical click for an accepted shop refresh. */
+export function playRefreshClick() {
+  if (!soundEnabled) return;
+  tone({ frequency: 480, slideTo: 240, duration: 0.055, type: 'square', volume: 0.04, attack: 0.001, decay: 0.032 });
+  noiseBurst({ duration: 0.028, volume: 0.022, filterFreq: 2300 });
+  later(38, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 820, slideTo: 1040, duration: 0.045, type: 'triangle', volume: 0.026, attack: 0.001, decay: 0.025 });
+  });
 }
 
 /** Soft “plop” when a cat is placed or moved onto the board. */
@@ -295,3 +417,12 @@ export function isAudioUnlocked() {
 
 // Initialize from storage once this module loads in the browser.
 loadSoundEnabled();
+bindAudioFocusListeners();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    releaseMusicOwnership();
+    pauseLevelMusic();
+    unbindAudioFocusListeners();
+  });
+}

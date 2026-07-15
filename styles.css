@@ -30,8 +30,34 @@ body {
   min-height: 100vh;
   background: radial-gradient(circle at 50% 8%, #365e6e 0, #173542 42%, #0b1c24 100%);
 }
-button { font: inherit; color: inherit; }
+button {
+  font: inherit;
+  color: inherit;
+  transition: translate 140ms ease-out, scale 140ms ease-out, opacity 140ms ease-out;
+}
 button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
+
+/* Shared button feedback: board cells keep their own placement / unit cues. */
+button:not(.cell):not(:disabled):not([aria-disabled="true"]) { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  button:not(.cell):not(:disabled):not([aria-disabled="true"]):hover {
+    translate: 0 -1px;
+    scale: 1.012;
+  }
+}
+button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
+  translate: 0 1px;
+  scale: .985;
+  opacity: .9;
+}
+@media (prefers-reduced-motion: reduce) {
+  button { transition-duration: 0ms; }
+  button:not(.cell):not(:disabled):not([aria-disabled="true"]):hover,
+  button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
+    translate: 0;
+    scale: 1;
+  }
+}
 
 .game-shell {
   width: min(1440px, calc(100% - 32px));
@@ -92,6 +118,8 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
 .worker-slot { padding: 0; cursor: pointer; background: #c9dfaa; }
 .worker-slot.empty { border-style: dashed; background: rgba(255,248,220,.55); }
 .worker-slot > canvas { position: absolute; inset: 9%; width: 82%; height: 82%; image-rendering: pixelated; }
+.worker-slot.is-working { z-index: 2; overflow: visible; }
+.worker-slot.is-working > canvas { z-index: 3; will-change: transform; }
 .worker-slot .worker-badge { position: absolute; left: 2px; top: 2px; padding: 1px 3px; border: 1px solid var(--ink); background: #ffe56e; font-size: 8px; font-weight: 900; }
 .worker-slot .copy-pips { z-index: 2; }
 .station-cell { display: grid; place-items: center; background: #8b6647; }
@@ -134,40 +162,6 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
   box-shadow: inset 0 1px 0 #fff08b;
 }
 .work-action { position: absolute; z-index: 4; inset: 0; overflow: hidden; pointer-events: none; }
-.cook-spoon {
-  position: absolute;
-  left: 58%;
-  top: 5%;
-  width: 5%;
-  height: 43%;
-  border: 1px solid var(--ink);
-  background: #d8ddd4;
-  transform-origin: 50% 88%;
-  animation: cook-spoon-stir .56s steps(4) 4;
-}
-.cook-spoon::after {
-  content: '';
-  position: absolute;
-  left: -90%;
-  bottom: -12%;
-  width: 250%;
-  height: 24%;
-  border: 1px solid var(--ink);
-  border-radius: 50%;
-  background: #aebbb7;
-}
-.cook-steam {
-  position: absolute;
-  top: 17%;
-  width: 7%;
-  height: 18%;
-  border-left: 2px solid rgba(255,249,211,.92);
-  border-radius: 50%;
-  opacity: 0;
-  animation: cook-steam-rise .56s steps(4) 4;
-}
-.cook-steam.steam-one { left: 36%; }
-.cook-steam.steam-two { left: 49%; animation-delay: .14s; }
 .trade-coin {
   position: absolute;
   left: 43%;
@@ -260,28 +254,19 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
 .armour-glint.glint-two { left: 61%; top: 30%; animation-delay: .14s; }
 .worker-slot.worker-hammer > canvas {
   transform-origin: 70% 72%;
-  animation: smith-pounding .56s steps(4) 4;
+  animation: smith-pounding 2.24s steps(16) 1 both;
 }
 .worker-slot.worker-stir > canvas {
   transform-origin: 64% 76%;
-  animation: cook-stirring .56s steps(4) 4;
+  animation: cook-stirring 2.24s steps(16) 1 both;
 }
 .worker-slot.worker-coin > canvas {
   transform-origin: 72% 68%;
-  animation: trader-counting .62s steps(5) 4;
+  animation: trader-counting 2.24s steps(16) 1 both;
 }
 .worker-slot.worker-polish > canvas {
   transform-origin: 50% 76%;
-  animation: armourer-polishing .56s steps(5) 4;
-}
-@keyframes cook-spoon-stir {
-  0%, 100% { transform: rotate(22deg) translateX(-10%); }
-  45%, 58% { transform: rotate(-25deg) translateX(18%); }
-}
-@keyframes cook-steam-rise {
-  0%, 22%, 100% { opacity: 0; transform: translate(0, 38%) scale(.7); }
-  42% { opacity: .9; }
-  78% { opacity: .3; transform: translate(45%, -75%) scale(1.12); }
+  animation: armourer-polishing 2.24s steps(16) 1 both;
 }
 @keyframes trade-coin-toss {
   0%, 100% { transform: translateY(28%) scaleX(1); }
@@ -298,9 +283,12 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
   45%, 58% { transform: rotate(-48deg) translate(-8%, 12%); }
 }
 @keyframes smith-pounding {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  35% { transform: translateY(-4%) rotate(2deg); }
-  55% { transform: translateY(3%) rotate(-2deg); }
+  0%, 8%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-72%) rotate(2deg); }
+  34%, 58% { transform: translate(-2%, -78%) rotate(3deg); }
+  46%, 70% { transform: translate(2%, -69%) rotate(-3deg); }
+  84% { transform: translateY(-72%) rotate(1deg); }
+  94% { transform: translateY(-18%) rotate(0); }
 }
 @keyframes forge-spark-pop {
   0%, 40%, 100% { opacity: 0; transform: translate(0, 0) scale(.2); }
@@ -317,19 +305,28 @@ button:focus-visible { outline: 3px solid #ffe55d; outline-offset: 2px; }
   78% { opacity: .35; transform: scale(.72) rotate(40deg); }
 }
 @keyframes cook-stirring {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  35% { transform: translate(-2%, -3%) rotate(-2deg); }
-  62% { transform: translate(2%, 2%) rotate(2deg); }
+  0%, 8%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-72%) rotate(-2deg); }
+  34%, 58% { transform: translate(-3%, -78%) rotate(-3deg); }
+  46%, 70% { transform: translate(3%, -70%) rotate(3deg); }
+  84% { transform: translateY(-73%) rotate(-1deg); }
+  94% { transform: translateY(-18%) rotate(0); }
 }
 @keyframes trader-counting {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  36% { transform: translateY(-5%) rotate(2deg); }
-  68% { transform: translateY(1%) rotate(-1deg); }
+  0%, 8%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-72%) rotate(2deg); }
+  34%, 58% { transform: translate(-3%, -77%) rotate(2deg); }
+  46%, 70% { transform: translate(3%, -69%) rotate(-2deg); }
+  84% { transform: translateY(-72%) rotate(1deg); }
+  94% { transform: translateY(-18%) rotate(0); }
 }
 @keyframes armourer-polishing {
-  0%, 100% { transform: translateX(0) rotate(0); }
-  35% { transform: translateX(-4%) rotate(-2deg); }
-  62% { transform: translateX(4%) rotate(2deg); }
+  0%, 8%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-72%) rotate(-2deg); }
+  34%, 58% { transform: translate(-4%, -77%) rotate(-3deg); }
+  46%, 70% { transform: translate(4%, -69%) rotate(3deg); }
+  84% { transform: translateY(-72%) rotate(-1deg); }
+  94% { transform: translateY(-18%) rotate(0); }
 }
 .station-cell.has-output { z-index: 5; overflow: visible; cursor: pointer; isolation: isolate; }
 .station-output {
@@ -2062,8 +2059,13 @@ h1 span { color: var(--orange); font-size: .75em; }
   font-size: 12px;
   white-space: nowrap;
   animation: banner-drop .45s steps(5);
+  transform-origin: center;
+  will-change: transform, opacity;
 }
 .wave-banner b { color: var(--orange-dark); }
+.wave-banner.is-exiting {
+  animation: banner-lift-away .72s cubic-bezier(.4, 0, .2, 1) forwards;
+}
 .wave-banner[hidden] { display: none; }
 .turn-tag {
   position: absolute;
@@ -2082,6 +2084,12 @@ h1 span { color: var(--orange); font-size: .75em; }
 .turn-tag.storm { border-color: #d8fbff; background: #17233f; color: #fff36b; box-shadow: 2px 2px 0 var(--ink), 0 0 11px #76e7ff; }
 .turn-tag[hidden] { display: none; }
 @keyframes banner-drop { 0% { transform: translateX(-50%) translateY(-18px); opacity: 0; } 100% { transform: translateX(-50%) translateY(0); opacity: 1; } }
+@keyframes banner-lift-away {
+  0% { opacity: 1; box-shadow: 4px 4px 0 var(--ink); transform: translateX(-50%) translateY(0) scale(1); }
+  18% { opacity: 1; box-shadow: 6px 7px 0 var(--ink), 0 0 18px rgba(255, 220, 91, .55); transform: translateX(-50%) translateY(3px) scale(1.035); }
+  55% { opacity: .9; box-shadow: 3px 9px 0 rgba(23, 43, 54, .72), 0 0 12px rgba(255, 220, 91, .3); transform: translateX(-50%) translateY(-9px) scale(.98); }
+  100% { opacity: 0; box-shadow: 0 17px 0 rgba(23, 43, 54, 0); transform: translateX(-50%) translateY(-38px) scale(.88) rotate(-1deg); }
+}
 
 /* Coat legend: every coat's sprite, name, and five-word role; locked rows show their unlock round. */
 .coat-legend-panel, .production-legend-panel { margin-top: 12px; padding: 8px; border: 3px solid var(--ink); background: rgba(255,248,220,.72); box-shadow: 3px 3px 0 var(--ink); }
@@ -2293,6 +2301,7 @@ h1 span { color: var(--orange); font-size: .75em; }
   .unit.hurt.shake-soft, .unit.hurt.shake-hard, .unit.hurt.shake-rattle,
   .cell.bomb-footprint, .unit.decoy-blocking::before { animation: none; }
   .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
+  .wave-banner.is-exiting { animation: none; }
 }
 
 /* --- Tutorial overlay: spotlight ring + coach bubble --- */
@@ -2308,6 +2317,13 @@ h1 span { color: var(--orange); font-size: .75em; }
 }
 /* Interactive steps skip the dark mask so nothing you need is hidden. */
 .tutorial-spotlight.no-dim { box-shadow: 0 0 0 4px #ffd24a; }
+.tutorial-muted-region {
+  position: absolute;
+  background: rgba(6, 10, 20, .68);
+  box-shadow: inset 0 0 0 2px rgba(6, 10, 20, .22);
+  pointer-events: none;
+}
+.tutorial-muted-region[hidden] { display: none; }
 .tutorial-bubble {
   position: absolute; max-width: 300px; padding: 16px 20px; border-radius: 16px;
   background: #12203a; color: #eaf1ff; border: 1px solid #2c4066;
@@ -2319,7 +2335,22 @@ h1 span { color: var(--orange); font-size: .75em; }
 .tutorial-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
 .tutorial-next, .tutorial-skip { font: inherit; cursor: pointer; border-radius: 8px; pointer-events: auto; }
 .tutorial-next { padding: 8px 16px; background: #ffd24a; color: #12203a; border: 0; font-weight: 700; }
-.tutorial-skip { margin-left: 8px; padding: 8px 12px; background: transparent; color: #8fa6c9; border: 0; font-size: 12px; }
+.tutorial-skip {
+  margin-left: 8px; padding: 8px 12px; background: transparent; color: #8fa6c9;
+  border: 0; font-size: 12px; transition: background-color 140ms ease-out, color 140ms ease-out, box-shadow 140ms ease-out;
+}
+.tutorial-skip:hover, .tutorial-skip:focus-visible {
+  background: #ffd24a; color: #12203a; box-shadow: 0 0 0 2px rgba(255, 210, 74, .35);
+}
+
+/* Once the first setup is complete, wait a beat and gently point at the next action. */
+.done-button.tutorial-start-cue { animation: tutorial-start-wiggle 520ms ease-out 1600ms 2; }
+@keyframes tutorial-start-wiggle {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  25% { transform: translateX(-3px) rotate(-.6deg); }
+  50% { transform: translateX(3px) rotate(.6deg); }
+  75% { transform: translateX(-2px) rotate(-.35deg); }
+}
 
 /* Drag hint: pulsing drop target + looping ghost drag demo */
 .tutorial-drop-target {
@@ -2381,4 +2412,5 @@ h1 span { color: var(--orange); font-size: .75em; }
   .tutorial-spotlight { transition: none; }
   .tutorial-drop-target { animation: none; }
   .tutorial-source-highlight { animation: none; }
+  .done-button.tutorial-start-cue { animation: none; }
 }

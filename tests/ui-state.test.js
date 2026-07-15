@@ -776,6 +776,69 @@ test('UI click sound stays quieter than gameplay feedback', async () => {
   assert.doesNotThrow(() => sound.playUiClick());
 });
 
+test('refresh has its own safe mechanical click sound', async () => {
+  const sound = await import('../src/sound.js');
+  assert.equal(typeof sound.playRefreshClick, 'function');
+  assert.doesNotThrow(() => sound.playRefreshClick());
+});
+
+test('refresh click synthesizes a two-stage click with a noise transient', async () => {
+  const oscillators = [];
+  const bufferSources = [];
+  class FakeAudioContext {
+    constructor() {
+      this.currentTime = 0;
+      this.destination = {};
+      this.sampleRate = 8000;
+      this.state = 'running';
+    }
+
+    createOscillator() {
+      const oscillator = {
+        type: '',
+        frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+      oscillators.push(oscillator);
+      return oscillator;
+    }
+
+    createGain() {
+      return {
+        gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect() {},
+      };
+    }
+
+    createBuffer(_channels, length) {
+      return { getChannelData: () => new Float32Array(length) };
+    }
+
+    createBufferSource() {
+      const source = { connect() {}, start() {}, stop() {} };
+      bufferSources.push(source);
+      return source;
+    }
+
+    createBiquadFilter() {
+      return { type: '', frequency: { value: 0 }, connect() {} };
+    }
+  }
+
+  globalThis.window = {
+    AudioContext: FakeAudioContext,
+    setTimeout(callback) { callback(); return 1; },
+  };
+  const sound = await import(`../src/sound.js?refresh-click=${Date.now()}-${Math.random()}`);
+  sound.playRefreshClick();
+
+  assert.deepEqual(oscillators.map((oscillator) => oscillator.type), ['square', 'triangle']);
+  assert.equal(bufferSources.length, 1);
+  delete globalThis.window;
+});
+
 test('sound helpers no-op safely without a browser audio context', async () => {
   const sound = await import('../src/sound.js');
   assert.equal(typeof sound.playCatDrop, 'function');
@@ -863,6 +926,147 @@ test('level music loops quietly and follows the shared sound setting', async () 
   sound.stopLevelMusic();
   assert.equal(players[0].pauseCount, 2);
   assert.equal(players[0].currentTime, 0);
+
+  delete globalThis.window;
+});
+
+test('automated browser checks never start audible game music', async () => {
+  const players = [];
+  globalThis.window = {
+    navigator: { webdriver: true },
+    document: {
+      hidden: false,
+      visibilityState: 'visible',
+      addEventListener: () => {},
+    },
+    Audio: class FakeAudio {
+      constructor() { players.push(this); }
+      play() { return Promise.resolve(); }
+      pause() {}
+    },
+  };
+
+  const sound = await import(`../src/sound.js?automated=${Date.now()}-${Math.random()}`);
+  assert.equal(sound.startLevelMusic(), false);
+  assert.equal(players.length, 0);
+
+  delete globalThis.window;
+});
+
+test('background tabs pause music and resume only when visible again', async () => {
+  const players = [];
+  let visibilityHandler = null;
+  let focusHandler = null;
+  let blurHandler = null;
+  let focused = false;
+  const document = {
+    hidden: true,
+    visibilityState: 'hidden',
+    hasFocus: () => focused,
+    addEventListener(type, handler) {
+      if (type === 'visibilitychange') visibilityHandler = handler;
+    },
+  };
+  class FakeAudio {
+    constructor() {
+      this.playCount = 0;
+      this.pauseCount = 0;
+      players.push(this);
+    }
+
+    play() {
+      this.playCount += 1;
+      return Promise.resolve();
+    }
+
+    pause() {
+      this.pauseCount += 1;
+    }
+  }
+  globalThis.window = {
+    document,
+    Audio: FakeAudio,
+    addEventListener(type, handler) {
+      if (type === 'focus') focusHandler = handler;
+      if (type === 'blur') blurHandler = handler;
+    },
+  };
+
+  const sound = await import(`../src/sound.js?visibility=${Date.now()}-${Math.random()}`);
+  assert.equal(sound.startLevelMusic(), false);
+  assert.equal(players.length, 0);
+
+  focused = true;
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  visibilityHandler();
+  assert.equal(players.length, 1);
+  assert.equal(players[0].playCount, 1);
+
+  focused = false;
+  blurHandler();
+  assert.equal(players[0].pauseCount, 1);
+
+  focused = true;
+  focusHandler();
+  assert.equal(players[0].playCount, 2);
+
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  visibilityHandler();
+  assert.equal(players[0].pauseCount, 2);
+
+  delete globalThis.window;
+});
+
+test('a game tab gives up music when another tab claims ownership', async () => {
+  const memory = new Map();
+  const players = [];
+  let storageHandler = null;
+  class FakeAudio {
+    constructor() {
+      this.playCount = 0;
+      this.pauseCount = 0;
+      players.push(this);
+    }
+
+    play() {
+      this.playCount += 1;
+      return Promise.resolve();
+    }
+
+    pause() {
+      this.pauseCount += 1;
+    }
+  }
+  globalThis.window = {
+    document: { hidden: false, visibilityState: 'visible', addEventListener: () => {} },
+    localStorage: {
+      getItem: (key) => (memory.has(key) ? memory.get(key) : null),
+      setItem: (key, value) => { memory.set(key, String(value)); },
+      removeItem: (key) => { memory.delete(key); },
+    },
+    addEventListener(type, handler) {
+      if (type === 'storage') storageHandler = handler;
+    },
+    Audio: FakeAudio,
+  };
+
+  const sound = await import(`../src/sound.js?ownership=${Date.now()}-${Math.random()}`);
+  assert.equal(sound.startLevelMusic(), true);
+  assert.equal(players[0].playCount, 1);
+  assert.ok(memory.has(sound.MUSIC_OWNER_KEY));
+
+  memory.set(sound.MUSIC_OWNER_KEY, 'other-tab');
+  storageHandler({ key: sound.MUSIC_OWNER_KEY, newValue: 'other-tab' });
+  assert.equal(players[0].pauseCount, 1);
+
+  memory.delete(sound.MUSIC_OWNER_KEY);
+  storageHandler({ key: sound.MUSIC_OWNER_KEY, newValue: null });
+  assert.equal(players[0].playCount, 2);
+
+  sound.stopLevelMusic();
+  assert.equal(memory.has(sound.MUSIC_OWNER_KEY), false);
 
   delete globalThis.window;
 });

@@ -2,7 +2,7 @@
 // this only reads game state and builds engine-shaped shop slots / dog waves for
 // a scripted opening. Consumed by the glue layer in app.js.
 import {
-  CAT_COAT, CAT_COAT_INFO, catStatsFor, createDog, DOG_ROLE,
+  CAT_COAT, CAT_COAT_INFO, CAT_ZONE_START, COLS, ROWS, catStatsFor, createDog, DOG_ROLE,
   MAX_FIELD_CATS, WORKER_ROLE, WORKER_INFO,
 } from './game-engine.js';
 
@@ -76,6 +76,23 @@ export const ownsAbilityCat = (game) => game.cats.some((cat) => Boolean(cat.acti
 export const inventoryHasItem = (game) => game.inventory.some(Boolean);
 export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.role === role);
 
+const TUTORIAL_LANE_ORDER = [2, 3, 1, 4, 0, 5].filter((col) => col < COLS);
+
+export function tutorialShopFighterSelector(game, coat) {
+  const shopIndex = game.shop.findIndex((slot) => slot
+    && !slot.sold
+    && slot.category === 'fighter'
+    && slot.coat === coat);
+  return shopIndex < 0 ? null : `#shop .shop-card[data-shop-index="${shopIndex}"]`;
+}
+
+export function tutorialOpenLaneSelector(game) {
+  const occupiedColumns = new Set(game.cats.map((cat) => cat.col));
+  const col = TUTORIAL_LANE_ORDER.find((candidate) => !occupiedColumns.has(candidate));
+  if (col === undefined) return null;
+  return `#board .cell[data-row="${Math.max(CAT_ZONE_START, ROWS - 1)}"][data-col="${col}"]`;
+}
+
 // --- coach steps: linear, rounds 1-3. mode 'tap' shows a Continue button;
 // mode 'gate' advances when isDone(game) is true. showWhen (optional) delays
 // the bubble until the game is in the right phase. ---
@@ -86,11 +103,14 @@ export const CORE_STEPS = [
   { id: 'r1-scout', round: 1, mode: 'tap', spotlight: '#dog-preview-grid',
     text: "This Scout Report shows which dogs are coming. Check it each round so you buy the right defenders." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
-    dragFrom: '#shop .pet-draggable', dragTo: '#board .cell[data-row="13"][data-col="2"]',
+    dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
+    dragTo: tutorialOpenLaneSelector,
+    mutedRegion: '.dog-preview-wing',
     text: "You have 10 gold and cats cost 3. Drag Purrcy Pew-Pew from the shop onto the battlefield.",
     isDone: (g) => catOnBoard(g, CAT_COAT.ORANGE) },
   { id: 'r1-buy2', round: 1, mode: 'gate', spotlight: '#shop',
-    dragFrom: '#shop .pet-draggable', dragTo: '#board .cell[data-row="13"][data-col="3"]',
+    dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
+    dragTo: tutorialOpenLaneSelector,
     text: "Purrcy only shoots straight up his own lane. Grab a second Purrcy and cover another lane.",
     isDone: (g) => boardCatCount(g) >= 2 },
   { id: 'r1-refresh', round: 1, mode: 'gate', spotlight: '#refresh',

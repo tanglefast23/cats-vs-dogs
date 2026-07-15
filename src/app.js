@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
-import { unlockAudio, playUiClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -90,6 +90,7 @@ const glossaryModalEl = $('#glossary-modal');
 const soundToggleEl = $('#setting-sound');
 const tutorialOverlayEl = $('#tutorial-overlay');
 const tutorialSpotlightEl = $('#tutorial-spotlight');
+const tutorialMutedRegionEl = $('#tutorial-muted-region');
 const tutorialBubbleEl = $('#tutorial-bubble');
 const tutorialTextEl = $('#tutorial-text');
 const tutorialNextEl = $('#tutorial-next');
@@ -319,6 +320,7 @@ function renderShop() {
 
     const button = document.createElement('button');
     button.className = 'shop-card';
+    button.dataset.shopIndex = String(index);
     button.disabled = !interactive;
     button.setAttribute('aria-disabled', canBuy ? 'false' : 'true');
     button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
@@ -350,7 +352,7 @@ function renderShop() {
         : `Drag ${info.name} onto the battlefield or the Cat Workbench.`;
       $('#message').textContent = game.message;
     });
-    bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
+    if (interactive) bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
     bindTooltip(button, () => isWorker ? workerTooltipInfo(slot, info) : catTooltipInfo(slot));
 
     const save = document.createElement('button');
@@ -1176,19 +1178,18 @@ function productionStation(worker, index) {
     const workVisual = productionWorkVisual(worker.role);
     if (workVisual && game.phase === 'prep' && !playing) {
       station.classList.add('is-working', `work-${workVisual}`);
-      const workAction = document.createElement('span');
-      workAction.className = `work-action work-${workVisual}`;
-      workAction.setAttribute('aria-hidden', 'true');
-      if (workVisual === 'stir') {
-        workAction.innerHTML = '<i class="cook-spoon"></i><i class="cook-steam steam-one"></i><i class="cook-steam steam-two"></i>';
-      } else if (workVisual === 'coin') {
-        workAction.innerHTML = '<i class="trade-coin">●</i><i class="trade-spark trade-spark-one">✦</i><i class="trade-spark trade-spark-two">✦</i>';
-      } else if (workVisual === 'hammer') {
-        workAction.innerHTML = '<i class="forge-hammer"></i><i class="forge-spark spark-one"></i><i class="forge-spark spark-two"></i><i class="forge-spark spark-three"></i>';
-      } else if (workVisual === 'polish') {
-        workAction.innerHTML = '<i class="polish-cloth"></i><i class="armour-glint glint-one">✦</i><i class="armour-glint glint-two">✦</i>';
+      const workActionMarkup = {
+        coin: '<i class="trade-coin">●</i><i class="trade-spark trade-spark-one">✦</i><i class="trade-spark trade-spark-two">✦</i>',
+        hammer: '<i class="forge-hammer"></i><i class="forge-spark spark-one"></i><i class="forge-spark spark-two"></i><i class="forge-spark spark-three"></i>',
+        polish: '<i class="polish-cloth"></i><i class="armour-glint glint-one">✦</i><i class="armour-glint glint-two">✦</i>',
+      }[workVisual];
+      if (workActionMarkup) {
+        const workAction = document.createElement('span');
+        workAction.className = `work-action work-${workVisual}`;
+        workAction.setAttribute('aria-hidden', 'true');
+        workAction.innerHTML = workActionMarkup;
+        station.append(workAction);
       }
-      station.append(workAction);
     }
   }
   return station;
@@ -1697,6 +1698,9 @@ function renderHud() {
   }
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
+  if (!tutorialActive || game.round !== 1 || game.phase !== 'prep') {
+    doneButton.classList.remove('tutorial-start-cue');
+  }
   doneButton.hidden = game.phase === 'prep' && game.cats.length === 0;
   doneButton.disabled = playing || (!canContinueTactics && (game.phase !== 'prep' || game.cats.length === 0));
   $('#done-label').textContent = canContinueTactics
@@ -2660,7 +2664,7 @@ function closeGlossary() {
 // dim: darken the rest of the screen (only for informational steps). showSpotlight:
 // draw the ring on `selector` (off for drag steps, which light source+target instead).
 function positionTutorialOverlay(selector, showContinue, opts = {}) {
-  const { dim = true, showSpotlight = true } = opts;
+  const { dim = true, showSpotlight = true, mutedRegion = null } = opts;
   const target = selector ? document.querySelector(selector) : null;
   const pad = 8;
   if (target && showSpotlight) {
@@ -2673,6 +2677,17 @@ function positionTutorialOverlay(selector, showContinue, opts = {}) {
     tutorialSpotlightEl.style.height = `${r.height + pad * 2}px`;
   } else {
     tutorialSpotlightEl.style.display = 'none';
+  }
+  const mutedTarget = mutedRegion ? document.querySelector(mutedRegion) : null;
+  if (mutedTarget) {
+    const r = mutedTarget.getBoundingClientRect();
+    tutorialMutedRegionEl.hidden = false;
+    tutorialMutedRegionEl.style.left = `${r.left}px`;
+    tutorialMutedRegionEl.style.top = `${r.top}px`;
+    tutorialMutedRegionEl.style.width = `${r.width}px`;
+    tutorialMutedRegionEl.style.height = `${r.height}px`;
+  } else {
+    tutorialMutedRegionEl.hidden = true;
   }
   // Bubble anchors to `selector` even when the ring is hidden (drag steps).
   if (target) {
@@ -2784,6 +2799,7 @@ function startTutorial() {
 function endTutorial() {
   tutorialActive = false;
   tutorialCurrentTip = null;
+  $('#done')?.classList.remove('tutorial-start-cue');
   hideTutorialOverlay();
 }
 
@@ -2835,10 +2851,13 @@ function syncTutorial() {
   if (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
     if (!step.showWhen || step.showWhen(game)) {
-      const isDrag = !!(step.dragFrom && step.dragTo);
+      $('#done')?.classList.toggle('tutorial-start-cue', step.id === 'r1-start');
+      const dragFrom = typeof step.dragFrom === 'function' ? step.dragFrom(game) : step.dragFrom;
+      const dragTo = typeof step.dragTo === 'function' ? step.dragTo(game) : step.dragTo;
+      const isDrag = !!(dragFrom && dragTo);
       showTutorialBubble(step.text, step.spotlight, step.mode === 'tap',
-        { dim: step.mode === 'tap', showSpotlight: !isDrag });
-      if (isDrag) showDragHint(step.dragFrom, step.dragTo);
+        { dim: step.mode === 'tap', showSpotlight: !isDrag, mutedRegion: step.mutedRegion });
+      if (isDrag) showDragHint(dragFrom, dragTo);
       else hideDragHint();
       return;
     }
@@ -2882,6 +2901,7 @@ function render() {
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const WAVE_BANNER_READ_MS = 2400;
 
 async function runCombatSection() {
   // Take the roll call before resolving: the engine drops the dead as it goes, and the
@@ -2896,7 +2916,7 @@ async function runCombatSection() {
 }
 
 /** Drop-in banner naming the wave and what just walked through the gate. */
-function announceWave() {
+async function announceWave() {
   const banner = $('#wave-banner');
   if (!banner) return;
   const fresh = game.dogs.filter((dog) => dog.row === 0);
@@ -2908,9 +2928,16 @@ function announceWave() {
     const name = DOG_ROLE_INFO[role]?.name ?? 'Dog';
     return `${count > 1 ? `${count}× ` : ''}${name.toUpperCase()}`;
   });
-  banner.innerHTML = `WAVE ${game.round} · ${parts.join(' + ') || 'INCOMING'}`;
+  banner.innerHTML = `<b>WAVE ${game.round}</b> · ${parts.join(' + ') || 'INCOMING'}`;
+  banner.classList.remove('is-exiting');
   banner.hidden = false;
-  window.setTimeout(() => { banner.hidden = true; }, Math.round(1300 / combatSpeed));
+  await wait(WAVE_BANNER_READ_MS);
+  await waitForResume();
+  banner.classList.add('is-exiting');
+  await Promise.all(banner.getAnimations({ subtree: true })
+    .map((animation) => animation.finished.catch(() => {})));
+  banner.hidden = true;
+  banner.classList.remove('is-exiting');
 }
 
 async function playRound() {
@@ -2924,8 +2951,7 @@ async function playRound() {
     if (tutorialActive) applyTutorialWave();
     game = startRound(game);
     render();
-    announceWave();
-    await wait(Math.round(650 / combatSpeed));
+    await announceWave();
     await waitForResume();
   } else {
     game = continueCombat(game);
@@ -2993,19 +3019,22 @@ window.addEventListener('resize', () => { if (tutorialActive) { dragHintKey = nu
 window.addEventListener('click', (event) => {
   const control = event.target?.closest?.('button, input[type="checkbox"], [role="button"]');
   if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
+  if (control.id === 'refresh') return;
   playUiClick();
 });
 
 $('#refresh').addEventListener('click', () => {
+  const previousGame = game;
   if (tutorialActive) {
-    const before = game.gold;
+    const previousGold = game.gold;
     game = refreshShop(game);
-    game.gold = before; // free reroll while learning
+    game.gold = previousGold; // free reroll while learning
     const scripted = tutorialShopAfterRefresh(game.round);
     if (scripted) game.shop = scripted;
   } else {
     game = refreshShop(game);
   }
+  if (game !== previousGame) playRefreshClick();
   selected = null;
   render();
 });

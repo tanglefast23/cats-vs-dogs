@@ -508,14 +508,23 @@ export function drawWorker(canvas, role = 'cook', level = 1) {
 export function drawStation(canvas, role = 'cook') {
   const ctx = prepare(canvas);
   const outline = '#172b36';
-  px(ctx, '#a87b52', 0, 23, 32, 9); px(ctx, '#714832', 0, 28, 32, 4);
   if (role === 'cook') {
-    px(ctx, '#d84a45', 10, 20, 4, 7); px(ctx, '#ff9e3d', 14, 17, 5, 10); px(ctx, '#ffe05b', 17, 21, 4, 6);
-    px(ctx, outline, 8, 9, 17, 10); px(ctx, '#4f5860', 9, 10, 15, 8); px(ctx, '#89959a', 11, 10, 11, 3);
+    // One compact enamel oven: stovetop, controls, handle, and a warm dark door.
+    px(ctx, outline, 8, 2, 16, 3); px(ctx, '#4f5d60', 9, 3, 6, 1); px(ctx, '#4f5d60', 17, 3, 6, 1);
+    px(ctx, outline, 6, 5, 20, 25); px(ctx, '#9aa5a5', 7, 6, 18, 23);
+    px(ctx, '#d8ddd4', 8, 7, 16, 5);
+    px(ctx, outline, 10, 8, 2, 2); px(ctx, '#f1c94d', 10, 8, 1, 1);
+    px(ctx, outline, 20, 8, 2, 2); px(ctx, '#f1c94d', 20, 8, 1, 1);
+    px(ctx, outline, 9, 13, 14, 2); px(ctx, '#d8ddd4', 10, 13, 12, 1);
+    px(ctx, outline, 8, 16, 16, 11); px(ctx, '#3e4b50', 10, 18, 12, 7);
+    px(ctx, '#7f4e35', 11, 22, 10, 2); px(ctx, '#e87832', 14, 22, 4, 1);
+    px(ctx, outline, 8, 29, 4, 3); px(ctx, outline, 20, 29, 4, 3);
   } else if (role === 'trader') {
+    px(ctx, '#a87b52', 0, 23, 32, 9); px(ctx, '#714832', 0, 28, 32, 4);
     px(ctx, outline, 4, 8, 24, 17); px(ctx, '#b96f42', 5, 9, 22, 15); px(ctx, '#f3d27b', 7, 11, 18, 5);
     px(ctx, '#d84a45', 3, 4, 26, 6); px(ctx, '#f2cf4a', 13, 17, 6, 6);
   } else if (role === 'weaponsmith') {
+    px(ctx, '#a87b52', 0, 23, 32, 9); px(ctx, '#714832', 0, 28, 32, 4);
     // Broad weapon anvil, with a hot blade blank resting on its face.
     px(ctx, outline, 2, 11, 28, 8); px(ctx, '#68777d', 3, 12, 26, 6);
     px(ctx, '#b9c5c5', 5, 12, 20, 2); px(ctx, '#3e4c52', 4, 17, 23, 2);
@@ -523,6 +532,7 @@ export function drawStation(canvas, role = 'cook') {
     px(ctx, outline, 8, 24, 18, 4); px(ctx, '#49565b', 9, 24, 16, 3);
     px(ctx, '#ffb33d', 8, 9, 14, 3); px(ctx, '#fff17a', 10, 9, 8, 1); px(ctx, '#d85a32', 21, 10, 5, 2);
   } else {
+    px(ctx, '#a87b52', 0, 23, 32, 9); px(ctx, '#714832', 0, 28, 32, 4);
     px(ctx, outline, 7, 17, 19, 8); px(ctx, '#697982', 8, 18, 17, 6);
     px(ctx, outline, 12, 8, 9, 10); px(ctx, '#8d9ba0', 13, 9, 7, 8); px(ctx, outline, 14, 25, 5, 6);
   }
