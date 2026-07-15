@@ -2293,10 +2293,13 @@ h1 span { color: var(--orange); font-size: .75em; }
 .tutorial-bubble {
   position: absolute; max-width: 300px; padding: 16px 20px; border-radius: 16px;
   background: #12203a; color: #eaf1ff; border: 1px solid #2c4066;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); pointer-events: auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  /* Body is click-through so it can never block a drop onto a spotlighted target;
+     only the buttons capture clicks (re-enabled below). */
+  pointer-events: none;
 }
 .tutorial-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
-.tutorial-next, .tutorial-skip { font: inherit; cursor: pointer; border-radius: 8px; }
+.tutorial-next, .tutorial-skip { font: inherit; cursor: pointer; border-radius: 8px; pointer-events: auto; }
 .tutorial-next { padding: 8px 16px; background: #ffd24a; color: #12203a; border: 0; font-weight: 700; }
 .tutorial-skip { margin-left: 8px; padding: 8px 12px; background: transparent; color: #8fa6c9; border: 0; font-size: 12px; }
 

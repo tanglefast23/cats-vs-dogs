@@ -2540,7 +2540,13 @@ function positionTutorialOverlay(selector, showContinue) {
     tutorialSpotlightEl.style.top = `${r.top - pad}px`;
     tutorialSpotlightEl.style.width = `${r.width + pad * 2}px`;
     tutorialSpotlightEl.style.height = `${r.height + pad * 2}px`;
-    const bubbleTop = Math.min(r.bottom + 12, window.innerHeight - 176);
+    // Prefer below the target; if it would run off the bottom (or cover a low
+    // target like the House), flip above so the spotlighted target stays visible.
+    const bubbleH = tutorialBubbleEl.offsetHeight || 140;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const bubbleTop = spaceBelow > bubbleH + 24
+      ? r.bottom + 12
+      : Math.max(12, r.top - bubbleH - 12);
     const bubbleLeft = Math.min(Math.max(12, r.left), window.innerWidth - 320);
     tutorialBubbleEl.style.top = `${bubbleTop}px`;
     tutorialBubbleEl.style.left = `${bubbleLeft}px`;
@@ -2608,6 +2614,12 @@ function applyTutorialRound() {
   if (game.round > 4) { endTutorial(); return; }
   const shop = tutorialShop(game.round);
   if (shop) game.shop = shop;
+  // Round 3 teaches healing: leave the strongest cat lightly wounded (persisted
+  // "damage" from the advancing pack) so one Whisker treat fully patches it.
+  if (game.round === 3) {
+    const front = [...game.cats].sort((a, b) => b.level - a.level)[0];
+    if (front && front.hp === front.maxHp) front.hp = Math.max(1, front.maxHp - 2);
+  }
 }
 
 // Called at the tail of every render() while the tutorial is active.

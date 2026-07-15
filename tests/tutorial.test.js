@@ -39,17 +39,14 @@ test('tutorial shops have exactly three slots and the right guarantees', () => {
   assert.equal(tutorialShop(3), null, 'unscripted rounds return null');
 });
 
-test('tutorialWave scripts R1 in the covered lanes and R3 as one close biter', () => {
+test('tutorialWave scripts R1 in the covered lanes; other rounds use the normal wave', () => {
   const r1 = tutorialWave(1, [2, 4]);
   assert.equal(r1.length, 2);
   assert.deepEqual(r1.map((d) => d.col).sort(), [2, 4]);
   assert.ok(r1.every((d) => d.row === 0));
 
-  const r3 = tutorialWave(3, [3]);
-  assert.equal(r3.length, 1);
-  assert.equal(r3[0].col, 3);
-  assert.ok(r3[0].row > 0 && r3[0].row < 10, 'spawns close, above the cat zone');
-
+  // R3's heal is staged via a scripted persisted wound (app.js), not a wave dog.
+  assert.equal(tutorialWave(3, [3]), null);
   assert.equal(tutorialWave(2, [1]), null);
 });
 

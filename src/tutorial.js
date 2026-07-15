@@ -57,10 +57,10 @@ export function tutorialWave(round, catColumns = []) {
     const cols = catColumns.length ? catColumns.slice(0, 2) : [2, 3];
     return cols.map((col) => createDog(1, 0, col, DOG_ROLE.SCRUFFY));
   }
-  if (round === 3) {
-    const col = catColumns[0] ?? 2;
-    return [createDog(1, 8, col, DOG_ROLE.SCRUFFY)]; // close range → guaranteed bite
-  }
+  // R3's heal lesson is staged via a scripted persisted wound (see app.js
+  // applyTutorialRound), not a biter — the strong merged cat would one-shot any
+  // gentle dog before it could land a bite, and a survivor only bites after the
+  // pause. So R3 uses the normal wave.
   return null;
 }
 
@@ -116,15 +116,13 @@ export const CORE_STEPS = [
   { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep',
     text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
 
-  // Round 3 — production payoff (heal), staged
-  { id: 'r3-bite', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => anyWoundedCat(g),
-    text: "A dog got through and bit your cat! Wounds stick between rounds — patch it up." },
-  { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#tactics-panel', showWhen: (g) => g.phase === 'tactics',
-    text: "In the pause, drag Whisker's treat from storage onto the hurt cat — heal +2.",
+  // Round 3 — production payoff (heal). A small wound persists from the advancing
+  // pack (scripted in app.js), so one Whisker treat fully patches it.
+  { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
+    text: "One of your cats is still hurt — wounds carry over between rounds. Let's patch it up." },
+  { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep',
+    text: "Drag Whisker's treat from House Storage onto the hurt cat — heal +2. That's the payoff of production.",
     isDone: (g) => !anyWoundedCat(g) },
-  { id: 'r3-continue', round: 3, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'tactics',
-    text: "That's the whole loop: produce → collect → use it when it counts. Continue the fight.",
-    isDone: (g) => g.phase !== 'tactics' },
 ];
 
 // --- just-in-time tips: shown once each, one at a time, when `when` first holds ---
