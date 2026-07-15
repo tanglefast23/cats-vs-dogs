@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
-import { unlockAudio, playCatDrop, playHit, playCollection, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
+import { unlockAudio, playCatDrop, playHit, playCollection, playItemUse, isSoundEnabled, setSoundEnabled, loadSoundEnabled } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -874,6 +874,63 @@ function applyDropAction(action, source) {
   return game !== before;
 }
 
+// Per-item flourish when a production item is used on a cat.
+function itemUseKeyframes(kind) {
+  if (kind === 'armour') {
+    return { frames: [
+      { offset: 0,    opacity: 0, transform: 'translateY(-34px) scale(0.9)' },
+      { offset: 0.22, opacity: 1, transform: 'translateY(-34px) scale(1.18)' },
+      { offset: 0.46, opacity: 1, transform: 'translateY(-30px) scale(1.30)' },
+      { offset: 0.60, opacity: 1, transform: 'translateY(2px) scale(1.0)' },   // slam down
+      { offset: 0.70, opacity: 1, transform: 'translateY(4px) scale(0.9)' },   // impact squash
+      { offset: 0.85, opacity: 0.8, transform: 'translateY(0) scale(1.06)' },
+      { offset: 1,    opacity: 0, transform: 'translateY(0) scale(1.14)' },    // merge into the cat
+    ], opts: { duration: 780, easing: 'cubic-bezier(.3,.1,.3,1.4)' } };
+  }
+  if (kind === 'weapon') {
+    return { frames: [
+      { offset: 0,    opacity: 0, transform: 'translate(8px,-12px) rotate(-48deg) scale(0.85)' },
+      { offset: 0.12, opacity: 1, transform: 'translate(8px,-12px) rotate(-48deg) scale(1)' },
+      { offset: 0.28, opacity: 1, transform: 'translate(6px,-10px) rotate(38deg)' },   // swing
+      { offset: 0.44, opacity: 1, transform: 'translate(6px,-10px) rotate(-30deg)' },  // swing
+      { offset: 0.60, opacity: 1, transform: 'translate(6px,-10px) rotate(30deg)' },   // swing
+      { offset: 0.74, opacity: 1, transform: 'translate(0,4px) rotate(0deg) scale(1.12)' }, // slam into paw
+      { offset: 0.86, opacity: 1, transform: 'translate(0,4px) rotate(0deg) scale(0.98)' },
+      { offset: 1,    opacity: 0, transform: 'translate(0,2px) rotate(0deg) scale(0.85)' },
+    ], opts: { duration: 820, easing: 'ease-in-out' } };
+  }
+  // food: chomps that eat the treat away from the right, then a crumb poof.
+  return { frames: [
+    { offset: 0,    opacity: 0, transform: 'translateY(-6px) scale(0.6)',  clipPath: 'inset(0 0 0 0)' },
+    { offset: 0.12, opacity: 1, transform: 'translateY(-6px) scale(1.1)',  clipPath: 'inset(0 0 0 0)' },
+    { offset: 0.32, opacity: 1, transform: 'translateY(-4px) scale(0.9)',  clipPath: 'inset(0 34% 0 0)' },
+    { offset: 0.48, opacity: 1, transform: 'translateY(-4px) scale(1.02)', clipPath: 'inset(0 34% 0 0)' },
+    { offset: 0.64, opacity: 1, transform: 'translateY(-3px) scale(0.86)', clipPath: 'inset(0 66% 0 0)' },
+    { offset: 0.82, opacity: 0.9, transform: 'translateY(-8px) scale(0.9)', clipPath: 'inset(0 84% 0 0)' },
+    { offset: 1,    opacity: 0, transform: 'translateY(-18px) scale(0.8)', clipPath: 'inset(0 100% 0 0)' },
+  ], opts: { duration: 900, easing: 'ease-in-out' } };
+}
+
+function playItemUseEffect(kind, targetId, tier) {
+  playItemUse(kind);
+  if (prefersReducedMotion) return;
+  const catEl = findUnitElement(targetId);
+  if (!catEl) return;
+  const r = catEl.getBoundingClientRect();
+  const wrap = document.createElement('div');
+  wrap.className = 'item-use-fx';
+  wrap.style.left = `${r.left + r.width / 2}px`;
+  wrap.style.top = `${r.top + r.height / 2}px`;
+  const inner = document.createElement('div');
+  inner.className = 'item-use-fx-inner';
+  inner.append(unitCanvas('item', { kind, tier }));
+  wrap.append(inner);
+  document.body.append(wrap);
+  const { frames, opts } = itemUseKeyframes(kind);
+  const animation = inner.animate(frames, opts);
+  animation.finished.then(() => wrap.remove()).catch(() => wrap.remove());
+}
+
 function showDropWeight(action, descriptor) {
   if (action.type === 'equip') {
     const cell = upgradeAnchor('cat', action.targetId);
@@ -989,6 +1046,10 @@ async function finishDrag(event, cancelled = false) {
     if (isBattlefieldDropAction(action)) playCatDrop();
   }
   render();
+  if (changed && (action.type === 'use-food' || action.type === 'equip')) {
+    playItemUseEffect(action.type === 'use-food' ? 'food' : state.source.itemKind,
+      action.targetId, state.source.tier ?? 1);
+  }
   if (changed && action.type === 'sell') showAdoptionFeedback(state.cat, action.value);
   else if (changed && action.type !== 'merge') showDropWeight(action, target.descriptor);
 }
