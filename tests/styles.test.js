@@ -41,6 +41,21 @@ test('Knotty yarn stays tied after cinching and has a separate fade phase', () =
   assert.match(app, /restoreActiveTethers\(\);/);
 });
 
+test('ranged cats recoil on launch and Laserpaw braces against the beam', () => {
+  assert.match(app, /showAttackRecoil\(event, signature\);/);
+  assert.match(app, /showAttackRecoil\(primary, signature, \{ durationMs: timing\.blastMs \}\);/);
+  assert.match(app, /phase: 'charge',[\s\S]*durationMs: timing\.beamChargeMs/s);
+  assert.match(css, /\.unit\.attack-recoil-standard\s*{[^}]*cat-launch-standard/s);
+  assert.match(css, /\.unit\.attack-recoil-laser\s*{[^}]*cat-laser-pressure/s);
+  assert.match(css, /@keyframes cat-laser-pressure\s*{[\s\S]*var\(--attack-recoil-x\)[\s\S]*var\(--attack-recoil-half-x\)/s);
+  assert.match(css, /\.backblast-laser\s*{[^}]*animation-name:\s*laser-backblast/s);
+});
+
+test('launch recoil respects reduced-motion preferences', () => {
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*\.unit\[class\*="attack-recoil-"\][\s\S]*animation:\s*none/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*\.launch-backblast\s*{\s*display:\s*none;/s);
+});
+
 test('repositionable cats use a separate faint tutorial glow', () => {
   assert.match(css, /#tutorial-focus-highlights,\s*\.tutorial-focus-highlight\s*{[^}]*pointer-events:\s*none/s);
   assert.match(css, /\.tutorial-focus-highlight\s*{[^}]*animation:\s*tutorial-focus-glow 1\.6s/s);

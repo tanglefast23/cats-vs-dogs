@@ -2,15 +2,22 @@
 import { DROP_IMPACT } from './drag-drop.js';
 
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
+export const SOUND_VOLUME_SETTING_KEY = 'cvd-sound-volume';
+export const MUSIC_VOLUME_SETTING_KEY = 'cvd-music-volume';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
 export const LEVEL_MUSIC_DURATION_SECONDS = 180;
-export const LEVEL_MUSIC_VOLUME = 0.4;
+export const DEFAULT_VOLUME = 50;
+export const SOUND_OUTPUT_CAP = 0.8;
+export const MUSIC_OUTPUT_CAP = 0.4;
+export const LEVEL_MUSIC_VOLUME = MUSIC_OUTPUT_CAP;
 export const UI_CLICK_VOLUME = 0.024;
 
 let audioCtx = null;
 let unlocked = false;
-let soundEnabled = true;
+let soundVolume = DEFAULT_VOLUME;
+let musicVolume = DEFAULT_VOLUME;
+let soundEnabled = soundVolume > 0;
 let levelMusic = null;
 let levelMusicRequested = false;
 let ownsMusic = false;
@@ -45,6 +52,20 @@ function isAutomatedBrowser() {
   return getWindow()?.navigator?.webdriver === true;
 }
 
+function normalizeVolume(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_VOLUME;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+}
+
+function soundOutputGain(recipeVolume) {
+  return Math.min(1, Math.max(0.0001, recipeVolume * (soundVolume / 100) * SOUND_OUTPUT_CAP));
+}
+
+function musicOutputGain() {
+  return MUSIC_OUTPUT_CAP * (musicVolume / 100);
+}
+
 // Only the tab-level visibility signal — embedded webviews (e.g. app preview panes)
 // report hasFocus() false and even visibilityState "hidden" while fully on screen,
 // so focus must never gate audio.
@@ -53,8 +74,12 @@ function isPageHidden() {
   return Boolean(doc && (doc.visibilityState === 'hidden' || doc.hidden === true));
 }
 
-function canUseAudioOutput() {
+function canUseSoundOutput() {
   return soundEnabled && !isAutomatedBrowser();
+}
+
+function canUseMusicOutput() {
+  return musicVolume > 0 && !isAutomatedBrowser();
 }
 
 function pauseLevelMusic() {
@@ -62,7 +87,7 @@ function pauseLevelMusic() {
 }
 
 function claimMusicOwnership() {
-  if (!canUseAudioOutput()) return false;
+  if (!canUseMusicOutput()) return false;
   const storage = getStorage();
   if (!storage) {
     ownsMusic = true;
@@ -96,7 +121,7 @@ function onMusicOwnershipChange(event) {
   if (event?.key !== MUSIC_OWNER_KEY || event.newValue === musicOwnerId) return;
   ownsMusic = false;
   pauseLevelMusic();
-  if (event.newValue === null && levelMusicRequested && canUseAudioOutput()) {
+  if (event.newValue === null && levelMusicRequested && canUseMusicOutput()) {
     startLevelMusic();
   }
 }
@@ -129,37 +154,91 @@ function unbindAudioLifecycleListeners() {
   win?.document?.removeEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
 
-export function loadSoundEnabled() {
+export function loadVolumeSettings() {
   const storage = getStorage();
-  if (!storage) return soundEnabled;
-  const raw = storage.getItem(SOUND_SETTING_KEY);
-  if (raw === null) return true;
-  soundEnabled = raw !== '0' && raw !== 'false';
-  return soundEnabled;
+  if (!storage) return { sound: soundVolume, music: musicVolume };
+
+  let fallback = DEFAULT_VOLUME;
+  try {
+    const legacy = storage.getItem(SOUND_SETTING_KEY);
+    if (legacy === '0' || legacy === 'false') fallback = 0;
+    const storedSound = storage.getItem(SOUND_VOLUME_SETTING_KEY);
+    const storedMusic = storage.getItem(MUSIC_VOLUME_SETTING_KEY);
+    soundVolume = storedSound === null ? fallback : normalizeVolume(storedSound);
+    musicVolume = storedMusic === null ? fallback : normalizeVolume(storedMusic);
+  } catch {
+    // Private mode / quota — retain the in-memory values.
+  }
+
+  soundEnabled = soundVolume > 0;
+  if (levelMusic) levelMusic.volume = musicOutputGain();
+  return { sound: soundVolume, music: musicVolume };
+}
+
+export function getSoundVolume() {
+  return soundVolume;
+}
+
+export function getMusicVolume() {
+  return musicVolume;
+}
+
+function storeVolume(key, value) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(key, String(value));
+  } catch {
+    // Private mode / quota — keep the in-memory value.
+  }
+}
+
+export function setSoundVolume(value) {
+  soundVolume = normalizeVolume(value);
+  soundEnabled = soundVolume > 0;
+  storeVolume(SOUND_VOLUME_SETTING_KEY, soundVolume);
+  if (soundEnabled) unlockAudio();
+  return soundVolume;
+}
+
+export function setMusicVolume(value) {
+  const wasMuted = musicVolume === 0;
+  musicVolume = normalizeVolume(value);
+  storeVolume(MUSIC_VOLUME_SETTING_KEY, musicVolume);
+  if (levelMusic) levelMusic.volume = musicOutputGain();
+
+  if (musicVolume === 0) {
+    releaseMusicOwnership();
+    pauseLevelMusic();
+  } else if (wasMuted && levelMusicRequested) {
+    startLevelMusic();
+  }
+  return musicVolume;
+}
+
+// Compatibility for older callers and the former shared checkbox setting.
+export function loadSoundEnabled() {
+  loadVolumeSettings();
+  return isSoundEnabled();
 }
 
 export function isSoundEnabled() {
-  return soundEnabled;
+  return soundVolume > 0 || musicVolume > 0;
 }
 
 export function setSoundEnabled(enabled) {
-  soundEnabled = Boolean(enabled);
+  const nextVolume = enabled ? DEFAULT_VOLUME : 0;
   const storage = getStorage();
   if (storage) {
     try {
-      storage.setItem(SOUND_SETTING_KEY, soundEnabled ? '1' : '0');
+      storage.setItem(SOUND_SETTING_KEY, enabled ? '1' : '0');
     } catch {
       // Private mode / quota — keep in-memory only.
     }
   }
-  if (soundEnabled) {
-    unlockAudio();
-    if (levelMusicRequested) startLevelMusic();
-  } else {
-    releaseMusicOwnership();
-    pauseLevelMusic();
-  }
-  return soundEnabled;
+  setSoundVolume(nextVolume);
+  setMusicVolume(nextVolume);
+  return isSoundEnabled();
 }
 
 function musicPlayer() {
@@ -169,7 +248,7 @@ function musicPlayer() {
   levelMusic = new win.Audio(LEVEL_MUSIC_URL);
   levelMusic.loop = true;
   levelMusic.preload = 'auto';
-  levelMusic.volume = LEVEL_MUSIC_VOLUME;
+  levelMusic.volume = musicOutputGain();
   return levelMusic;
 }
 
@@ -202,7 +281,7 @@ export function stopLevelMusic() {
 
 function context() {
   const win = getWindow();
-  if (!win || !canUseAudioOutput()) return null;
+  if (!win || !canUseSoundOutput()) return null;
   const AC = win.AudioContext || win.webkitAudioContext;
   if (!AC) return null;
   if (!audioCtx) audioCtx = new AC();
@@ -244,7 +323,7 @@ function tone({
   }
 
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + attack);
+  gain.gain.exponentialRampToValueAtTime(soundOutputGain(volume), now + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(attack + 0.01, duration - decay));
 
   osc.connect(gain);
@@ -273,7 +352,7 @@ function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200 } = {}) 
   filter.frequency.value = filterFreq;
   const gain = ctx.createGain();
   const now = ctx.currentTime;
-  gain.gain.setValueAtTime(volume, now);
+  gain.gain.setValueAtTime(soundOutputGain(volume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   source.connect(filter);
@@ -530,7 +609,7 @@ export function isAudioUnlocked() {
 }
 
 // Initialize from storage once this module loads in the browser.
-loadSoundEnabled();
+loadVolumeSettings();
 bindAudioLifecycleListeners();
 
 if (import.meta.hot) {

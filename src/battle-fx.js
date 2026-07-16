@@ -54,13 +54,14 @@ const HOMING_SKIN_BY_COAT = Object.freeze({
  * absorbedBy — set on secondary damage. These victims are caught in the parent's blast,
  *              so they must never fire a projectile of their own. This one field is the
  *              whole bomb fix.
+ * recoil     — how the attacking cat visibly absorbs the force of launching the attack.
  * heavy      — bigger shake, deeper sound.
  */
 export const ATTACK_FX = Object.freeze({
   // ---- Cats ----------------------------------------------------------------
   // Purrcy Pew-Pew: three rapid pellets that split his damage.
   column: {
-    projectile: 'pellet', path: 'straight', muzzle: 'gunsmoke', impact: 'spark', heavy: false,
+    projectile: 'pellet', path: 'straight', muzzle: 'gunsmoke', impact: 'spark', recoil: 'rapid', heavy: false,
   },
   // Clawdius: the claw flurry, already choreographed in melee-animation.js.
   melee: {
@@ -68,36 +69,36 @@ export const ATTACK_FX = Object.freeze({
   },
   // Hissiletoe and the five specialists below it.
   homing: {
-    projectile: 'homing', path: 'homing', muzzle: null, impact: 'thump', heavy: false,
+    projectile: 'homing', path: 'homing', muzzle: null, impact: 'thump', recoil: 'standard', heavy: false,
   },
   frost: {
-    projectile: 'frost-shard', path: 'homing', muzzle: 'frost-puff', impact: 'frost', heavy: false,
+    projectile: 'frost-shard', path: 'homing', muzzle: 'frost-puff', impact: 'frost', recoil: 'standard', heavy: false,
   },
   rift: {
-    projectile: 'rift-mote', path: 'homing', muzzle: 'rift-ring', impact: 'warp', heavy: false,
+    projectile: 'rift-mote', path: 'homing', muzzle: 'rift-ring', impact: 'warp', recoil: 'standard', heavy: false,
   },
   mirage: {
-    projectile: 'mirage-card', path: 'homing', muzzle: 'card-fan', impact: 'slice', heavy: false,
+    projectile: 'mirage-card', path: 'homing', muzzle: 'card-fan', impact: 'slice', recoil: 'standard', heavy: false,
   },
   spark: {
-    projectile: 'static-spark', path: 'homing', muzzle: 'static-pop', impact: 'zap', heavy: false,
+    projectile: 'static-spark', path: 'homing', muzzle: 'static-pop', impact: 'zap', recoil: 'standard', heavy: false,
   },
   note: {
-    projectile: 'music-note', path: 'homing', muzzle: null, impact: 'chime', heavy: false,
+    projectile: 'music-note', path: 'homing', muzzle: null, impact: 'chime', recoil: 'standard', heavy: false,
   },
   // Knotty Kitty: yarn that trails a string and leaves the dog tethered.
   tangle: {
-    projectile: 'yarn', path: 'yarn-throw', muzzle: null, impact: 'wrap', tether: true, heavy: false,
+    projectile: 'yarn', path: 'yarn-throw', muzzle: null, impact: 'wrap', tether: true, recoil: 'toss', heavy: false,
   },
   // Bombay Boom's regular attack: one lobbed bomb, one target square.
   bomb: {
     projectile: 'bomb', path: 'lob', muzzle: 'fuse-spark',
-    impact: 'scorch', blast: 'single-cell', heavy: true,
+    impact: 'scorch', blast: 'single-cell', recoil: 'heavy', heavy: true,
   },
   // His once-per-battle plus bomb: centre + four orthogonal neighbours.
   'bomb-cross': {
     projectile: 'bomb', path: 'lob', muzzle: 'fuse-spark',
-    impact: 'scorch', blast: 'plus', heavy: true,
+    impact: 'scorch', blast: 'plus', recoil: 'heavy', heavy: true,
   },
   // Every dog after the first is caught in the same plus blast — never a new bomb.
   'bomb-cross-secondary': {
@@ -106,7 +107,7 @@ export const ATTACK_FX = Object.freeze({
   },
   // Laserpaw: one beam through up to three dogs, not three separate shots.
   piercing: {
-    projectile: null, path: 'beam', muzzle: 'prism-charge', impact: 'burn', heavy: true,
+    projectile: null, path: 'beam', muzzle: 'prism-charge', impact: 'burn', recoil: 'laser', heavy: true,
   },
   // Thunderpaws' storm keeps its existing bespoke choreography; this entry exists so the
   // victims still get a matching hurt reaction.
@@ -134,6 +135,19 @@ export const ATTACK_FX = Object.freeze({
     projectile: null, path: null, muzzle: null,
     impact: 'thud', absorbedBy: 'bone-bomb', heavy: false,
   },
+});
+
+/**
+ * Launch force for each ranged-cat animation, measured in fractions of one unit width.
+ * The direction is calculated per attack; these values only decide the weight. Laserpaw
+ * moves furthest because the beam keeps pressing against him after the initial blast.
+ */
+export const ATTACK_RECOIL_FX = Object.freeze({
+  rapid: Object.freeze({ distance: 0.09, backblast: 'small' }),
+  standard: Object.freeze({ distance: 0.13, backblast: 'small' }),
+  toss: Object.freeze({ distance: 0.16, backblast: 'soft' }),
+  heavy: Object.freeze({ distance: 0.20, backblast: 'heavy' }),
+  laser: Object.freeze({ distance: 0.25, backblast: 'laser' }),
 });
 
 /**
@@ -254,6 +268,23 @@ export function contactVector(fromRow, fromCol, toRow, toCol) {
   const length = Math.hypot(dx, dy);
   if (!length) return { dx: 0, dy: 1 };
   return { dx: dx / length, dy: dy / length };
+}
+
+/** The attacking cat is pushed opposite the direction its projectile travels. */
+export function attackRecoilFx(signature, fromRow, fromCol, toRow, toCol) {
+  const kind = ATTACK_FX[signature]?.recoil;
+  const profile = ATTACK_RECOIL_FX[kind];
+  if (!profile) return null;
+  const forward = contactVector(fromRow, fromCol, toRow, toCol);
+  return {
+    kind,
+    distance: profile.distance,
+    backblast: profile.backblast,
+    forwardDx: forward.dx,
+    forwardDy: forward.dy,
+    dx: -forward.dx * profile.distance,
+    dy: -forward.dy * profile.distance,
+  };
 }
 
 /** A death is simply the blow that took a living unit to zero. */

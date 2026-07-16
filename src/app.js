@@ -14,14 +14,14 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
-import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
   ATTACK_FX, HURT_FX, attackDogFx, attackSignature, attackGroupKey, blastFootprint,
-  contactVector, isKill, damageNumberFx,
+  contactVector, isKill, attackRecoilFx, damageNumberFx,
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
 import {
@@ -93,7 +93,10 @@ const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
 const settingsModalEl = $('#settings-modal');
 const glossaryModalEl = $('#glossary-modal');
-const soundToggleEl = $('#setting-sound');
+const soundVolumeEl = $('#setting-sound-volume');
+const soundVolumeValueEl = $('#setting-sound-value');
+const musicVolumeEl = $('#setting-music-volume');
+const musicVolumeValueEl = $('#setting-music-value');
 const tutorialOverlayEl = $('#tutorial-overlay');
 const tutorialSpotlightEl = $('#tutorial-spotlight');
 const tutorialMutedRegionEl = $('#tutorial-muted-region');
@@ -1797,6 +1800,11 @@ function findUnitElement(id) {
  * cats that share `style: 'homing'` get told apart.
  */
 let fxUnits = new Map();
+const attackRecoilTimers = new WeakMap();
+const ATTACK_RECOIL_CLASSES = Object.freeze([
+  'attack-recoil-charge', 'attack-recoil-rapid', 'attack-recoil-standard',
+  'attack-recoil-toss', 'attack-recoil-heavy', 'attack-recoil-laser',
+]);
 
 function snapshotUnits(state) {
   fxUnits = new Map();
@@ -1968,6 +1976,64 @@ function primaryOf(group) {
   }) ?? group.events[0];
 }
 
+function clearAttackRecoil(unit) {
+  if (!unit) return;
+  window.clearTimeout(attackRecoilTimers.get(unit));
+  attackRecoilTimers.delete(unit);
+  unit.classList.remove(...ATTACK_RECOIL_CLASSES);
+}
+
+/** A little dust/energy wake behind the cat makes the backwards movement read as force. */
+function showLaunchBackblast(event, recoil, durationMs) {
+  const origin = cellCenter(event.fromRow, event.fromCol ?? event.col);
+  const rearDx = recoil.dx / recoil.distance;
+  const rearDy = recoil.dy / recoil.distance;
+  const backblast = effectAtPercent(
+    `launch-backblast backblast-${recoil.backblast}`,
+    origin.xPercent + rearDx * (100 / COLS) * 0.26,
+    origin.yPercent + rearDy * (100 / ROWS) * 0.26,
+  );
+  const angle = (Math.atan2(rearDy, rearDx) * 180) / Math.PI;
+  const visibleMs = recoil.kind === 'laser' ? durationMs : Math.min(durationMs, timing.impactMs);
+  backblast.style.setProperty('--backblast-angle', `${angle}deg`);
+  backblast.style.setProperty('--backblast-ms', `${visibleMs}ms`);
+  window.setTimeout(() => backblast.remove(), visibleMs + 50);
+}
+
+/**
+ * Push a ranged cat opposite its attack direction. A laser has a separate charge pose,
+ * then stays under pressure for the full beam instead of playing one generic bump.
+ */
+function showAttackRecoil(event, signature, {
+  phase = 'fire',
+  durationMs = timing.impactMs,
+} = {}) {
+  if (fxUnitFor(event.from)?.kind !== 'cat') return null;
+  const fromCol = event.fromCol ?? event.col;
+  const toRow = event.aimRow ?? event.toRow;
+  const toCol = event.aimCol ?? event.col;
+  const recoil = attackRecoilFx(signature, event.fromRow, fromCol, toRow, toCol);
+  const unit = findUnitElement(event.from);
+  if (!recoil || !unit) return null;
+
+  clearAttackRecoil(unit);
+  unit.style.setProperty('--attack-recoil-x', `${recoil.dx * 100}%`);
+  unit.style.setProperty('--attack-recoil-y', `${recoil.dy * 100}%`);
+  unit.style.setProperty('--attack-recoil-half-x', `${recoil.dx * 50}%`);
+  unit.style.setProperty('--attack-recoil-half-y', `${recoil.dy * 50}%`);
+  const windupDistance = recoil.kind === 'laser' ? 0.07 : 0.04;
+  unit.style.setProperty('--attack-forward-x', `${recoil.forwardDx * windupDistance * 100}%`);
+  unit.style.setProperty('--attack-forward-y', `${recoil.forwardDy * windupDistance * 100}%`);
+  unit.style.setProperty('--attack-recoil-ms', `${durationMs}ms`);
+  void unit.offsetWidth;
+  unit.classList.add(phase === 'charge' ? 'attack-recoil-charge' : `attack-recoil-${recoil.kind}`);
+
+  if (phase === 'fire') showLaunchBackblast(event, recoil, durationMs);
+  const cleanup = window.setTimeout(() => clearAttackRecoil(unit), durationMs + 30);
+  attackRecoilTimers.set(unit, cleanup);
+  return recoil;
+}
+
 async function animateAttack(group, index) {
   const primary = primaryOf(group);
   const signature = attackSignature(primary, group.caster);
@@ -2034,6 +2100,7 @@ async function animateProjectileVolley(group, signature, fx, index) {
       ? (event.pelletIndex ?? pellet) * timing.burstStaggerMs + index * 8
       : index * timing.shotStaggerMs;
     await wait(stagger);
+    showAttackRecoil(event, signature);
     showMuzzle(fx, event.fromRow, event.fromCol ?? event.col);
 
     const durationMs = fx.path === 'homing'
@@ -2113,6 +2180,7 @@ function restoreActiveTethers() {
  */
 async function animateLobbedBlast(group, primary, signature, fx, index) {
   await wait(index * timing.shotStaggerMs);
+  showAttackRecoil(primary, signature, { durationMs: timing.blastMs });
   showMuzzle(fx, primary.fromRow, primary.fromCol ?? primary.col);
   const aimRow = primary.aimRow ?? primary.toRow;
   const aimCol = primary.aimCol ?? primary.col;
@@ -2173,6 +2241,10 @@ async function animateLobbedBlast(group, primary, signature, fx, index) {
  */
 async function animateBeam(group, primary, signature, fx, index) {
   await wait(index * timing.shotStaggerMs);
+  showAttackRecoil(primary, signature, {
+    phase: 'charge',
+    durationMs: timing.beamChargeMs,
+  });
   showMuzzle(fx, primary.fromRow, primary.fromCol ?? primary.col);
 
   const hits = group.events.filter((event) => !event.miss && event.to);
@@ -2189,6 +2261,9 @@ async function animateBeam(group, primary, signature, fx, index) {
   beam.style.setProperty('--beam-charge-ms', `${timing.beamChargeMs}ms`);
 
   await wait(timing.beamChargeMs);
+  showAttackRecoil(primary, signature, {
+    durationMs: timing.beamHoldMs + hits.length * timing.pierceStaggerMs,
+  });
   beam.classList.add('is-firing');
 
   if (!hits.length) {
@@ -3377,7 +3452,17 @@ async function playRound() {
 
 
 function syncSettingsUi() {
-  if (soundToggleEl) soundToggleEl.checked = isSoundEnabled();
+  syncVolumeControl(soundVolumeEl, soundVolumeValueEl, getSoundVolume());
+  syncVolumeControl(musicVolumeEl, musicVolumeValueEl, getMusicVolume());
+}
+
+function syncVolumeControl(input, output, volume) {
+  if (!input || !output) return;
+  input.value = String(volume);
+  input.style.setProperty('--volume-fill', `${volume}%`);
+  input.setAttribute('aria-valuetext', volume === 0 ? 'Muted' : volume === 100 ? 'Maximum' : `${volume} percent`);
+  output.textContent = `${volume}%`;
+  output.classList.toggle('is-muted', volume === 0);
 }
 
 function openSettings() {
@@ -3498,11 +3583,23 @@ $('#settings-close')?.addEventListener('click', closeSettings);
 settingsModalEl?.addEventListener('click', (event) => {
   if (event.target === settingsModalEl) closeSettings();
 });
-soundToggleEl?.addEventListener('change', () => {
-  unlockAudio();
-  setSoundEnabled(soundToggleEl.checked);
-  if (soundToggleEl.checked) playUiClick();
-  game.message = soundToggleEl.checked ? 'Sound and music on.' : 'Sound and music muted.';
+soundVolumeEl?.addEventListener('input', () => {
+  const volume = setSoundVolume(soundVolumeEl.value);
+  syncVolumeControl(soundVolumeEl, soundVolumeValueEl, volume);
+});
+soundVolumeEl?.addEventListener('change', () => {
+  const volume = getSoundVolume();
+  if (volume > 0) playUiClick();
+  game.message = volume === 0 ? 'Sound effects muted.' : `Sound effects ${volume}%.`;
+  renderHud();
+});
+musicVolumeEl?.addEventListener('input', () => {
+  const volume = setMusicVolume(musicVolumeEl.value);
+  syncVolumeControl(musicVolumeEl, musicVolumeValueEl, volume);
+});
+musicVolumeEl?.addEventListener('change', () => {
+  const volume = getMusicVolume();
+  game.message = volume === 0 ? 'Music muted.' : `Music ${volume}%.`;
   renderHud();
 });
 window.addEventListener('keydown', (event) => {
@@ -3512,7 +3609,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 
-loadSoundEnabled();
+loadVolumeSettings();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
 render();

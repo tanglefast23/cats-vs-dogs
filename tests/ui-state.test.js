@@ -796,6 +796,53 @@ test('UI click sound stays quieter than gameplay feedback', async () => {
   assert.doesNotThrow(() => sound.playUiClick());
 });
 
+test('the sound slider scales synthesized effects inside the safe output cap', async () => {
+  const peaks = [];
+  class FakeAudioContext {
+    constructor() {
+      this.currentTime = 0;
+      this.destination = {};
+      this.state = 'running';
+    }
+
+    createOscillator() {
+      return {
+        frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    }
+
+    createGain() {
+      return {
+        gain: {
+          setValueAtTime() {},
+          exponentialRampToValueAtTime(value) {
+            if (value > 0.0001) peaks.push(value);
+          },
+        },
+        connect() {},
+      };
+    }
+  }
+
+  globalThis.window = { AudioContext: FakeAudioContext };
+  const sound = await import(`../src/sound.js?sound-volume=${Date.now()}-${Math.random()}`);
+
+  sound.setSoundVolume(100);
+  sound.playUiClick();
+  const maxGain = Math.max(...peaks);
+  assert.equal(maxGain, sound.UI_CLICK_VOLUME * sound.SOUND_OUTPUT_CAP);
+
+  peaks.length = 0;
+  sound.setSoundVolume(50);
+  sound.playUiClick();
+  assert.equal(Math.max(...peaks), maxGain * 0.5);
+
+  delete globalThis.window;
+});
+
 test('refresh has its own safe mechanical click sound', async () => {
   const sound = await import('../src/sound.js');
   assert.equal(typeof sound.playRefreshClick, 'function');
@@ -875,7 +922,7 @@ test('sound helpers no-op safely without a browser audio context', async () => {
   assert.doesNotThrow(() => sound.stopLevelMusic());
 });
 
-test('sound setting can be toggled and remembered', async () => {
+test('sound and music volumes default to the midpoint and are remembered independently', async () => {
   const memory = new Map();
   globalThis.window = {
     localStorage: {
@@ -888,21 +935,45 @@ test('sound setting can be toggled and remembered', async () => {
   };
 
   const sound = await import(`../src/sound.js?settings=${Date.now()}`);
-  sound.setSoundEnabled(false);
-  assert.equal(sound.isSoundEnabled(), false);
-  assert.equal(memory.get(sound.SOUND_SETTING_KEY), '0');
+  assert.equal(sound.DEFAULT_VOLUME, 50);
+  assert.deepEqual(sound.loadVolumeSettings(), { sound: 50, music: 50 });
+
+  sound.setSoundVolume(27);
+  sound.setMusicVolume(76);
+  assert.equal(sound.getSoundVolume(), 27);
+  assert.equal(sound.getMusicVolume(), 76);
+  assert.equal(memory.get(sound.SOUND_VOLUME_SETTING_KEY), '27');
+  assert.equal(memory.get(sound.MUSIC_VOLUME_SETTING_KEY), '76');
+
+  sound.setSoundVolume(-12);
+  sound.setMusicVolume(140);
+  assert.equal(sound.getSoundVolume(), 0);
+  assert.equal(sound.getMusicVolume(), 100);
   assert.doesNotThrow(() => sound.playCatDrop());
   assert.doesNotThrow(() => sound.playHit());
 
-  sound.setSoundEnabled(true);
-  assert.equal(sound.isSoundEnabled(), true);
-  assert.equal(memory.get(sound.SOUND_SETTING_KEY), '1');
-  assert.equal(sound.loadSoundEnabled(), true);
+  assert.ok(sound.SOUND_OUTPUT_CAP <= 0.8, 'sound effects max should use a conservative cap');
+  assert.ok(sound.MUSIC_OUTPUT_CAP <= 0.4, 'music max should use a conservative cap');
 
   delete globalThis.window;
 });
 
-test('level music loops quietly and follows the shared sound setting', async () => {
+test('the old shared mute setting migrates to both volume sliders', async () => {
+  const memory = new Map([['cvd-sound-enabled', '0']]);
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (memory.has(key) ? memory.get(key) : null),
+      setItem: (key, value) => { memory.set(key, String(value)); },
+    },
+  };
+
+  const sound = await import(`../src/sound.js?legacy-settings=${Date.now()}-${Math.random()}`);
+  assert.deepEqual(sound.loadVolumeSettings(), { sound: 0, music: 0 });
+
+  delete globalThis.window;
+});
+
+test('level music loops quietly and follows its own capped volume', async () => {
   const players = [];
   class FakeAudio {
     constructor(src) {
@@ -935,13 +1006,16 @@ test('level music loops quietly and follows the shared sound setting', async () 
   assert.equal(players.length, 1);
   assert.equal(players[0].loop, true);
   assert.equal(players[0].preload, 'auto');
-  assert.equal(players[0].volume, sound.LEVEL_MUSIC_VOLUME);
-  assert.ok(sound.LEVEL_MUSIC_VOLUME >= 0.35, 'music should remain clearly audible');
+  assert.equal(players[0].volume, sound.MUSIC_OUTPUT_CAP * 0.5);
   assert.equal(players[0].playCount, 1);
 
-  sound.setSoundEnabled(false);
+  sound.setSoundVolume(0);
+  assert.equal(players[0].pauseCount, 0, 'muting effects must not mute music');
+
+  sound.setMusicVolume(0);
   assert.equal(players[0].pauseCount, 1);
-  sound.setSoundEnabled(true);
+  sound.setMusicVolume(100);
+  assert.equal(players[0].volume, sound.MUSIC_OUTPUT_CAP);
   assert.equal(players[0].playCount, 2);
 
   sound.stopLevelMusic();

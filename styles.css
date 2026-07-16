@@ -1078,6 +1078,140 @@ h1 span { color: var(--orange); font-size: .75em; }
 .storm-target-marker.is-striking { animation: storm-target-hit var(--storm-flash-ms, 360ms) steps(6) forwards; }
 .unit.storm-casting { z-index: 19; }
 .unit.storm-casting canvas { animation: storm-cat-charge .19s steps(2) infinite alternate; filter: brightness(1.5) drop-shadow(0 0 5px #fff36b) drop-shadow(0 0 11px #58ddff); }
+
+/* ---------------------------------------------------------------------------
+   Ranged-cat launch recoil. The cat leans into the shot, snaps opposite its
+   travel direction, then settles. Laserpaw braces during charge and fights the
+   beam's force for as long as it remains on screen.
+   --------------------------------------------------------------------------- */
+.unit[class*="attack-recoil-"] {
+  z-index: 19;
+  transform-origin: 50% 78%;
+  will-change: transform;
+}
+.unit.attack-recoil-rapid { animation: cat-launch-rapid var(--attack-recoil-ms, 340ms) steps(5) both; }
+.unit.attack-recoil-standard { animation: cat-launch-standard var(--attack-recoil-ms, 340ms) steps(6) both; }
+.unit.attack-recoil-toss { animation: cat-launch-toss var(--attack-recoil-ms, 340ms) steps(6) both; }
+.unit.attack-recoil-heavy { animation: cat-launch-heavy var(--attack-recoil-ms, 520ms) steps(7) both; }
+.unit.attack-recoil-charge { animation: cat-laser-brace var(--attack-recoil-ms, 240ms) steps(5) both; }
+.unit.attack-recoil-laser { animation: cat-laser-pressure var(--attack-recoil-ms, 650ms) steps(10) both; }
+
+@keyframes cat-launch-rapid {
+  0% { transform: translate(0, 0) scale(1); }
+  12% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) scale(.95, 1.05); }
+  28% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) scale(1.08, .92); }
+  58% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) scale(.98, 1.02); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes cat-launch-standard {
+  0% { transform: translate(0, 0) scale(1); }
+  14% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) scale(.94, 1.06); }
+  30% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) scale(1.1, .9); }
+  64% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) scale(.97, 1.03); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes cat-launch-toss {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  20% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) rotate(4deg) scale(.92, 1.08); }
+  38% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) rotate(-6deg) scale(1.08, .92); }
+  68% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) rotate(2deg) scale(.98, 1.02); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes cat-launch-heavy {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  18% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) rotate(3deg) scale(.9, 1.1); }
+  32% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) rotate(-5deg) scale(1.13, .87); }
+  58% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) rotate(2deg) scale(.96, 1.04); }
+  78% { transform: translate(0, 0) rotate(-1deg) scale(1.03, .97); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes cat-laser-brace {
+  0% { transform: translate(0, 0) scale(1); }
+  55% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) scale(.92, 1.08); }
+  100% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) scale(.88, 1.12); }
+}
+@keyframes cat-laser-pressure {
+  0% { transform: translate(var(--attack-forward-x), var(--attack-forward-y)) scale(.88, 1.12); }
+  10% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) rotate(-2deg) scale(1.14, .86); }
+  26% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) rotate(2deg) scale(1.04, .96); }
+  42% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) rotate(-2deg) scale(1.1, .9); }
+  58% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) rotate(2deg) scale(1.03, .97); }
+  74% { transform: translate(var(--attack-recoil-x), var(--attack-recoil-y)) rotate(-1deg) scale(1.08, .92); }
+  90% { transform: translate(var(--attack-recoil-half-x), var(--attack-recoil-half-y)) scale(.98, 1.02); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+
+.unit.attack-recoil-charge > canvas {
+  animation: laser-cat-charge-glow var(--attack-recoil-ms, 240ms) steps(5) both;
+}
+.unit.attack-recoil-laser > canvas {
+  animation: laser-cat-force-glow var(--attack-recoil-ms, 650ms) steps(8) both;
+}
+.unit.attack-recoil-laser::before {
+  content: '';
+  position: absolute;
+  inset: 8%;
+  z-index: -1;
+  border: 3px solid rgba(103, 245, 255, .78);
+  border-radius: 50%;
+  box-shadow: 0 0 10px #67f5ff, 0 0 20px rgba(239, 145, 255, .75) inset;
+  opacity: 0;
+  animation: laser-pressure-shell var(--attack-recoil-ms, 650ms) steps(8) both;
+}
+@keyframes laser-cat-charge-glow {
+  0% { filter: drop-shadow(2px 3px 0 rgba(17,38,32,.4)); }
+  100% { filter: brightness(1.35) drop-shadow(0 0 5px #67f5ff) drop-shadow(0 0 10px #ef91ff); }
+}
+@keyframes laser-cat-force-glow {
+  0%, 100% { filter: drop-shadow(2px 3px 0 rgba(17,38,32,.4)); }
+  12%, 82% { filter: brightness(1.55) drop-shadow(0 0 7px #fff) drop-shadow(0 0 14px #67f5ff) drop-shadow(0 0 19px #ef91ff); }
+}
+@keyframes laser-pressure-shell {
+  0%, 100% { opacity: 0; transform: scale(.55); }
+  12% { opacity: .9; transform: scale(1.08); }
+  28%, 72% { opacity: .45; transform: scale(.9); }
+  45%, 88% { opacity: .8; transform: scale(1.03); }
+}
+
+/* Dust for physical shots, energy wash for the laser, placed behind the cat in JS. */
+.launch-backblast {
+  position: absolute;
+  width: 28px;
+  height: 16px;
+  z-index: 13;
+  border: 3px solid #f4d7a0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 248, 220, .9) 0 20%, rgba(203, 166, 111, .68) 24% 55%, transparent 60%);
+  box-shadow: -9px 2px 0 -5px #d5b078, 9px -2px 0 -5px #fff0c5;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(.25);
+  animation: launch-backblast var(--backblast-ms, 340ms) steps(6) forwards;
+}
+.backblast-soft { border-color: #f1b7d4; background: radial-gradient(ellipse, #fff0f8 0 20%, rgba(223, 143, 190, .68) 24% 55%, transparent 60%); }
+.backblast-heavy { width: 38px; height: 21px; border-color: #e4b66e; box-shadow: -13px 3px 0 -5px #b9874b, 13px -3px 0 -5px #ffe0a0; }
+.backblast-laser {
+  width: 44px;
+  height: 24px;
+  border-color: #67f5ff;
+  background: radial-gradient(ellipse, #fff 0 12%, rgba(103, 245, 255, .88) 16% 42%, rgba(239, 145, 255, .64) 46% 66%, transparent 70%);
+  box-shadow: -15px 0 0 -6px #67f5ff, 15px 0 0 -6px #ef91ff, 0 0 18px 6px rgba(103, 245, 255, .72);
+  animation-name: laser-backblast;
+}
+@keyframes launch-backblast {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(.25); }
+  20% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1); }
+  62% { opacity: .72; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1.18); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1.55); }
+}
+@keyframes laser-backblast {
+  0%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(.35); }
+  10% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1.15); }
+  28%, 60% { opacity: .58; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(.82); }
+  43%, 78% { opacity: .95; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1.18); }
+  92% { opacity: .5; transform: translate(-50%, -50%) rotate(var(--backblast-angle, 90deg)) scale(1.35); }
+}
+
 .projectile-effect { position: absolute; width: 12px; height: 12px; border: 3px solid #a64c2c; background: #fff365; box-shadow: 0 0 0 2px #ff9f3f, 0 0 12px 5px rgba(255,245,118,.85); transform: translate(-50%, -50%); z-index: 14; }
 .projectile-effect::after { content: ''; position: absolute; left: 2px; top: 2px; width: 2px; height: 2px; background: #fff; }
 .burst-projectile {
@@ -1926,7 +2060,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 }
 .settings-modal[hidden] { display: none; }
 .settings-card {
-  width: min(360px, calc(100vw - 32px));
+  width: min(410px, calc(100vw - 32px));
   padding: 16px;
   border: 4px solid var(--ink);
   background: var(--paper);
@@ -1945,15 +2079,22 @@ h1 span { color: var(--orange); font-size: .75em; }
   letter-spacing: -1px;
 }
 .settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 10px;
   padding: 12px;
   border: 3px solid var(--ink);
   background: #eef6d8;
   box-shadow: 3px 3px 0 var(--ink);
-  cursor: pointer;
+}
+.settings-row + .settings-row {
+  margin-top: 12px;
+  background: #fff0c9;
+}
+.settings-row-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 .settings-row strong {
   display: block;
@@ -1965,15 +2106,92 @@ h1 span { color: var(--orange); font-size: .75em; }
   font-size: 10px;
   color: #4d6a52;
 }
-.settings-row input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
-  accent-color: var(--orange);
-  cursor: pointer;
+.settings-row + .settings-row small { color: #785c3f; }
+.settings-row output {
+  min-width: 54px;
+  padding: 5px 6px 4px;
+  border: 2px solid var(--ink);
+  background: #fff8dc;
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--orange-dark);
+  font-family: var(--px);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+.settings-row output.is-muted {
+  background: #d6ddce;
+  color: #53636a;
+}
+.settings-slider {
+  --slider-accent: var(--orange);
+  --slider-shadow: var(--orange-dark);
+  --volume-fill: 50%;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: pan-y;
+}
+.settings-slider-music {
+  --slider-accent: var(--green);
+  --slider-shadow: #426f39;
+}
+.settings-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 14px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(to right, var(--slider-accent) 0 var(--volume-fill), #fff8dc var(--volume-fill) 100%);
+  box-shadow: 2px 2px 0 var(--slider-shadow);
+}
+.settings-slider::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+  margin-top: -8px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #ffe66b;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.settings-slider::-moz-range-track {
+  width: 100%;
+  height: 14px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: linear-gradient(to right, var(--slider-accent) 0 var(--volume-fill), #fff8dc var(--volume-fill) 100%);
+  box-shadow: 2px 2px 0 var(--slider-shadow);
+}
+.settings-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: #ffe66b;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.settings-slider:focus-visible {
+  outline: 3px solid #ffe55d;
+  outline-offset: 3px;
+}
+.settings-range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -4px;
+  color: #5d6f65;
+  font-family: var(--px);
+  font-size: 7px;
+  line-height: 1;
 }
 .settings-hint {
-  margin: 12px 2px 0;
+  margin: 14px 2px 0;
   font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
   color: #557078;
 }
 
@@ -2514,6 +2732,9 @@ h1 span { color: var(--orange); font-size: .75em; }
   .unit.hurt.shake-soft, .unit.hurt.shake-hard, .unit.hurt.shake-rattle,
   .cell.bomb-footprint, .unit.decoy-blocking::before, .tangle-bind,
   .projectile-yarn::after, .projectile-yarn.has-tether::before { animation: none; }
+  .unit[class*="attack-recoil-"], .unit.attack-recoil-charge > canvas,
+  .unit.attack-recoil-laser > canvas, .unit.attack-recoil-laser::before { animation: none; }
+  .launch-backblast { display: none; }
   .tangle-bind.is-fading { opacity: 0; }
   .unit.hurt[class*="dog-reaction-"] canvas { animation: hurt-flash .34s steps(4); }
   .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
