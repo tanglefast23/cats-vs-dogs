@@ -193,13 +193,25 @@ test('every core step is well-formed', () => {
     assert.ok(typeof step.text === 'function' || (typeof step.text === 'string' && step.text.length > 0));
     assert.ok(['tap', 'gate'].includes(step.mode));
     if (step.mode === 'gate') assert.equal(typeof step.isDone, 'function');
-    if (step.spotlight !== null) assert.equal(typeof step.spotlight, 'string');
+    if (step.spotlight !== null) assert.ok(['string', 'function'].includes(typeof step.spotlight));
     if (step.dragFrom) assert.ok(['string', 'function'].includes(typeof step.dragFrom));
     if (step.dragTo) assert.ok(['string', 'function'].includes(typeof step.dragTo));
     if (step.dragHints) assert.equal(typeof step.dragHints, 'function');
     if (step.mutedRegion) assert.equal(typeof step.mutedRegion, 'string');
   }
   assert.equal(new Set(CORE_STEPS.map((s) => s.id)).size, CORE_STEPS.length);
+});
+
+test('round 2 start step coaches spending leftover gold before prompting Start', () => {
+  const step = CORE_STEPS.find((s) => s.id === 'r2-start');
+  const rich = { ...createGame(), gold: 7, phase: 'prep' };
+  assert.match(step.text(rich), /7 gold/);
+  assert.doesNotMatch(step.text(rich), /start the round —/i);
+  assert.equal(step.spotlight(rich), '#shop');
+
+  const spent = { ...createGame(), gold: 2, phase: 'prep' };
+  assert.match(step.text(spent), /Start the round/);
+  assert.equal(step.spotlight(spent), '#done');
 });
 
 test('the first placement lesson mutes the unrelated dog preview lane', () => {

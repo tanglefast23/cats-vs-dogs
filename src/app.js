@@ -3009,8 +3009,9 @@ function syncTutorial() {
       const text = typeof step.text === 'function'
         ? step.text(game, tutorialCompletedMergeTasks)
         : step.text;
+      const spotlight = typeof step.spotlight === 'function' ? step.spotlight(game) : step.spotlight;
       const isDrag = dragHints.length > 0;
-      showTutorialBubble(text, step.spotlight, step.mode === 'tap',
+      showTutorialBubble(text, spotlight, step.mode === 'tap',
         { dim: step.mode === 'tap', showSpotlight: !isDrag, mutedRegion: step.mutedRegion });
       if (isDrag) showDragHints(dragHints);
       else hideDragHint();

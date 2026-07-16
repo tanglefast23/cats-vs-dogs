@@ -2463,11 +2463,11 @@ h1 span { color: var(--orange); font-size: .75em; }
 /* Dim everything except the spotlight, using a huge ring shadow as the mask. */
 .tutorial-spotlight {
   position: absolute; border-radius: 12px;
-  box-shadow: 0 0 0 4px #ffd24a, 0 0 0 9999px rgba(6, 10, 20, 0.72);
+  box-shadow: 0 0 0 5px #68e7ff, 0 0 18px rgba(104, 231, 255, .9), 0 0 0 9999px rgba(6, 10, 20, 0.72);
   transition: all 180ms ease; pointer-events: none;
 }
 /* Interactive steps skip the dark mask so nothing you need is hidden. */
-.tutorial-spotlight.no-dim { box-shadow: 0 0 0 4px #ffd24a; }
+.tutorial-spotlight.no-dim { box-shadow: 0 0 0 5px #68e7ff, 0 0 18px rgba(104, 231, 255, .9); }
 .tutorial-muted-region {
   position: absolute;
   background: rgba(6, 10, 20, .68);

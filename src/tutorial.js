@@ -204,8 +204,14 @@ export const CORE_STEPS = [
       && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
     text: "Power spike! One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
-  { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep',
-    text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
+  // Text and spotlight flip once the leftover gold is spent — coach the purchase
+  // up front instead of scolding after a Start click (see onDoneClick nudge).
+  { id: 'r2-start', round: 2, mode: 'gate', showWhen: (g) => g.phase === 'prep',
+    spotlight: (g) => (g.gold >= 3 ? '#shop' : '#done'),
+    text: (g) => (g.gold >= 3
+      ? `You've still got ${g.gold} gold and unspent gold is lost — grab another cat before you start.`
+      : 'Start the round — the dogs are getting closer.'),
+    isDone: (g) => g.phase !== 'prep' },
 
   // Round 3 — production payoff (heal). A small wound persists from the advancing
   // pack (scripted in app.js), so one Whisker treat fully patches it.
