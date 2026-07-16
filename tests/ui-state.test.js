@@ -967,16 +967,12 @@ test('automated browser checks never start audible game music', async () => {
   delete globalThis.window;
 });
 
-test('background tabs pause music and resume only when visible again', async () => {
+test('hidden tabs pause music and resume when visible again', async () => {
   const players = [];
   let visibilityHandler = null;
-  let focusHandler = null;
-  let blurHandler = null;
-  let focused = false;
   const document = {
-    hidden: true,
-    visibilityState: 'hidden',
-    hasFocus: () => focused,
+    hidden: false,
+    visibilityState: 'visible',
     addEventListener(type, handler) {
       if (type === 'visibilitychange') visibilityHandler = handler;
     },
@@ -1000,35 +996,59 @@ test('background tabs pause music and resume only when visible again', async () 
   globalThis.window = {
     document,
     Audio: FakeAudio,
-    addEventListener(type, handler) {
-      if (type === 'focus') focusHandler = handler;
-      if (type === 'blur') blurHandler = handler;
-    },
+    addEventListener: () => {},
   };
 
   const sound = await import(`../src/sound.js?visibility=${Date.now()}-${Math.random()}`);
-  assert.equal(sound.startLevelMusic(), false);
-  assert.equal(players.length, 0);
-
-  focused = true;
-  document.hidden = false;
-  document.visibilityState = 'visible';
-  visibilityHandler();
+  assert.equal(sound.startLevelMusic(), true);
   assert.equal(players.length, 1);
   assert.equal(players[0].playCount, 1);
-
-  focused = false;
-  blurHandler();
-  assert.equal(players[0].pauseCount, 1);
-
-  focused = true;
-  focusHandler();
-  assert.equal(players[0].playCount, 2);
 
   document.hidden = true;
   document.visibilityState = 'hidden';
   visibilityHandler();
-  assert.equal(players[0].pauseCount, 2);
+  assert.equal(players[0].pauseCount, 1);
+
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  visibilityHandler();
+  assert.equal(players[0].playCount, 2);
+
+  delete globalThis.window;
+});
+
+test('embedded webviews that report unfocused or hidden still play music', async () => {
+  // Regression: app preview panes render the game on screen while the page
+  // reports visibilityState "hidden" and hasFocus() false — audio must not
+  // be gated on those signals or real play sessions go silent.
+  const players = [];
+  globalThis.window = {
+    document: {
+      hidden: true,
+      visibilityState: 'hidden',
+      hasFocus: () => false,
+      addEventListener: () => {},
+    },
+    Audio: class FakeAudio {
+      constructor() {
+        this.playCount = 0;
+        players.push(this);
+      }
+
+      play() {
+        this.playCount += 1;
+        return Promise.resolve();
+      }
+
+      pause() {}
+    },
+    addEventListener: () => {},
+  };
+
+  const sound = await import(`../src/sound.js?embedded=${Date.now()}-${Math.random()}`);
+  assert.equal(sound.startLevelMusic(), true);
+  assert.equal(players.length, 1);
+  assert.equal(players[0].playCount, 1);
 
   delete globalThis.window;
 });

@@ -44,15 +44,16 @@ function isAutomatedBrowser() {
   return getWindow()?.navigator?.webdriver === true;
 }
 
-function isPageVisible() {
+// Only the tab-level visibility signal — embedded webviews (e.g. app preview panes)
+// report hasFocus() false and even visibilityState "hidden" while fully on screen,
+// so focus must never gate audio.
+function isPageHidden() {
   const doc = getWindow()?.document;
-  if (!doc) return true;
-  if (doc.visibilityState === 'hidden' || doc.hidden === true) return false;
-  return typeof doc.hasFocus !== 'function' || doc.hasFocus();
+  return Boolean(doc && (doc.visibilityState === 'hidden' || doc.hidden === true));
 }
 
 function canUseAudioOutput() {
-  return soundEnabled && !isAutomatedBrowser() && isPageVisible();
+  return soundEnabled && !isAutomatedBrowser();
 }
 
 function pauseLevelMusic() {
@@ -100,7 +101,7 @@ function onMusicOwnershipChange(event) {
 }
 
 function onAudioVisibilityChange() {
-  if (!isPageVisible()) {
+  if (isPageHidden()) {
     releaseMusicOwnership();
     pauseLevelMusic();
     return;
@@ -113,20 +114,16 @@ function onPageHide() {
   pauseLevelMusic();
 }
 
-function bindAudioFocusListeners() {
+function bindAudioLifecycleListeners() {
   const win = getWindow();
   win?.addEventListener?.('storage', onMusicOwnershipChange);
-  win?.addEventListener?.('focus', onAudioVisibilityChange);
-  win?.addEventListener?.('blur', onPageHide);
   win?.addEventListener?.('pagehide', onPageHide);
   win?.document?.addEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
 
-function unbindAudioFocusListeners() {
+function unbindAudioLifecycleListeners() {
   const win = getWindow();
   win?.removeEventListener?.('storage', onMusicOwnershipChange);
-  win?.removeEventListener?.('focus', onAudioVisibilityChange);
-  win?.removeEventListener?.('blur', onPageHide);
   win?.removeEventListener?.('pagehide', onPageHide);
   win?.document?.removeEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
@@ -533,12 +530,12 @@ export function isAudioUnlocked() {
 
 // Initialize from storage once this module loads in the browser.
 loadSoundEnabled();
-bindAudioFocusListeners();
+bindAudioLifecycleListeners();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     releaseMusicOwnership();
     pauseLevelMusic();
-    unbindAudioFocusListeners();
+    unbindAudioLifecycleListeners();
   });
 }
