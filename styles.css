@@ -392,19 +392,19 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   aspect-ratio: 11 / 14;
 }
 .board-frame { position: relative; grid-column: 2; grid-row: 1 / 3; width: 100%; }
-/* Brick edging frames the house row: down both outer walls and across the
-   bottom of house + yard. */
+/* Timber encloses only the Production House. The right rail sits inside the
+   house edge so the battlefield grid remains fully visible. */
 .field-house-layout::after,
 .house-wing::after,
-.board-frame::after {
+.house-wing .production-grid::after {
   content: '';
   position: absolute;
   pointer-events: none;
 }
 .field-house-layout::after {
   left: -16px;
-  right: -16px;
-  bottom: -16px;
+  right: calc(100% * 6 / 11);
+  bottom: 0;
   height: 16px;
   background:
     repeating-linear-gradient(90deg, #4b352e 0 4px, transparent 4px 44px),
@@ -412,7 +412,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   box-shadow: 7px 8px 0 #08171e;
 }
 .house-wing::after,
-.board-frame::after {
+.house-wing .production-grid::after {
   width: 16px;
   bottom: 0;
   background:
@@ -420,7 +420,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
     linear-gradient(90deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px);
 }
 .house-wing::after { left: -16px; top: 0; }
-.board-frame::after { right: -16px; height: calc(100% / 14 * 1); }
+.house-wing .production-grid::after { right: 0; top: 0; bottom: 0; width: 16px; z-index: 6; }
 /* Broken white picket fence across the back of the yard — the dogs came through here. */
 .field-house-layout::before {
   content: '';
@@ -489,6 +489,12 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   width: 31px;
   height: 31px;
   font-size: 17px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.phase-tutorial-button.tutorial-button {
+  height: 31px;
+  padding: 0 8px;
+  font-size: 8px;
   box-shadow: 2px 2px 0 var(--ink);
 }
 .phase-hud {
@@ -613,8 +619,10 @@ body.cat-sell-dragging .next-wave-zone { pointer-events: auto; }
     linear-gradient(90deg, rgba(255,255,255,.08) 50%, transparent 50%) 0 0 / 20px 20px,
     #8b5a3c;
   box-shadow: none;
+  transform: translateY(-16px);
 }
 .house-wing .production-cell { border: 1px solid rgba(255,248,220,.5); box-shadow: none; }
+.house-wing .production-grid { position: relative; }
 .house-wing .production-cell small { display: none; }
 .house-wing .worker-slot.empty .empty-plus { font-family: var(--px); font-size: 14px; }
 .house-wing::before {
@@ -952,8 +960,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .board.ability-cast { filter: brightness(1.25) saturate(1.25); }
 @keyframes ability-target-pulse { 50% { box-shadow: inset 0 0 0 4px #8ee7ff, 0 0 12px #8ee7ff; } }
 @keyframes bomb-footprint-pulse { to { filter: brightness(1.24); } }
-/* Full-tint toast — no edge stripe; the whole card carries the state. */
-.message { min-height: 38px; margin: 0 0 7px; padding: 7px 9px; border: 2px solid var(--ink); background: #ffe9a8; box-shadow: 2px 2px 0 var(--ink); font-size: 10px; line-height: 1.4; }
 .done-button { width: 100%; border: 3px solid var(--ink); background: var(--orange); color: #fff9db; padding: 11px; box-shadow: 4px 4px 0 var(--ink); font-weight: 900; letter-spacing: 1px; cursor: pointer; text-shadow: 1px 1px var(--orange-dark); }
 .done-button[hidden] { display: none; }
 .done-button small { display: block; margin-top: 3px; font-size: 8px; color: #ffe8c4; }
@@ -2596,7 +2602,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .shop-card .stats { gap: 7px; margin: 4px 0; font-size: 11px; }
 .shop-save { padding: 5px 2px; font-size: 11px; letter-spacing: .3px; }
 
-.message { min-height: 42px; padding: 9px 10px; font-size: 12px; line-height: 1.45; }
 .done-button small { margin-top: 6px; font-size: 10px; line-height: 1.35; }
 .unit-badge { min-width: 18px; height: 18px; font-size: 10px; }
 .unit-tooltip .tooltip-attack b { font-size: 11px; }
@@ -2651,7 +2656,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .phase-control-wing .shop-card .stats { gap: 3px; margin: 2px 0; font-size: 8px; }
 .phase-control-wing .shop-save { padding: 3px 1px; font-size: 7px; }
 .phase-control-wing .workbench-grid { gap: 4px; }
-.phase-control-wing .message { min-height: 0; margin-bottom: 6px; padding: 7px; font-size: 9px; line-height: 1.35; }
 .phase-control-wing .done-button { padding: 8px 5px; font-size: 9px; letter-spacing: .4px; }
 .phase-control-wing .done-button small { margin-top: 4px; font-size: 7px; line-height: 1.3; }
 .phase-control-wing .tactics-panel {
@@ -2697,11 +2701,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
   margin-top: 7px;
   padding-top: 7px;
   border-top: 2px dashed rgba(197,235,250,.34);
-}
-.phase-control-wing.is-battle .message {
-  border-color: #071821;
-  background: #d4e9f1;
-  box-shadow: 2px 2px 0 #06141c;
 }
 @keyframes battle-live-pulse { 50% { opacity: .35; } }
 
@@ -3156,6 +3155,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   height: 38px;
   font-size: 21px;
 }
+.phase-tutorial-button.tutorial-button { height: 38px; padding-inline: 10px; font-size: 9px; }
 .phase-hud { gap: 7px; }
 .phase-hud-chip.hud-chip { min-height: 48px; padding: 5px; }
 .phase-hud-chip .hud-icon { font-size: 17px; }
@@ -3199,7 +3199,6 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .bench-slot > small { font-size: 9px; }
 .bench-slot .reserve-level { min-width: 22px; padding: 3px; font-size: 10px; }
 
-.phase-control-wing .message { margin-bottom: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
 .phase-control-wing .done-button { padding: 11px 8px; font-size: 13px; line-height: 1.35; }
 #done-label { font-size: 16px; line-height: 1.35; }
 .phase-control-wing .done-button small { margin-top: 6px; font-size: 10px; line-height: 1.45; }
@@ -3295,6 +3294,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 @media (max-width: 880px) {
   .phase-titlebar h1 { font-size: 11px; }
   .phase-settings-button.icon-button { flex-basis: 34px; width: 34px; height: 34px; }
+  .phase-tutorial-button.tutorial-button { height: 34px; padding-inline: 8px; font-size: 8px; }
   .phase-hud-chip.hud-chip { min-height: 40px; padding: 5px 3px; }
   .phase-hud-chip.hud-chip strong { font-size: 15px; }
   .phase-control-wing .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

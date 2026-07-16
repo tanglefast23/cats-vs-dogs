@@ -112,18 +112,18 @@ test('eating an apple layers a sharp crack over two crunchy chew beats', async (
   assert.equal(events.filter((event) => event === 'oscillator').length, 3);
 });
 
-test('the browser ships Paws and Plans as the level soundtrack', () => {
-  const mp3 = readFileSync(new URL('../src/assets/audio/paws-and-plans.mp3', import.meta.url));
+test('the browser ships the compact 30-second Backyard Bounce variation', () => {
+  const mp3 = readFileSync(new URL('../src/assets/audio/backyard-bounce-loop.mp3', import.meta.url));
   const hasId3Header = mp3.toString('ascii', 0, 3) === 'ID3';
   const hasMpegFrameSync = mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0;
 
-  assert.match(LEVEL_MUSIC_URL, /paws-and-plans\.mp3$/);
-  assert.ok(LEVEL_MUSIC_DURATION_SECONDS > 157 && LEVEL_MUSIC_DURATION_SECONDS < 158);
+  assert.match(LEVEL_MUSIC_URL, /backyard-bounce-loop\.mp3$/);
+  assert.equal(LEVEL_MUSIC_DURATION_SECONDS, 30);
   assert.ok(hasId3Header || hasMpegFrameSync, 'compressed music is not a valid MP3 stream');
-  assert.ok(mp3.length < 1_700_000, `Paws and Plans is not web-optimized (${mp3.length} bytes)`);
+  assert.ok(mp3.length < 300_000, `Backyard Bounce loop is not web-optimized (${mp3.length} bytes)`);
 });
 
-test('level music loops the Paws and Plans track', async () => {
+test('level music streams and loops the Backyard Bounce variation', async () => {
   let player = null;
   class FakeAudio {
     constructor(src) {
@@ -151,8 +151,9 @@ test('level music loops the Paws and Plans track', async () => {
   try {
     const freshSound = await import(`../src/sound.js?level-music-loop=${Date.now()}`);
     assert.equal(freshSound.startLevelMusic(), true);
-    assert.match(player.src, /paws-and-plans\.mp3$/);
+    assert.match(player.src, /backyard-bounce-loop\.mp3$/);
     assert.equal(player.loop, true);
+    assert.equal(player.preload, 'metadata');
     freshSound.stopLevelMusic();
   } finally {
     if (previousWindow === undefined) delete globalThis.window;

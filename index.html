@@ -17,7 +17,10 @@
           <section class="phase-status-panel" aria-label="Game information">
             <header class="phase-titlebar">
               <h1>CATS <span>VS</span> DOGS</h1>
-              <button id="settings" class="icon-button phase-settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+              <div class="titlebar-actions">
+                <button id="tutorial" class="icon-button tutorial-button phase-tutorial-button" type="button" aria-label="Start a new tutorial" title="Start a new tutorial">TUTORIAL</button>
+                <button id="settings" class="icon-button phase-settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+              </div>
             </header>
             <section class="phase-hud" aria-label="Game status">
               <div class="hud-chip phase-hud-chip"><span class="hud-icon coin" aria-hidden="true">●</span><strong id="gold">10</strong><small>GOLD</small></div>
@@ -40,7 +43,7 @@
 
             <section class="workbench-panel" aria-label="Cat Workbench">
               <div class="panel-heading compact">
-                <div><span class="tiny-label">RESERVE · MERGE · DEPLOY</span><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
+                <div><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
               </div>
               <div id="workbench" class="workbench-grid"></div>
             </section>
@@ -60,8 +63,7 @@
           </section>
 
           <section class="round-controls phase-action">
-            <p id="message" class="message" role="status">Build your team, then start the round.</p>
-            <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Spend every coin · Clear every dog to win</small></button>
+            <button id="done" class="done-button" hidden><span id="done-label">READY</span></button>
           </section>
         </aside>
         <aside class="house-wing" aria-label="Production House">
@@ -135,7 +137,7 @@
         <span class="settings-row-heading">
           <span>
             <strong>Music</strong>
-            <small id="setting-music-help">Paws and Plans level soundtrack</small>
+            <small id="setting-music-help">Backyard Bounce level soundtrack</small>
           </span>
           <output id="setting-music-value" for="setting-music-volume">50%</output>
         </span>

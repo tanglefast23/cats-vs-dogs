@@ -324,7 +324,6 @@ function showShopPurchaseDenied(button, reason) {
   game.message = reason === 'gold'
     ? `Not enough gold — this cat costs 3 and you have ${game.gold}.`
     : 'The Cat Workbench is full — deploy or merge a cat before adopting another.';
-  $('#message').textContent = game.message;
 
   window.setTimeout(() => {
     button.classList.remove('purchase-denied');
@@ -394,7 +393,6 @@ function renderShop() {
       game.message = isWorker
         ? `Drag ${info.name} into either House slot or onto the Cat Workbench.`
         : `Drag ${info.name} onto the battlefield or the Cat Workbench.`;
-      $('#message').textContent = game.message;
     });
     if (interactive) bindPetDrag(button, isWorker ? 'shop-worker' : 'shop-fighter', { ...slot, shopIndex: index });
     bindTooltip(button, () => isWorker ? workerTooltipInfo(slot, info) : catTooltipInfo(slot));
@@ -658,7 +656,6 @@ function tryMerge(targetType, targetId) {
 function showCatSelectionAdvice(cat) {
   const info = CAT_COAT_INFO[normalizeCoat(cat.coat)];
   game.message = catSelectionAdvice(cat, info, game.phase);
-  $('#message').textContent = game.message;
 }
 
 function selectCat(type, cat) {
@@ -1383,7 +1380,6 @@ function renderWorkbench() {
       slot.addEventListener('click', () => {
         if (suppressNextPetClick) return;
         game.message = `${info.name} is reserved. Drag into either Production House slot, or stack it with a matching production cat here.`;
-        $('#message').textContent = game.message;
       });
     } else {
       slot.classList.add('fighter-reserve');
@@ -1847,7 +1843,6 @@ function renderHud() {
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
-  $('#message').textContent = game.message;
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
@@ -1858,9 +1853,7 @@ function renderHud() {
     || !['prep', 'tactics'].includes(game.phase)
     || (game.phase === 'prep' && game.cats.length === 0);
   doneButton.disabled = playing || (!canContinueTactics && (game.phase !== 'prep' || game.cats.length === 0));
-  $('#done-label').textContent = canContinueTactics
-    ? 'CONTINUE FIGHT'
-    : `START ROUND ${game.round}`;
+  $('#done-label').textContent = 'READY';
 }
 
 function findUnitElement(id) {
@@ -3636,6 +3629,7 @@ $('#next-wave-toggle')?.addEventListener('click', () => {
   renderDogPreview();
   renderBoard();
 });
+$('#tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
 $('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
 

@@ -1106,7 +1106,7 @@ test('level music loops quietly and follows its own capped volume', async () => 
   assert.equal(sound.startLevelMusic(), true);
   assert.equal(players.length, 1);
   assert.equal(players[0].loop, true);
-  assert.equal(players[0].preload, 'auto');
+  assert.equal(players[0].preload, 'metadata');
   assert.equal(players[0].volume, sound.MUSIC_OUTPUT_CAP * 0.5);
   assert.equal(players[0].playCount, 1);
 
