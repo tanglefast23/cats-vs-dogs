@@ -27,3 +27,9 @@ export function describeUpgrade(before, after) {
     intensity: 'standard',
   };
 }
+
+export function describeProductionLevelUp(before, after) {
+  const reveal = describeUpgrade(before, after);
+  if (reveal?.kind !== 'level-up') return null;
+  return { ...reveal, note: 'PRODUCTION BOOST!' };
+}

@@ -2408,6 +2408,10 @@ h1 span { color: var(--orange); font-size: .75em; }
 .upgrade-reveal.upgrade-level-up .upgrade-radiance { width: 145%; border-width: 5px; box-shadow: 0 0 18px #fff078; }
 .upgrade-reveal.upgrade-level-up .upgrade-smoke i { background: #fff4c4; box-shadow: 6px -4px 0 #fff, -5px 5px 0 #d9b776; }
 .upgrade-reveal.upgrade-level-up .upgrade-callout { font-size: 12px; background: #ffd84f; }
+.upgrade-reveal.upgrade-production .upgrade-radiance { border-color: #b9ef78; box-shadow: 0 0 16px #e9ffb5; }
+.upgrade-reveal.upgrade-production .upgrade-smoke i { background: #eef8cf; box-shadow: 5px -4px 0 #fff8dc, -5px 4px 0 #9fc46d; }
+.upgrade-reveal.upgrade-production .upgrade-callout { background: #d8f48f; box-shadow: 3px 3px 0 #688748; }
+.upgrade-reveal.upgrade-production em { color: #42612d; }
 .upgrade-reveal.upgrade-ultimate .upgrade-radiance { width: 175%; border: 6px dashed #7ff5ff; box-shadow: 0 0 12px #ff66c4, inset 0 0 12px #ffe66b; }
 .upgrade-reveal.upgrade-ultimate .upgrade-smoke i:nth-child(odd) { background: #bff8ff; box-shadow: 6px -4px 0 #fff, -5px 5px 0 #7bbde4; }
 .upgrade-reveal.upgrade-ultimate .upgrade-smoke i:nth-child(even) { background: #ffd1ee; box-shadow: 6px -4px 0 #fff, -5px 5px 0 #d87aad; }
@@ -2418,6 +2422,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 .upgrade-transforming.upgrade-revealed .unit canvas { animation: upgraded-cat-reveal .68s cubic-bezier(.16,.9,.25,1.4); }
 .upgrade-transforming.upgrade-level-up,
 .upgrade-transforming.upgrade-ultimate { z-index: 9; box-shadow: inset 0 0 0 4px #ffe66b, 0 0 16px #fff078; }
+.upgrade-transforming.upgrade-production { box-shadow: inset 0 0 0 4px #c9ef82, 0 0 16px #e9ffb5; }
 .upgrade-transforming.upgrade-ultimate { box-shadow: inset 0 0 0 4px #7ff5ff, 0 0 22px #ff66c4; }
 .board.upgrade-board-pulse { animation: upgrade-board-pulse .72s steps(6); }
 @keyframes upgrade-smoke-pop {

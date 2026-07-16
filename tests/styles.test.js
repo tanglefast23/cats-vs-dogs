@@ -22,6 +22,14 @@ test('worker cat offers use a pastel violet background', () => {
   assert.match(css, /\.shop-slot\.worker-offer \.shop-card\s*{[^}]*background:\s*#e6d7f5/);
 });
 
+test('production-cat level-ups use a local production reveal instead of pulsing the battlefield', () => {
+  assert.match(app, /'purchase-worker': 'worker'/);
+  assert.match(app, /'merge-bench-worker': 'bench'/);
+  assert.match(app, /if \(reveal\.kind === 'level-up' && !reveal\.production\)/);
+  assert.match(css, /\.upgrade-reveal\.upgrade-production \.upgrade-radiance\s*{[^}]*#b9ef78/);
+  assert.match(css, /\.upgrade-transforming\.upgrade-production\s*{[^}]*#c9ef82/);
+});
+
 test('tutorial outlines use the thicker cyan breathing glow', () => {
   assert.match(css, /--tutorial-accent:\s*#63e6ff/);
   assert.match(css, /\.tutorial-spotlight\s*{[^}]*0 0 0 5px var\(--tutorial-accent\)/s);

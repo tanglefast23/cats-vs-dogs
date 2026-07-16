@@ -338,7 +338,7 @@ function tone({
   osc.stop(now + duration + 0.02);
 }
 
-function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200 } = {}) {
+function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200, filterType = 'lowpass' } = {}) {
   if (!soundEnabled) return;
   const ctx = context();
   if (!ctx) return;
@@ -354,7 +354,7 @@ function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200 } = {}) 
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
+  filter.type = filterType;
   filter.frequency.value = filterFreq;
   const gain = ctx.createGain();
   const now = ctx.currentTime;
@@ -546,21 +546,31 @@ export function playCollection(kind = 'item') {
   });
 }
 
-/** Crunchy bite when a cat eats a food treat. */
-export function playFoodUse() {
+/** Crisp apple-skin snap followed by two juicy chewing crunches. */
+export function playAppleCrunch() {
   if (!soundEnabled) return;
-  noiseBurst({ duration: 0.06, volume: 0.05, filterFreq: 2600 });
-  tone({ frequency: 240, slideTo: 150, duration: 0.07, type: 'triangle', volume: 0.04 });
+  noiseBurst({ duration: 0.055, volume: 0.075, filterFreq: 3200, filterType: 'highpass' });
+  noiseBurst({ duration: 0.1, volume: 0.065, filterFreq: 1700 });
+  tone({ frequency: 290, slideTo: 105, duration: 0.1, type: 'square', volume: 0.055, attack: 0.001, decay: 0.06 });
+  later(55, () => {
+    if (!soundEnabled) return;
+    noiseBurst({ duration: 0.045, volume: 0.06, filterFreq: 2700, filterType: 'highpass' });
+  });
   later(150, () => {
     if (!soundEnabled) return;
-    noiseBurst({ duration: 0.05, volume: 0.04, filterFreq: 2200 });
-    tone({ frequency: 200, slideTo: 130, duration: 0.06, type: 'triangle', volume: 0.035 });
+    noiseBurst({ duration: 0.07, volume: 0.06, filterFreq: 2400, filterType: 'highpass' });
+    noiseBurst({ duration: 0.09, volume: 0.05, filterFreq: 1200 });
+    tone({ frequency: 210, slideTo: 115, duration: 0.08, type: 'triangle', volume: 0.045 });
   });
-  later(320, () => {
+  later(285, () => {
     if (!soundEnabled) return;
-    tone({ frequency: 320, slideTo: 560, duration: 0.1, type: 'sine', volume: 0.04 });
+    noiseBurst({ duration: 0.055, volume: 0.05, filterFreq: 2100, filterType: 'highpass' });
+    tone({ frequency: 180, slideTo: 95, duration: 0.07, type: 'triangle', volume: 0.04 });
   });
 }
+
+// Compatibility for callers that still use the generic production-item name.
+export const playFoodUse = playAppleCrunch;
 
 /** A couple of metallic swings, then a slam, when a cat equips a weapon. */
 export function playWeaponUse() {
@@ -593,7 +603,7 @@ export function playArmourUse() {
 export function playItemUse(kind) {
   if (kind === 'weapon') playWeaponUse();
   else if (kind === 'armour') playArmourUse();
-  else playFoodUse();
+  else playAppleCrunch();
 }
 
 /** Happy little fanfare when dogs break through and celebrate. */

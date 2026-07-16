@@ -145,24 +145,31 @@ test('every cat has one explicit strength and a real weakness at every level', (
       .filter((coat) => Number(coat) !== CAT_COAT.GREY)
       .map((coat) => catStatsFor(level, Number(coat)));
 
-    assert.ok(purrcy.attack >= hissiletoe.attack * 2, `L${level} straight damage pays for lane lock`);
+    assert.ok(purrcy.attack > hissiletoe.attack, `L${level} straight damage pays for lane lock`);
     assert.equal(bombay.attack, hissiletoe.attack, `L${level} Bombay's lane bomb has medium damage`);
     assert.ok(clawdius.hp > Math.max(...nonTankStats.map((stats) => stats.hp)));
     assert.ok(clawdius.attack < hissiletoe.attack, `L${level} tank damage stays below the generalist`);
   }
 });
 
-test('each merge tier slightly beats the three cats combined into it', () => {
+test('every cat uses linear 1x, 2x, and 3x attack scaling by level', () => {
   for (const coat of Object.keys(CAT_COAT_INFO).map(Number)) {
     const levelOne = catStatsFor(1, coat);
     const levelTwo = catStatsFor(2, coat);
     const levelThree = catStatsFor(3, coat);
 
     assert.ok(levelTwo.hp > levelOne.hp * 3, `coat ${coat} L2 health should beat three L1 cats`);
-    assert.ok(levelTwo.attack > levelOne.attack * 3, `coat ${coat} L2 attack should beat three L1 cats`);
+    assert.equal(levelTwo.attack, levelOne.attack * 2, `coat ${coat} L2 attack should double L1`);
     assert.ok(levelThree.hp > levelTwo.hp * 3, `coat ${coat} L3 health should beat three L2 cats`);
-    assert.ok(levelThree.attack > levelTwo.attack * 3, `coat ${coat} L3 attack should beat three L2 cats`);
+    assert.equal(levelThree.attack, levelOne.attack * 3, `coat ${coat} L3 attack should triple L1`);
   }
+});
+
+test('Purrcy pellets scale from 1-1-1 to 2-2-2 and 3-3-3', () => {
+  assert.deepEqual(
+    [1, 2, 3].map((level) => splitDamage(catStatsFor(level, CAT_COAT.ORANGE).attack, 3)),
+    [[1, 1, 1], [2, 2, 2], [3, 3, 3]],
+  );
 });
 
 test('SAP shop slots grow on rounds five and nine while fighter unlocks remain separate', () => {
@@ -249,17 +256,17 @@ test('nine level-one cats can still combine through the three-slot workbench', (
   assert.deepEqual(game.bench.map((cat) => cat.level), [3]);
 });
 
-test('Purrcy defeats a tier-one Chomps in one two-action round', () => {
+test('level-one Purrcy deals three damage per action', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1 });
   game = placeCat(game, 0, 12, 2);
   game.dogs = [createDog(1, 0, 2)];
 
   game = resolveSection(game);
-  assert.equal(game.dogs[0].hp, 4);
+  assert.equal(game.dogs[0].hp, 5);
 
   game = resolveSection(game);
-  assert.equal(game.dogs.length, 0);
+  assert.equal(game.dogs[0].hp, 2);
 });
 
 test('orange cat splits one attack into rapid burst pellets', () => {
@@ -277,13 +284,13 @@ test('orange cat splits one attack into rapid burst pellets', () => {
 
   assert.equal(shots.length, 3);
   assert.equal(shots.every((shot) => shot.burst), true);
-  assert.equal(shots.reduce((sum, shot) => sum + shot.damage, 0), 4);
-  assert.deepEqual(shots.map((shot) => shot.damage), [2, 1, 1]);
+  assert.equal(shots.reduce((sum, shot) => sum + shot.damage, 0), 3);
+  assert.deepEqual(shots.map((shot) => shot.damage), [1, 1, 1]);
   assert.equal(shots[0].hpBefore, 8);
-  assert.equal(shots[0].hpAfter, 6);
-  assert.equal(shots[1].hpAfter, 5);
-  assert.equal(shots[2].hpAfter, 4);
-  assert.equal(game.dogs[0].hp, 4);
+  assert.equal(shots[0].hpAfter, 7);
+  assert.equal(shots[1].hpAfter, 6);
+  assert.equal(shots[2].hpAfter, 5);
+  assert.equal(game.dogs[0].hp, 5);
 });
 
 test('orange cat burst keeps hitting the nearest dog in its column', () => {
@@ -297,10 +304,10 @@ test('orange cat burst keeps hitting the nearest dog in its column', () => {
   const upperDog = game.dogs.find((dog) => dog.row === 3);
   const lowerDog = game.dogs.find((dog) => dog.row === 6);
   assert.equal(upperDog.hp, 8);
-  assert.equal(lowerDog.hp, 4);
+  assert.equal(lowerDog.hp, 5);
 });
 
-test('level-two Purrcy splits its fourteen damage across three pellets', () => {
+test('level-two Purrcy fires three equal two-damage pellets', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 2, coat: CAT_COAT.ORANGE });
   game = placeCat(game, 0, 12, 2);
@@ -309,8 +316,8 @@ test('level-two Purrcy splits its fourteen damage across three pellets', () => {
   game = resolveSection(game);
   const shots = game.events.filter((event) => event.type === 'shot');
   assert.equal(shots.length, 3);
-  assert.deepEqual(shots.map((shot) => shot.damage), [5, 5, 4]);
-  assert.equal(game.dogs.length, 0);
+  assert.deepEqual(shots.map((shot) => shot.damage), [2, 2, 2]);
+  assert.equal(game.dogs[0].hp, 7);
 });
 
 test('white cat targets the lowest dog row before the nearest column', () => {
@@ -422,6 +429,22 @@ test('Calico Tangler marks a dog to skip its next unblocked move without healing
   game = resolveSection(game);
   assert.equal(game.dogs[0].hp, 6);
   assert.equal(game.dogs[0].row, 7, 'the same dog cannot be locked by yarn forever');
+});
+
+test('Knotty Kitty tangles for one, two, or three moves by level', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game.cats = [createCat(level, CAT_COAT.CALICO)];
+    game.cats[0].row = 12; game.cats[0].col = 2;
+    const dog = createDog(4, 5, 2);
+    dog.frozenActions = 1;
+    game.dogs = [dog];
+
+    game = resolveSection(game);
+
+    assert.equal(game.dogs[0].tangledMovesRemaining, level);
+    assert.equal(game.dogs[0].tangled, true);
+  }
 });
 
 test('Bombay Boom lobs one medium bomb at the nearest dog in his own lane', () => {
@@ -575,7 +598,7 @@ test('Sir Flinches-a-Lot panic-steps after surviving a hit so later column pelle
   game = resolveSection(game);
 
   const survivor = game.dogs.find((dog) => dog.id === skittish.id);
-  assert.equal(survivor.hp, 4, 'only the first two-damage pellet connects');
+  assert.equal(survivor.hp, 5, 'only the first one-damage pellet connects');
   assert.equal(survivor.col, 1);
   assert.equal(game.events.filter((event) => event.type === 'shot' && !event.miss).length, 1);
   assert.equal(game.events.filter((event) => event.type === 'shot' && event.miss).length, 2);
@@ -839,15 +862,15 @@ test('Growl Gadot frightens a nearby cat and weakens its next attack', () => {
   game.dogs = [createDog(1, 7, 2, DOG_ROLE.GROWLER)];
 
   game = resolveSection(game);
-  assert.equal(game.dogs[0].hp, 2);
+  assert.equal(game.dogs[0].hp, 3);
   assert.equal(game.cats[0].nextAttackPenalty, 2);
   assert.ok(game.events.some((event) => event.type === 'dog-fear' && event.amount === 2));
 
   game = resolveSection(game);
   const weakenedShot = game.events.find((event) => event.type === 'shot' && !event.miss);
-  assert.equal(weakenedShot.damage, 1, 'Purrcy splits the reduced two attack into one-damage pellets');
-  assert.equal(game.events.filter((event) => event.type === 'shot' && !event.miss).length, 2);
-  assert.equal(game.dogs.length, 0);
+  assert.equal(weakenedShot.damage, 1, 'Purrcy fires its one remaining attack as one pellet');
+  assert.equal(game.events.filter((event) => event.type === 'shot' && !event.miss).length, 1);
+  assert.equal(game.dogs[0].hp, 2);
 });
 
 test('special dog roles unlock gradually and debut in their first eligible wave', () => {
@@ -1082,8 +1105,8 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(ghost.attack, /homing|column|sine|random/i);
   assert.equal(tabby.category, 'T1');
   assert.equal(catTooltipInfo({ level: 1, coat: CAT_COAT.PRISM }).category, 'T3');
-  assert.equal(tabby.stats, 'Health 6/6 · Attack 2+1+1');
-  assert.equal(catTooltipInfo({ level: 2, coat: CAT_COAT.ORANGE }).stats, 'Health 13/13 · Attack 5+5+4');
+  assert.equal(tabby.stats, 'Health 6/6 · Attack 1+1+1');
+  assert.equal(catTooltipInfo({ level: 2, coat: CAT_COAT.ORANGE }).stats, 'Health 13/13 · Attack 2+2+2');
   assert.equal(brawler.stats, 'Health 12/12 · Attack 1');
   assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7');
 });
@@ -1092,6 +1115,13 @@ test('cat tooltips get straight to the attack description', () => {
   Object.values(CAT_COAT_INFO).forEach((info) => {
     assert.doesNotMatch(info.attackDetail, /^Each action,/i);
   });
+  const purrtal = catTooltipInfo({ level: 2, coat: CAT_COAT.RIFT });
+  assert.match(purrtal.attack, /next damaging hit or the round ends/i);
+  assert.match(purrtal.attack, /2\/3\/4 squares/i);
+  assert.match(purrtal.attack, /10%\/20%\/30% attack/i);
+  assert.match(purrtal.attack, /minimum 1\/2\/3/i);
+  assert.match(purrtal.attack, /at least 1 damage/i);
+  assert.match(purrtal.attack, /do not stack/i);
 });
 
 test('cat tooltips fully explain equipment, temporary buffs, and active ability state', () => {
@@ -1105,31 +1135,31 @@ test('cat tooltips fully explain equipment, temporary buffs, and active ability 
       weapon: { tier: 2, attack: 2 },
       armour: { tier: 1, block: 2, uses: 2, maxUses: 3 },
     },
-    guard: 2,
-    nextAttackBonus: 2,
+    portalGuardLevel: 2,
+    portalAttackBonusLevel: 2,
     activeUsed: false,
   });
 
   assert.match(tooltip.effects.find((effect) => effect.kind === 'weapon').detail, /every attack/i);
   assert.match(tooltip.effects.find((effect) => effect.kind === 'armour').detail, /2\/3 protected hits.*at least 1 damage/i);
-  assert.match(tooltip.effects.find((effect) => effect.kind === 'guard').detail, /next hit/i);
-  assert.match(tooltip.effects.find((effect) => effect.kind === 'attack-up').detail, /next attacks/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'guard').detail, /20%.*next hit.*minimum 2/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'attack-up').detail, /20%.*next attack.*minimum 2/i);
   assert.deepEqual(tooltip.effects.find((effect) => effect.kind === 'ability'), {
     kind: 'ability',
     label: 'TACTICS SPECIAL',
     value: 'READY',
-    detail: 'Available once this battle during a Tactics Window.',
+    detail: 'Available during a Tactics Window — once per battle normally, and once per window in round 10.',
   });
 });
 
 test('dog tooltips explain march and bite behavior', () => {
   const dog = dogTooltipInfo({
     tier: 1, hp: 7, maxHp: 7, attack: 3,
-    attackBoost: 2, frozenActions: 1, tangled: true,
+    attackBoost: 2, portalAttackPenaltyLevel: 1, frozenActions: 1, tangled: true,
   });
   assert.match(dog.attack, /porch|ahead|bites|steps/i);
   assert.match(dog.stats, /7/);
-  assert.deepEqual(dog.effects.map((effect) => effect.kind), ['attack-up', 'frozen', 'tangled']);
+  assert.deepEqual(dog.effects.map((effect) => effect.kind), ['attack-up', 'attack-down', 'frozen', 'tangled']);
 });
 
 test('cats still act with miss events when no dogs are in range', () => {

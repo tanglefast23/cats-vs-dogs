@@ -8,6 +8,7 @@ import {
   CAT_ZONE_START,
   COLS,
   DOG_ROLE,
+  MAX_ROUNDS,
   ROWS,
   addCatToBench,
   addInventoryStack,
@@ -24,6 +25,8 @@ import {
   openTacticsWindow,
   placeCat,
   plusCells,
+  portalEffectAmount,
+  portalEffectForLevel,
   resolveSection,
   startRound,
   useActiveAbility,
@@ -182,15 +185,17 @@ test('drag validation reads prepOrigin from real engine cats, so highlights matc
   assert.equal(moveCat(game, melee.id, 10, 1), game, 'engine rejects the same drop the highlight rejects');
 });
 
-test('Frosty freezes a dog through the current round and the following round', () => {
+test('level-two Frosty freezes a dog through the current round and the following round', () => {
   let game = createGame(() => 0.5);
-  game = placeCoat(game, CAT_COAT.FROST, 13, 0);
+  game.cats = [createCat(2, CAT_COAT.FROST)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
   game.dogs = [createDog(3, 5, 5)];
   game.phase = 'tactics';
   game.section = 1;
   const dogId = game.dogs[0].id;
   game = useActiveAbility(game, game.cats[0].id, { dogId });
   assert.equal(game.dogs[0].frozenActions, 3);
+  assert.equal(game.dogs[0].shatterDamage, 2);
 
   game = continueCombat(game);
   game = resolveSection(game);
@@ -211,6 +216,23 @@ test('Frosty freezes a dog through the current round and the following round', (
   assert.notEqual(game.dogs.find((dog) => dog.id === dogId).row, 5, 'the dog acts again after two rounds of freeze');
 });
 
+test('Frosty freeze duration and shatter damage scale 1x, 2x, and 3x by level', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game.cats = [createCat(level, CAT_COAT.FROST)];
+    game.cats[0].row = 13; game.cats[0].col = 0;
+    game.dogs = [createDog(4, 5, 5)];
+    game.phase = 'tactics';
+    game.section = 1;
+
+    game = useActiveAbility(game, game.cats[0].id, { dogId: game.dogs[0].id });
+
+    assert.equal(game.dogs[0].frozenActions, 1 + ((level - 1) * ACTIONS_PER_ROUND));
+    assert.equal(game.dogs[0].frozenRoundsRemaining, level);
+    assert.equal(game.dogs[0].shatterDamage, level);
+  }
+});
+
 test('Rift Walker teleports an ally anywhere and grants its level bonus', () => {
   let game = createGame(() => 0.5);
   game.cats = [createCat(2, CAT_COAT.RIFT), createCat(1, CAT_COAT.GREY)];
@@ -224,12 +246,24 @@ test('Rift Walker teleports an ally anywhere and grants its level bonus', () => 
   });
   const target = game.cats[1];
   assert.deepEqual([target.row, target.col], [10, 5]);
-  assert.equal(target.guard, 2);
+  assert.equal(target.portalGuardLevel, 2);
+  assert.equal(target.portalAttackBonusLevel, 2);
 });
 
-test('Purrtal teleports an enemy up to two grid steps onto a square with one dog', () => {
+test('Purrtal percentage effects scale from one configuration with level minimums', () => {
+  assert.deepEqual([1, 2, 3].map((level) => portalEffectForLevel(level)), [
+    { percent: 10, minimum: 1, enemyRange: 2 },
+    { percent: 20, minimum: 2, enemyRange: 3 },
+    { percent: 30, minimum: 3, enemyRange: 4 },
+  ]);
+  assert.equal(portalEffectAmount(9, 3), 3, '30% of 9 rounds down to 2, then uses the level-three minimum');
+  assert.equal(portalEffectAmount(30, 3), 9, 'future high stats use the full percentage');
+  assert.equal(portalEffectAmount(11, 3), 3, '30% of 11 rounds down to 3');
+});
+
+test('level-two Purrtal can stack an enemy onto one dog and applies its one-shot penalty', () => {
   let game = createGame(() => 0.5);
-  game.cats = [createCat(1, CAT_COAT.RIFT)];
+  game.cats = [createCat(2, CAT_COAT.RIFT)];
   game.cats[0].row = 13; game.cats[0].col = 0;
   const target = createDog(2, 5, 3);
   const waitingDog = createDog(1, 4, 2);
@@ -241,11 +275,99 @@ test('Purrtal teleports an enemy up to two grid steps onto a square with one dog
 
   assert.deepEqual([game.dogs.find((dog) => dog.id === target.id).row, game.dogs.find((dog) => dog.id === target.id).col], [4, 2]);
   assert.equal(game.dogs.filter((dog) => dog.row === 4 && dog.col === 2).length, 2);
+  assert.equal(game.dogs.find((dog) => dog.id === target.id).portalAttackPenaltyLevel, 2);
   assert.equal(game.cats[0].activeUsed, true);
   assert.deepEqual(game.events.find((event) => event.type === 'teleport' && event.to === target.id), {
     type: 'teleport', unitType: 'dog', from: game.cats[0].id, to: target.id,
     fromRow: 5, fromCol: 3, row: 4, col: 2,
+    attackPenalty: 2, attackPenaltyPercent: 20, attackPenaltyMinimum: 2,
   });
+});
+
+test('Purrtal enemy range scales 2, 3, and 4 while ally effects scale 10%, 20%, and 30%', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    const caster = createCat(level, CAT_COAT.RIFT);
+    const ally = createCat(1, CAT_COAT.GREY);
+    caster.row = 13; caster.col = 0;
+    ally.row = 13; ally.col = 1;
+    game.cats = [caster, ally];
+    game.phase = 'tactics';
+
+    game = useActiveAbility(game, caster.id, { targetCatId: ally.id, row: 10, col: 5 });
+
+    const movedAlly = game.cats.find((cat) => cat.id === ally.id);
+    assert.equal(movedAlly.portalGuardLevel, level);
+    assert.equal(movedAlly.portalAttackBonusLevel, level);
+
+    const rangeGame = createGame(() => 0.5);
+    const dog = createDog(2, 5, 1);
+    rangeGame.dogs = [dog];
+    const range = level + 1;
+    assert.equal(canTeleportDogTo(rangeGame, dog.id, 5, 1 + range, range), true);
+    assert.equal(canTeleportDogTo(rangeGame, dog.id, 5, 2 + range, range), false);
+  }
+});
+
+test('Purrtal enemy penalties do not stack and expire after one damaging attack', () => {
+  let game = createGame(() => 0.5);
+  const strongPurrtal = createCat(3, CAT_COAT.RIFT);
+  const weakPurrtal = createCat(1, CAT_COAT.RIFT);
+  const defender = createCat(3, CAT_COAT.GREY);
+  strongPurrtal.row = 13; strongPurrtal.col = 0;
+  weakPurrtal.row = 13; weakPurrtal.col = 1;
+  defender.row = 11; defender.col = 2;
+  const dog = createDog(2, 8, 2);
+  dog.hp = 100; dog.maxHp = 100;
+  game.cats = [strongPurrtal, weakPurrtal, defender];
+  game.dogs = [dog];
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, strongPurrtal.id, { targetDogId: dog.id, row: 9, col: 2 });
+  game = useActiveAbility(game, weakPurrtal.id, { targetDogId: dog.id, row: 10, col: 2 });
+  assert.equal(game.dogs[0].portalAttackPenaltyLevel, 3, 'the weaker portal does not add to or replace the 30% effect');
+
+  game = resolveSection(continueCombat(game));
+
+  const bite = game.events.find((event) => event.type === 'melee' && event.from === dog.id);
+  assert.equal(bite.damage, 3, 'T2 Chomps deals 6 attack minus the level-three minimum penalty of 3');
+  assert.equal(game.dogs[0].portalAttackPenaltyLevel, 0);
+});
+
+test('Purrtal percentage guard and attack bonus apply once with their level minimums', () => {
+  let guarded = createGame(() => 0.5);
+  const guardCaster = createCat(3, CAT_COAT.RIFT);
+  const defender = createCat(3, CAT_COAT.GREY);
+  const attacker = createDog(4, 10, 2);
+  guardCaster.row = 13; guardCaster.col = 0;
+  defender.row = 13; defender.col = 1;
+  guarded.cats = [guardCaster, defender];
+  guarded.dogs = [attacker];
+  guarded.phase = 'tactics';
+  guarded = useActiveAbility(guarded, guardCaster.id, { targetCatId: defender.id, row: 11, col: 2 });
+  guarded = resolveSection(continueCombat(guarded));
+
+  const guardedBite = guarded.events.find((event) => event.type === 'melee' && event.from === attacker.id);
+  assert.equal(guardedBite.damage, 8, '30% guard blocks 3 from an 11-damage bite');
+  assert.equal(guardedBite.blocked, 3);
+  assert.equal(guarded.cats.find((cat) => cat.id === defender.id).portalGuardLevel, 0);
+
+  let boosted = createGame(() => 0.5);
+  const boostCaster = createCat(3, CAT_COAT.RIFT);
+  const purrcy = createCat(3, CAT_COAT.ORANGE);
+  const target = createDog(4, 5, 0);
+  target.hp = 100; target.maxHp = 100;
+  boostCaster.row = 13; boostCaster.col = 1;
+  purrcy.row = 13; purrcy.col = 0;
+  boosted.cats = [boostCaster, purrcy];
+  boosted.dogs = [target];
+  boosted.phase = 'tactics';
+  boosted = useActiveAbility(boosted, boostCaster.id, { targetCatId: purrcy.id, row: 12, col: 0 });
+  boosted = resolveSection(continueCombat(boosted));
+
+  const boostedShots = boosted.events.filter((event) => event.type === 'shot' && event.from === purrcy.id && !event.miss);
+  assert.deepEqual(boostedShots.map((event) => event.damage), [4, 4, 4]);
+  assert.equal(boosted.cats.find((cat) => cat.id === purrcy.id).portalAttackBonusLevel, 0);
 });
 
 test('Purrtal rejects enemy destinations beyond two steps or already holding two dogs', () => {
@@ -272,10 +394,10 @@ function summonPhantom(level, row = 11, col = 3) {
   return useActiveAbility(game, game.cats[0].id, { row, col });
 }
 
-test('Faux Paw phantom starts with one more attack block than its level and no HP', () => {
+test('Faux Paw phantom blocks scale 2x its level and have no HP', () => {
   for (const level of [1, 2, 3]) {
     const game = summonPhantom(level);
-    const expectedBlocks = level + 1;
+    const expectedBlocks = level * 2;
     assert.equal(game.decoys.length, 1);
     assert.equal(game.decoys[0].blocks, expectedBlocks);
     assert.equal(game.decoys[0].maxBlocks, expectedBlocks);
@@ -409,11 +531,11 @@ test('Faux Paw phantom decays from its remaining count after taking a hit', () =
   dog.maxHp = 100;
   game.dogs = [dog];
   game = resolveSection(continueCombat(game));
-  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 3);
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 5);
 
   game.dogs = [];
   game = finishRound(game);
-  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 4);
 });
 
 test('Stormcaller damages every living dog in one selected column', () => {
@@ -428,6 +550,22 @@ test('Stormcaller damages every living dog in one selected column', () => {
   const strikes = game.events.filter((event) => event.type === 'spell' && event.style === 'lightning');
   assert.deepEqual(strikes.map((event) => event.to), struckDogIds);
   assert.deepEqual(strikes.map((event) => [event.toRow, event.col]), [[2, 4], [5, 4]]);
+});
+
+test('Thunderpaws storm damage scales 2, 4, and 6 by level', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game.cats = [createCat(level, CAT_COAT.STORM)];
+    game.cats[0].row = 13; game.cats[0].col = 0;
+    const dog = createDog(4, 5, 4);
+    dog.hp = 100; dog.maxHp = 100;
+    game.dogs = [dog];
+    game.phase = 'tactics';
+
+    game = useActiveAbility(game, game.cats[0].id, { col: 4 });
+
+    assert.equal(game.events.find((event) => event.style === 'lightning').damage, level * 2);
+  }
 });
 
 test('Bombay Boom special hits a five-square plus — full damage at the centre, half to the sides', () => {
@@ -456,6 +594,24 @@ test('Bombay Boom special hits a five-square plus — full damage at the centre,
   assert.equal(hits.every((event) => event.aimRow === 5 && event.aimCol === 2), true);
   assert.equal(game.dogs.find((dog) => dog.id === outside.id).hp, 8);
   assert.equal(game.cats[0].activeUsed, true);
+});
+
+test('Bombay Boom special scales centre and collateral damage by level', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game.cats = [createCat(level, CAT_COAT.BLACK)];
+    game.cats[0].row = 12; game.cats[0].col = 2;
+    const center = createDog(4, 5, 2);
+    const side = createDog(4, 5, 3);
+    game.dogs = [center, side];
+    game.phase = 'tactics';
+
+    game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+    const hits = game.events.filter((event) => event.type === 'spell');
+    assert.equal(hits.find((event) => event.to === center.id).damage, level * 2);
+    assert.equal(hits.find((event) => event.to === side.id).damage, level);
+  }
 });
 
 test('Bombay Boom plus footprint clips cleanly at battlefield edges', () => {
@@ -531,6 +687,27 @@ test('Meowstro does not spend the ability on an isolated dog', () => {
   assert.equal(game.cats[0].activeUsed, false);
 });
 
+test('Meowstro multiplies forced duel damage 1x, 2x, and 3x by level', () => {
+  for (const level of [1, 2, 3]) {
+    let game = createGame(() => 0.5);
+    game.cats = [createCat(level, CAT_COAT.ENCORE)];
+    game.cats[0].row = 13; game.cats[0].col = 0;
+    const first = createDog(1, 5, 2);
+    const second = createDog(2, 5, 2);
+    first.hp = 100; first.maxHp = 100;
+    second.hp = 100; second.maxHp = 100;
+    game.dogs = [first, second];
+    game.phase = 'tactics';
+
+    game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+    assert.deepEqual(
+      game.events.filter((event) => event.type === 'dog-duel').map((event) => event.damage),
+      [4 * level, 6 * level],
+    );
+  }
+});
+
 test('starting a battle resets active casts without healing survivors between rounds', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.FROST, 13, 0);
@@ -540,6 +717,37 @@ test('starting a battle resets active casts without healing survivors between ro
   assert.equal(game.cats[0].activeUsed, false);
   game = finishRound(game);
   assert.equal(game.cats[0].hp, 1);
+});
+
+test('round 10 refreshes active abilities at every tactics pause', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.FROST, 13, 0);
+  game.round = MAX_ROUNDS;
+  game.phase = 'combat';
+  game.cats[0].activeUsed = true;
+
+  game = openTacticsWindow(game);
+  assert.equal(game.cats[0].activeUsed, false);
+  assert.match(game.message, /abilities refreshed/i);
+
+  game.dogs = [createDog(3, 5, 5)];
+  game = useActiveAbility(game, game.cats[0].id, { dogId: game.dogs[0].id });
+  assert.equal(game.cats[0].activeUsed, true);
+
+  game = continueCombat(game);
+  game = openTacticsWindow(game);
+  assert.equal(game.cats[0].activeUsed, false, 'the next final-round pause refreshes the cast again');
+});
+
+test('tactics pauses before round 10 do not refresh spent abilities', () => {
+  let game = createGame(() => 0.5);
+  game = placeCoat(game, CAT_COAT.FROST, 13, 0);
+  game.round = MAX_ROUNDS - 1;
+  game.phase = 'combat';
+  game.cats[0].activeUsed = true;
+
+  game = openTacticsWindow(game);
+  assert.equal(game.cats[0].activeUsed, true);
 });
 
 test('every cat gets one normal range-limited move during each tactics window', () => {

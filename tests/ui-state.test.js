@@ -10,7 +10,7 @@ import {
 import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
-import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
+import { UPGRADE_TIMING, describeProductionLevelUp, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
 test('cat pickup advice explains free placement before its first battle', () => {
@@ -147,15 +147,19 @@ test('cat equipment plates expose actual attack, block, and remaining-hit values
 });
 
 test('temporary cat and dog statuses provide large-marker values and plain-language labels', () => {
-  assert.deepEqual(catStatusMarkers({ guard: 2, nextAttackBonus: 3, nextAttackPenalty: 1 }), [
-    { kind: 'guard', value: '2', label: 'Guard blocks 2 damage from the next hit' },
-    { kind: 'attack-up', value: '+3', label: 'Next attack gains 3 damage' },
+  assert.deepEqual(catStatusMarkers({ portalGuardLevel: 2, portalAttackBonusLevel: 3, nextAttackPenalty: 1 }), [
+    { kind: 'guard', value: '20%', label: 'Guard blocks 20% of the next hit (minimum 2)' },
+    { kind: 'attack-up', value: '+30%', label: 'Next attack gains 30% damage (minimum 3)' },
     { kind: 'attack-down', value: '-1', label: 'Next attack loses 1 damage' },
   ]);
-  assert.deepEqual(dogStatusMarkers({ frozenActions: 1, tangled: true, attackBoost: 4 }), [
+  assert.deepEqual(dogStatusMarkers({ frozenActions: 1, tangled: true, attackBoost: 4, portalAttackPenaltyLevel: 3 }), [
     { kind: 'frozen', value: '1', label: 'Frozen for 1 round' },
     { kind: 'tangled', value: '1', label: 'Next movement is skipped' },
     { kind: 'attack-up', value: '+4', label: 'Next damaging attack gains 4 damage' },
+    { kind: 'attack-down', value: '-30%', label: 'Next damaging attack loses 30% damage (minimum 3)' },
+  ]);
+  assert.deepEqual(dogStatusMarkers({ tangledMovesRemaining: 3 }), [
+    { kind: 'tangled', value: '3', label: 'Next 3 movements are skipped' },
   ]);
   assert.deepEqual(dogStatusMarkers({ frozenActions: 3 }), [
     { kind: 'frozen', value: '2', label: 'Frozen for 2 rounds' },
@@ -632,6 +636,20 @@ test('level two and level three promotions receive stronger reveal classificatio
   );
   assert.ok(UPGRADE_TIMING.smokeMs >= 600);
   assert.ok(UPGRADE_TIMING.totalMs >= UPGRADE_TIMING.smokeMs);
+});
+
+test('production cats celebrate only when a stack crosses into a new level', () => {
+  assert.equal(
+    describeProductionLevelUp({ level: 1, copies: 1 }, { level: 1, copies: 2 }),
+    null,
+  );
+  assert.deepEqual(
+    describeProductionLevelUp({ level: 1, copies: 2 }, { level: 2, copies: 1 }),
+    {
+      kind: 'level-up', level: 2, label: 'LEVEL 2!', intensity: 'level-up',
+      note: 'PRODUCTION BOOST!',
+    },
+  );
 });
 
 test('level two and three cats have progressively stronger visible equipment sets', () => {

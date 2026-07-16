@@ -1,3 +1,5 @@
+import { portalEffectForLevel } from './game-engine.js';
+
 export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
 }
@@ -63,10 +65,16 @@ export function equippedItemMarkers(cat = {}) {
 /** Temporary cat effects that need to remain readable after their cast animation ends. */
 export function catStatusMarkers(cat = {}) {
   const markers = [];
-  if ((cat.guard ?? 0) > 0) {
+  if ((cat.portalGuardLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(cat.portalGuardLevel);
+    markers.push({ kind: 'guard', value: `${percent}%`, label: `Guard blocks ${percent}% of the next hit (minimum ${minimum})` });
+  } else if ((cat.guard ?? 0) > 0) {
     markers.push({ kind: 'guard', value: String(cat.guard), label: `Guard blocks ${cat.guard} damage from the next hit` });
   }
-  if ((cat.nextAttackBonus ?? 0) > 0) {
+  if ((cat.portalAttackBonusLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(cat.portalAttackBonusLevel);
+    markers.push({ kind: 'attack-up', value: `+${percent}%`, label: `Next attack gains ${percent}% damage (minimum ${minimum})` });
+  } else if ((cat.nextAttackBonus ?? 0) > 0) {
     markers.push({ kind: 'attack-up', value: `+${cat.nextAttackBonus}`, label: `Next attack gains ${cat.nextAttackBonus} damage` });
   }
   if ((cat.nextAttackPenalty ?? 0) > 0) {
@@ -82,11 +90,22 @@ export function dogStatusMarkers(dog = {}) {
     const rounds = dog.frozenRoundsRemaining ?? Math.ceil(dog.frozenActions / 2);
     markers.push({ kind: 'frozen', value: String(rounds), label: `Frozen for ${rounds} round${rounds === 1 ? '' : 's'}` });
   }
-  if (dog.tangled) {
-    markers.push({ kind: 'tangled', value: '1', label: 'Next movement is skipped' });
+  const tangledMoves = dog.tangledMovesRemaining ?? (dog.tangled ? 1 : 0);
+  if (tangledMoves > 0) {
+    markers.push({
+      kind: 'tangled',
+      value: String(tangledMoves),
+      label: tangledMoves === 1 ? 'Next movement is skipped' : `Next ${tangledMoves} movements are skipped`,
+    });
   }
   if ((dog.attackBoost ?? 0) > 0) {
     markers.push({ kind: 'attack-up', value: `+${dog.attackBoost}`, label: `Next damaging attack gains ${dog.attackBoost} damage` });
+  }
+  if ((dog.portalAttackPenaltyLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(dog.portalAttackPenaltyLevel);
+    markers.push({ kind: 'attack-down', value: `-${percent}%`, label: `Next damaging attack loses ${percent}% damage (minimum ${minimum})` });
+  } else if ((dog.nextAttackPenalty ?? 0) > 0) {
+    markers.push({ kind: 'attack-down', value: `-${dog.nextAttackPenalty}`, label: `Next damaging attack loses ${dog.nextAttackPenalty} damage` });
   }
   return markers;
 }

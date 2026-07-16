@@ -6,6 +6,7 @@ import {
   IMPACT_SOUNDS, LEVEL_MUSIC_DURATION_SECONDS, playImpact, playArmourBlock, SFX_GAIN,
   playMerge, playCatDeath, playDogDeath, playWaveStart,
   playRoundComplete, playVictory, playDefeat, playHeal, playHowl,
+  playAppleCrunch, playItemUse,
 } from '../src/sound.js';
 import { HURT_FX } from '../src/battle-fx.js';
 
@@ -77,17 +78,78 @@ test('synthesized SFX carry at least a 2x master gain', () => {
 });
 
 // Every game event with a sound: merges, deaths, wave start, round end, results,
-// heals, and howls must all be callable and safe without a window/AudioContext.
+// heals, howls, and eating an apple must all be callable and safe without a window/AudioContext.
 test('event sounds exist and are safe without an audio context', () => {
   const eventSounds = {
     playMerge, playCatDeath, playDogDeath, playWaveStart,
-    playRoundComplete, playVictory, playDefeat, playHeal, playHowl,
+    playRoundComplete, playVictory, playDefeat, playHeal, playHowl, playAppleCrunch,
   };
   for (const [name, play] of Object.entries(eventSounds)) {
     assert.equal(typeof play, 'function', `${name} is not exported as a function`);
     assert.doesNotThrow(() => play(), `${name} threw without a window`);
   }
   assert.doesNotThrow(() => playMerge({ levelUp: true }));
+  assert.doesNotThrow(() => playItemUse('food'));
+});
+
+test('eating an apple layers a sharp crack over two crunchy chew beats', async () => {
+  const events = [];
+  const audioParam = {
+    setValueAtTime() {},
+    exponentialRampToValueAtTime() {},
+  };
+  class FakeAudioContext {
+    state = 'running';
+    currentTime = 0;
+    sampleRate = 1000;
+    destination = {};
+
+    createOscillator() {
+      events.push('oscillator');
+      return { frequency: audioParam, connect() {}, start() {}, stop() {} };
+    }
+
+    createGain() {
+      return { gain: audioParam, connect() {} };
+    }
+
+    createBuffer(_channels, length) {
+      return { getChannelData: () => new Float32Array(length) };
+    }
+
+    createBufferSource() {
+      return { connect() {}, start() {}, stop() {} };
+    }
+
+    createBiquadFilter() {
+      const filter = { frequency: { value: 0 }, connect() {} };
+      Object.defineProperty(filter, 'type', {
+        set(value) { events.push(`filter:${value}`); },
+      });
+      return filter;
+    }
+  }
+
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    AudioContext: FakeAudioContext,
+    navigator: { webdriver: false },
+    setTimeout(callback) { callback(); },
+    addEventListener() {},
+    removeEventListener() {},
+    document: { addEventListener() {}, removeEventListener() {} },
+  };
+  try {
+    const freshSound = await import(`../src/sound.js?apple-crunch=${Date.now()}`);
+    freshSound.playItemUse('food');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+
+  assert.equal(events.filter((event) => event === 'filter:highpass').length, 4);
+  assert.equal(events.filter((event) => event === 'filter:lowpass').length, 2);
+  assert.equal(events.filter((event) => event === 'oscillator').length, 3);
 });
 
 test('level music is a three-minute arrangement with a balanced loop seam', () => {

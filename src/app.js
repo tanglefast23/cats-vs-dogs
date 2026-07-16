@@ -1,6 +1,7 @@
 import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, PRODUCTION_CAPACITY, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
+  PORTAL_PERCENTAGE_SCALE_TEXT, PORTAL_MINIMUM_SCALE_TEXT, PORTAL_RANGE_SCALE_TEXT, portalEffectForLevel,
   WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility, canTeleportDogTo,
@@ -17,7 +18,7 @@ import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobS
 import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
-import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
+import { UPGRADE_TIMING, describeProductionLevelUp, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
   ATTACK_FX, HURT_FX, attackDogFx, attackSignature, attackGroupKey, blastFootprint,
@@ -509,21 +510,49 @@ function decoyTooltipInfo(decoy) {
   };
 }
 
-function catFromState(state, type, id) {
+function upgradeUnitFromState(state, type, id) {
+  if (type === 'worker') return state.workers.find((worker) => worker?.id === id);
   const list = type === 'bench' ? state.bench : state.cats;
   return list.find((cat) => cat.id === id);
 }
 
 function queueUpgradeReveal(beforeState, afterState, targetType, targetId) {
-  const before = catFromState(beforeState, targetType, targetId);
-  const after = catFromState(afterState, targetType, targetId);
+  const before = upgradeUnitFromState(beforeState, targetType, targetId);
+  const after = upgradeUnitFromState(afterState, targetType, targetId);
   const reveal = describeUpgrade(before, after);
   if (!reveal) return null;
   pendingUpgrade = { ...reveal, targetType, targetId };
   return reveal;
 }
 
+function queueProductionLevelUp(beforeState, afterState, targetType, targetId) {
+  const before = upgradeUnitFromState(beforeState, targetType, targetId);
+  const after = upgradeUnitFromState(afterState, targetType, targetId);
+  const reveal = describeProductionLevelUp(before, after);
+  if (!reveal) return null;
+  pendingUpgrade = { ...reveal, targetType, targetId, production: true };
+  return reveal;
+}
+
+const PRODUCTION_UPGRADE_TARGET_TYPES = Object.freeze({
+  'purchase-worker': 'worker',
+  'purchase-worker-bench': 'bench',
+  'merge-worker': 'worker',
+  'place-worker': 'worker',
+  'return-worker': 'bench',
+  'merge-bench-worker': 'bench',
+});
+
+function queueProductionLevelUpForAction(beforeState, afterState, action) {
+  const targetType = PRODUCTION_UPGRADE_TARGET_TYPES[action.type];
+  if (!targetType || !action.targetId) return null;
+  return queueProductionLevelUp(beforeState, afterState, targetType, action.targetId);
+}
+
 function upgradeAnchor(targetType, targetId) {
+  if (targetType === 'worker') {
+    return document.querySelector(`.worker-slot[data-unit-id="${targetId}"]`);
+  }
   if (targetType === 'bench') {
     return document.querySelector(`.bench-slot[data-unit-id="${targetId}"]`);
   }
@@ -540,7 +569,7 @@ function playPendingUpgrade() {
 
   const rect = anchor.getBoundingClientRect();
   const overlay = document.createElement('div');
-  overlay.className = `upgrade-reveal upgrade-${reveal.intensity}`;
+  overlay.className = `upgrade-reveal upgrade-${reveal.intensity}${reveal.production ? ' upgrade-production' : ''}`;
   overlay.style.left = `${rect.left + rect.width / 2}px`;
   overlay.style.top = `${rect.top + rect.height / 2}px`;
   overlay.style.width = `${Math.max(58, rect.width)}px`;
@@ -562,19 +591,20 @@ function playPendingUpgrade() {
   badge.className = 'upgrade-callout';
   badge.textContent = reveal.label;
   const note = document.createElement('em');
-  note.textContent = reveal.kind === 'level-up' ? 'NEW LOOK!' : 'STACKED!';
+  note.textContent = reveal.note ?? (reveal.kind === 'level-up' ? 'NEW LOOK!' : 'STACKED!');
   overlay.append(radiance, smoke, badge, note);
   document.body.append(overlay);
 
   anchor.classList.add('upgrade-transforming', `upgrade-${reveal.intensity}`);
-  if (reveal.kind === 'level-up') $('#board')?.classList.add('upgrade-board-pulse');
+  if (reveal.production) anchor.classList.add('upgrade-production');
+  if (reveal.kind === 'level-up' && !reveal.production) $('#board')?.classList.add('upgrade-board-pulse');
   requestAnimationFrame(() => {
     overlay.classList.add('is-revealing');
     window.setTimeout(() => anchor.classList.add('upgrade-revealed'), UPGRADE_TIMING.revealDelayMs);
   });
 
   window.setTimeout(() => {
-    anchor.classList.remove('upgrade-transforming', 'upgrade-revealed', `upgrade-${reveal.intensity}`);
+    anchor.classList.remove('upgrade-transforming', 'upgrade-revealed', 'upgrade-production', `upgrade-${reveal.intensity}`);
     $('#board')?.classList.remove('upgrade-board-pulse');
     overlay.remove();
   }, UPGRADE_TIMING.totalMs);
@@ -908,6 +938,7 @@ function applyDropAction(action, source) {
   } else if (action.type === 'sell') {
     game = sellCat(game, source.type, source.id);
   }
+  if (game !== before) queueProductionLevelUpForAction(before, game, action);
   return game !== before;
 }
 
@@ -1258,6 +1289,7 @@ function productionWorkerSlot(index) {
     slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
     return slot;
   }
+  slot.dataset.unitId = worker.id;
   const info = WORKER_INFO[worker.role];
   slot.append(unitCanvas('worker', worker));
   const workVisual = productionWorkVisual(worker.role);
@@ -1382,20 +1414,22 @@ function renderDogPreview() {
 }
 
 const ACTIVE_COPY = {
-  'bomb-cross': ['PLUS BOMB', 'Aim on the battlefield. The five blue squares show the plus-shaped blast.'],
-  freeze: ['FREEZE', 'Choose a dog to freeze through this round and the next round.'],
-  teleport: ['PORTAL', 'Choose one of your cats or a dog. Allies can go to any empty cat square; dogs can move up to 2 squares.'],
-  decoy: ['DECOY', 'Choose an empty cat square or an existing phantom. Each cast adds Faux Paw\'s level + 1 blocks; the combined total loses 1 each later round.'],
-  storm: ['STORM', 'Choose a dog column to strike.'],
-  duel: ['DOG DUEL', 'Choose a square with two dogs, or one dog next to another dog.'],
+  'bomb-cross': ['PLUS BOMB', 'Aim on the battlefield. Damage scales 1×/2×/3× by level; the five-square plus shape stays the same.'],
+  freeze: ['FREEZE', 'Choose a dog. Freeze and shatter strength scale 1×/2×/3× by level.'],
+  teleport: ['PORTAL', `Choose an ally or enemy. Allies can go anywhere and gain ${PORTAL_PERCENTAGE_SCALE_TEXT} one-hit guard plus ${PORTAL_PERCENTAGE_SCALE_TEXT} next-attack damage, with ${PORTAL_MINIMUM_SCALE_TEXT} minimums. Enemies move ${PORTAL_RANGE_SCALE_TEXT} squares and lose ${PORTAL_PERCENTAGE_SCALE_TEXT} damage on their next attack, with the same minimums. Effects do not stack.`],
+  decoy: ['DECOY', 'Choose an empty cat square or an existing phantom. Each cast adds 2/4/6 blocks by level; the combined total loses 1 each later round.'],
+  storm: ['STORM', 'Choose a dog column. The strike deals 2/4/6 damage by level.'],
+  duel: ['DOG DUEL', 'Choose two nearby dogs. They deal 1×/2×/3× their own attack damage by Meowstro\'s level.'],
 };
 
 function activeTargetingInstruction(targeting) {
+  const casterLevel = game.cats.find((cat) => cat.id === targeting?.casterId)?.level ?? 1;
   if (targeting?.mode === 'teleport' && targeting.targetCatId) {
     return 'Choose any empty cat-territory square for your cat.';
   }
   if (targeting?.mode === 'teleport' && targeting.targetDogId) {
-    return 'Choose a square up to 2 steps away with room for one more dog.';
+    const range = portalEffectForLevel(casterLevel).enemyRange;
+    return `Choose a square up to ${range} steps away that is empty or holds only one dog.`;
   }
   return ACTIVE_COPY[targeting?.mode]?.[1] ?? 'Choose a target.';
 }
@@ -1500,7 +1534,8 @@ function tryActiveTarget(row, col, cat, dog) {
     if (targeting.targetCatId && row >= CAT_ZONE_START && !cat && !dog) {
       payload = { targetCatId: targeting.targetCatId, row, col };
     }
-    if (targeting.targetDogId && canTeleportDogTo(game, targeting.targetDogId, row, col)) {
+    const casterLevel = game.cats.find((cat) => cat.id === targeting.casterId)?.level ?? 1;
+    if (targeting.targetDogId && canTeleportDogTo(game, targeting.targetDogId, row, col, portalEffectForLevel(casterLevel).enemyRange)) {
       payload = { targetDogId: targeting.targetDogId, row, col };
     }
   }
@@ -1670,7 +1705,13 @@ function renderBoard() {
           || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && !activeTargeting.targetDogId && (cat || dog))
           || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !dog && !decoy)
           || (activeTargeting.mode === 'teleport' && activeTargeting.targetDogId
-            && canTeleportDogTo(game, activeTargeting.targetDogId, row, col));
+            && canTeleportDogTo(
+              game,
+              activeTargeting.targetDogId,
+              row,
+              col,
+              portalEffectForLevel(game.cats.find((unit) => unit.id === activeTargeting.casterId)?.level ?? 1).enemyRange,
+            ));
         if (bombAiming) {
           cell.classList.add('bomb-aim');
           cell.addEventListener('pointerenter', () => showBombTargetPreview(row, col));

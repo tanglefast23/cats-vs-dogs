@@ -126,7 +126,7 @@ test('shop fighter can merge directly while the target equipment survives', () =
   assert.equal(game.gold, 7);
   assert.equal(game.bench[0].copies, 2);
   assert.equal(game.bench[0].equipment.weapon.tier, 3);
-  assert.equal(game.bench[0].attack, 7);
+  assert.equal(game.bench[0].attack, 6);
 });
 
 test('worker purchase charges only after a valid production-slot drop', () => {
@@ -269,13 +269,13 @@ test('weapons replace permanently', () => {
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
   game = addInventoryStack(game, { kind: 'weapon', tier: 1, quantity: 1 });
   game = equipInventoryItem(game, 0, 'bench', game.bench[0].id);
-  assert.equal(game.bench[0].attack, 5);
+  assert.equal(game.bench[0].attack, 4);
   assert.equal(game.bench[0].equipment.weapon.tier, 1);
 
   game = addInventoryStack(game, { kind: 'weapon', tier: 3, quantity: 1 });
   const weaponIndex = game.inventory.findIndex((stack) => stack?.kind === 'weapon');
   game = equipInventoryItem(game, weaponIndex, 'bench', game.bench[0].id);
-  assert.equal(game.bench[0].attack, 7);
+  assert.equal(game.bench[0].attack, 6);
   assert.equal(game.bench[0].equipment.weapon.tier, 3);
 });
 

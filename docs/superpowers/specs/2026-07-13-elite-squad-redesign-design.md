@@ -39,19 +39,19 @@ You may **deploy at most 5 cats on the battlefield**, in every round (flat, no r
 
 ### 2. Merges become real power spikes
 
-Rescale level-2 and level-3 stats so a merged cat is **slightly stronger than the three cats you spent** — and clearly stronger than one cat in the same slot.
+Rescale level-2 and level-3 stats so a merged cat has **2× and 3× the attack of one level-1 cat** — and is clearly stronger than one cat in the same slot without automatically erasing late-game dogs.
 
-Illustrative, orange coat (exact per-coat numbers to be tuned):
+Current Purrcy curve:
 
 | In one slot | HP | Attack |
 |---|---|---|
-| Level 1 | 6 | 2 |
-| Level 2 — today → new | 9 → ~20 | 3 → ~7 |
-| Level 3 | a proper "monster" | |
+| Level 1 | 4 | 3 |
+| Level 2 | 13 | 6 |
+| Level 3 | 40 | 9 |
 
-- Apply the same **"beat the sum by a little"** rule to every coat.
-- **Chosen philosophy:** combined *slightly beats* the three inputs added together — rather than the alternative "combined merely equals the sum, and the freed slot is the whole reward." The slight-beat version makes every merge a felt power spike (fits the elite-squad fantasy) and feels good even early, before you have spare cats to fill the freed slots.
-- **Keep the premium small.** If a merged cat crushes three spread cats so hard you'd *always* merge, the decision dies again. The natural counterweight is already in the game (see #3): dogs pour down 6 lanes and an open lane costs a life, so one giant cat can't guard six lanes.
+- Apply the same **1×/2×/3× attack and numerical ability-strength rule** to every coat.
+- **Chosen philosophy:** level 2 doubles and level 3 triples one base cat. The freed squad space is the main merge reward, while upgraded cats stop short of reproducing all nine ingredients' attack in one action. Health retains its existing merge premium.
+- **Keep the health premium small.** If a merged cat crushes three spread cats so hard you'd *always* merge, the decision dies again. The natural counterweight is already in the game (see #3): dogs pour down 6 lanes and an open lane costs a life, so one giant cat can't guard six lanes.
 
 ### 3. Board stays 6 columns wide
 
@@ -86,7 +86,7 @@ The player observed the game feels "too easy / no fear of approaching doom / too
 
 ## Open items (to tune / verify, not blocking)
 
-- **Exact merge stat curves** per coat — start from the "beat the sum by a little" rule, tune in playtest.
+- **Exact merge stat curves** per coat — level 2 is twice and level 3 is three times the base attack; tune base attacks in playtest.
 - **Whether flat 5 holds** — confirm it feels right after playing; adjust the number if not.
 - **Incoming-wave visibility** — confirm the UI shows the *columns* of the next wave during prep. The engine knows them (`nextWave`); movement is far more strategic if the player can see where the dogs are about to come. If it's not shown, showing it becomes part of this work.
 

@@ -35,6 +35,17 @@ export const CAT_COAT = {
   ENCORE: 10,
 };
 
+export const PORTAL_EFFECT_SCALING = Object.freeze({
+  1: Object.freeze({ percent: 10, minimum: 1, enemyRange: 2 }),
+  2: Object.freeze({ percent: 20, minimum: 2, enemyRange: 3 }),
+  3: Object.freeze({ percent: 30, minimum: 3, enemyRange: 4 }),
+});
+
+const portalScale = Object.values(PORTAL_EFFECT_SCALING);
+export const PORTAL_PERCENTAGE_SCALE_TEXT = portalScale.map(({ percent }) => `${percent}%`).join('/');
+export const PORTAL_MINIMUM_SCALE_TEXT = portalScale.map(({ minimum }) => minimum).join('/');
+export const PORTAL_RANGE_SCALE_TEXT = portalScale.map(({ enemyRange }) => enemyRange).join('/');
+
 export const CAT_COAT_INFO = {
   0: {
     name: 'Purrcy Pew-Pew',
@@ -66,9 +77,9 @@ export const CAT_COAT_INFO = {
     ability: 'homing',
     role: 'Balanced homing generalist',
     strength: 'Reliable medium damage that can reach any column',
-    weakness: 'Deals half or less of Purrcy\'s damage',
+    weakness: 'Deals less damage than Purrcy',
     blurb: 'Medium stats · homing',
-    attackDetail: 'Fires one medium-strength sine-wave shot at the lowest dog row first, then the nearest column. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
+    attackDetail: 'Fires one medium-strength sine-wave shot at the lowest dog row first, then the nearest column. It can reach any column, but deals less damage than Purrcy\'s straight-shot volley.',
     shopTier: 1,
     unlockRound: 1,
   },
@@ -77,10 +88,10 @@ export const CAT_COAT_INFO = {
     shortName: 'Knotty',
     ability: 'tangle-homing',
     role: 'Movement-control specialist',
-    strength: 'Each dog hit for the first time skips its next move',
+    strength: 'Each dog hit for the first time skips moves equal to Knotty\'s level',
     weakness: 'Very low damage; a dog can only be tangled once',
     blurb: 'One-time stop · low damage',
-    attackDetail: 'Fires weak homing yarn. The first hit on each dog tangles it so its next unblocked move is skipped; later hits on that dog only deal the low damage.',
+    attackDetail: 'Fires weak homing yarn. The first hit on each dog tangles it for 1/2/3 skipped moves at levels 1/2/3; later hits on that dog only deal the low damage.',
     shopTier: 1,
     unlockRound: 1,
   },
@@ -93,7 +104,7 @@ export const CAT_COAT_INFO = {
     strength: 'Medium lane damage plus a five-square Tactics bomb',
     weakness: 'Fragile and cannot normally attack outside its lane',
     blurb: 'Medium lane bomb · plus spell',
-    attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits a five-square plus — full damage to the dog at the center, half to the four sides.',
+    attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits a five-square plus — full 2/4/6 damage at the center and 1/2/3 damage to the four sides at levels 1/2/3.',
     shopTier: 2,
     unlockRound: 4,
   },
@@ -111,51 +122,51 @@ export const CAT_COAT_INFO = {
   },
   6: {
     name: 'Frosty Paws', shortName: 'Frosty', ability: 'homing', activeAbility: 'freeze',
-    role: 'Freeze-control specialist', strength: 'Freezes one chosen dog for two rounds', weakness: 'Very low normal damage',
-    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog for the rest of the current round and all of the next round.', shopTier: 2, unlockRound: 4,
+    role: 'Freeze-control specialist', strength: 'Freezes one chosen dog for 1/2/3 rounds by level', weakness: 'Very low normal damage',
+    blurb: 'Scaling freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog for 1/2/3 rounds and add 1/2/3 shatter damage at levels 1/2/3.', shopTier: 2, unlockRound: 4,
   },
   7: {
     name: 'Purrtal', shortName: 'Purrtal', ability: 'homing', activeAbility: 'teleport',
-    role: 'Positioning specialist', strength: 'Teleports an ally anywhere or shifts one enemy up to two squares', weakness: 'Low normal damage',
-    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square, or move one enemy up to two squares onto a square holding at most one dog.', shopTier: 2, unlockRound: 4,
+    role: 'Positioning specialist', strength: 'Teleports an ally anywhere or shifts and weakens one enemy', weakness: 'Low normal damage',
+    blurb: 'Scaling mobility · low attack', attackDetail: `Unlocked on round 4. Once per battle, Purrtal can teleport an ally to any empty cat square. The ally gains ${PORTAL_PERCENTAGE_SCALE_TEXT} guard (minimum ${PORTAL_MINIMUM_SCALE_TEXT}) until its next damaging hit or the round ends, plus ${PORTAL_PERCENTAGE_SCALE_TEXT} damage (minimum ${PORTAL_MINIMUM_SCALE_TEXT}) on its next attack. Or move one enemy ${PORTAL_RANGE_SCALE_TEXT} squares onto an empty or one-dog square and give it -${PORTAL_PERCENTAGE_SCALE_TEXT} attack (minimum ${PORTAL_MINIMUM_SCALE_TEXT}) on its next damaging attack. At least 1 damage always gets through. Portal bonuses and penalties do not stack; the strongest value wins.`, shopTier: 2, unlockRound: 4,
   },
   8: {
     name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
     role: 'Defensive-utility specialist', strength: 'Summons a blocker anywhere in cat territory', weakness: 'Fragile with low normal damage',
-    blurb: 'Decaying blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a phantom with one more attack block than Faux Paw\'s level. It loses one remaining block each later round.', shopTier: 2, unlockRound: 4,
+    blurb: 'Decaying blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a phantom with 2/4/6 attack blocks at levels 1/2/3. It loses one remaining block each later round.', shopTier: 2, unlockRound: 4,
   },
   9: {
     name: 'Thunderpaws', shortName: 'Thunder', ability: 'homing', activeAbility: 'storm',
     role: 'Burst-ability specialist', strength: 'Strikes every dog in one chosen column', weakness: 'Very fragile with the weakest normal attack',
-    blurb: 'Huge spell · tiny attack', attackDetail: 'Unlocked on round 4. Normal shots barely hurt, but once per battle Thunderpaws can strike every dog in one selected column.', shopTier: 2, unlockRound: 4,
+    blurb: 'Huge spell · tiny attack', attackDetail: 'Unlocked on round 4. Normal shots barely hurt, but once per battle Thunderpaws can strike every dog in one selected column for 2/4/6 damage at levels 1/2/3.', shopTier: 2, unlockRound: 4,
   },
   10: {
     name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'duel',
     role: 'Enemy-control specialist', strength: 'Forces two nearby dogs to attack each other', weakness: 'Very low personal damage',
-    blurb: 'Dog duel · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can select a dog square and make two dogs there or on adjacent squares deal their own attack damage to each other.', shopTier: 2, unlockRound: 4,
+    blurb: 'Dog duel · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can make two nearby dogs deal 1×/2×/3× their own attack damage to each other at levels 1/2/3.', shopTier: 2, unlockRound: 4,
   },
 };
 
 // Default Purrcy stats are exported for older callers; every coat has its own curve below.
 export const CAT_STATS = {
-  1: { hp: 4, attack: 4 },
-  2: { hp: 13, attack: 14 },
-  3: { hp: 40, attack: 44 },
+  1: { hp: 4, attack: 3 },
+  2: { hp: 13, attack: 6 },
+  3: { hp: 40, attack: 9 },
 };
 
 // A unit pays for targeting or active utility with damage. Purrcy is the damage benchmark.
 const COAT_ATTACK = {
-  0: { 1: 4, 2: 14, 3: 44 },
-  1: { 1: 1, 2: 4, 3: 13 },
-  2: { 1: 2, 2: 7, 3: 22 },
-  3: { 1: 1, 2: 4, 3: 13 },
-  4: { 1: 2, 2: 7, 3: 22 },
-  5: { 1: 3, 2: 10, 3: 31 },
-  6: { 1: 1, 2: 4, 3: 13 },
-  7: { 1: 1, 2: 4, 3: 13 },
-  8: { 1: 1, 2: 4, 3: 13 },
-  9: { 1: 1, 2: 4, 3: 13 },
-  10: { 1: 1, 2: 4, 3: 13 },
+  0: { 1: 3, 2: 6, 3: 9 },
+  1: { 1: 1, 2: 2, 3: 3 },
+  2: { 1: 2, 2: 4, 3: 6 },
+  3: { 1: 1, 2: 2, 3: 3 },
+  4: { 1: 2, 2: 4, 3: 6 },
+  5: { 1: 3, 2: 6, 3: 9 },
+  6: { 1: 1, 2: 2, 3: 3 },
+  7: { 1: 1, 2: 2, 3: 3 },
+  8: { 1: 1, 2: 2, 3: 3 },
+  9: { 1: 1, 2: 2, 3: 3 },
+  10: { 1: 1, 2: 2, 3: 3 },
 };
 
 const COAT_HP = {
@@ -310,6 +321,21 @@ export function normalizeCoat(coat = 0) {
   return CAT_COAT_INFO[value] ? value : CAT_COAT.ORANGE;
 }
 
+function catLevelMultiplier(level = 1) {
+  const value = Math.floor(Number(level) || 1);
+  return Math.max(1, Math.min(3, value));
+}
+
+export function portalEffectForLevel(level = 1) {
+  return PORTAL_EFFECT_SCALING[catLevelMultiplier(level)];
+}
+
+export function portalEffectAmount(baseValue, level = 1) {
+  const { percent, minimum } = portalEffectForLevel(level);
+  const base = Math.max(0, Number(baseValue) || 0);
+  return Math.max(minimum, Math.floor((base * percent) / 100));
+}
+
 export function catStatsFor(level = 1, coat = 0) {
   const safeLevel = CAT_STATS[level] ? level : 1;
   const safeCoat = normalizeCoat(coat);
@@ -343,13 +369,25 @@ function catTooltipEffects(cat, info) {
       detail: `${uses}/${maxUses} protected hits remain. It reduces each hit by ${block}, but at least 1 damage always gets through.`,
     });
   }
-  if ((cat.guard ?? 0) > 0) {
+  if ((cat.portalGuardLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(cat.portalGuardLevel);
+    effects.push({
+      kind: 'guard', label: 'PORTAL GUARD', value: `${percent}% BLOCK`,
+      detail: `Blocks ${percent}% of damage from the next hit (minimum ${minimum}), then expires. At least 1 damage still gets through.`,
+    });
+  } else if ((cat.guard ?? 0) > 0) {
     effects.push({
       kind: 'guard', label: 'PORTAL GUARD', value: `${cat.guard} BLOCK`,
       detail: `Blocks ${cat.guard} additional damage from the next hit, then expires.`,
     });
   }
-  if ((cat.nextAttackBonus ?? 0) > 0) {
+  if ((cat.portalAttackBonusLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(cat.portalAttackBonusLevel);
+    effects.push({
+      kind: 'attack-up', label: 'NEXT ATTACK', value: `+${percent}% ATK`,
+      detail: `Adds ${percent}% damage to this cat’s next attack (minimum ${minimum}), then expires.`,
+    });
+  } else if ((cat.nextAttackBonus ?? 0) > 0) {
     effects.push({
       kind: 'attack-up', label: 'NEXT ATTACK', value: `+${cat.nextAttackBonus} ATK`,
       detail: 'Added once when this cat next attacks, then expires.',
@@ -365,7 +403,9 @@ function catTooltipEffects(cat, info) {
   if (activeAbility) {
     effects.push({
       kind: 'ability', label: 'TACTICS SPECIAL', value: cat.activeUsed ? 'USED' : 'READY',
-      detail: cat.activeUsed ? 'Already used in this battle.' : 'Available once this battle during a Tactics Window.',
+      detail: cat.activeUsed
+        ? 'Already used in this battle. In round 10 it refreshes at the next Tactics Window.'
+        : 'Available during a Tactics Window — once per battle normally, and once per window in round 10.',
     });
   }
   return effects;
@@ -444,6 +484,18 @@ export function dogTooltipInfo(dog) {
       detail: 'Added to this dog’s next damaging attack, then expires.',
     });
   }
+  if ((dog.portalAttackPenaltyLevel ?? 0) > 0) {
+    const { percent, minimum } = portalEffectForLevel(dog.portalAttackPenaltyLevel);
+    effects.push({
+      kind: 'attack-down', label: 'PORTAL WEAKNESS', value: `-${percent}% ATK`,
+      detail: `Subtracts ${percent}% from this dog’s next damaging attack (minimum ${minimum}), then expires. At least 1 damage still gets through; repeated portals keep only the strongest penalty.`,
+    });
+  } else if ((dog.nextAttackPenalty ?? 0) > 0) {
+    effects.push({
+      kind: 'attack-down', label: 'PORTAL WEAKNESS', value: `-${dog.nextAttackPenalty} ATK`,
+      detail: 'Subtracted from this dog’s next damaging attack, then expires. Repeated portals keep only the strongest penalty.',
+    });
+  }
   if ((dog.frozenActions ?? 0) > 0) {
     const frozenRounds = dog.frozenRoundsRemaining ?? Math.ceil(dog.frozenActions / ACTIONS_PER_ROUND);
     effects.push({
@@ -451,10 +503,11 @@ export function dogTooltipInfo(dog) {
       detail: `Cannot act for ${frozenRounds} more round${frozenRounds === 1 ? '' : 's'} (${dog.frozenActions} combat exchange${dog.frozenActions === 1 ? '' : 's'} remaining).`,
     });
   }
-  if (dog.tangled) {
+  const tangledMoves = dog.tangledMovesRemaining ?? (dog.tangled ? 1 : 0);
+  if (tangledMoves > 0) {
     effects.push({
-      kind: 'tangled', label: 'TANGLED', value: '1 MOVE',
-      detail: 'The next movement path is skipped; the yarn is then removed.',
+      kind: 'tangled', label: 'TANGLED', value: `${tangledMoves} MOVE${tangledMoves === 1 ? '' : 'S'}`,
+      detail: `The next ${tangledMoves} movement path${tangledMoves === 1 ? ' is' : 's are'} skipped; the yarn is then removed.`,
     });
   }
   return {
@@ -1035,6 +1088,20 @@ export function useFood(game, inventoryIndex, catId) {
   return next;
 }
 
+function effectiveDogAttack(dog) {
+  const boostedAttack = dog.attack + (dog.attackBoost ?? 0);
+  const portalPenalty = (dog.portalAttackPenaltyLevel ?? 0) > 0
+    ? portalEffectAmount(boostedAttack, dog.portalAttackPenaltyLevel)
+    : 0;
+  return Math.max(1, boostedAttack - portalPenalty - (dog.nextAttackPenalty ?? 0));
+}
+
+function consumeDogAttackModifiers(dog) {
+  dog.attackBoost = 0;
+  dog.portalAttackPenaltyLevel = 0;
+  dog.nextAttackPenalty = 0;
+}
+
 function resolveDogDuel(next, caster, row, col, random) {
   const selectedSquare = livingDogs(next.dogs)
     .filter((dog) => dog.row === row && dog.col === col);
@@ -1056,14 +1123,15 @@ function resolveDogDuel(next, caster, row, col, random) {
   }
 
   const [first, second] = fighters;
-  const firstDamage = Math.max(1, first.attack + (first.attackBoost ?? 0));
-  const secondDamage = Math.max(1, second.attack + (second.attackBoost ?? 0));
+  const multiplier = catLevelMultiplier(caster.level);
+  const firstDamage = effectiveDogAttack(first) * multiplier;
+  const secondDamage = effectiveDogAttack(second) * multiplier;
   const firstHpBefore = first.hp;
   const secondHpBefore = second.hp;
   first.hp = Math.max(0, first.hp - secondDamage);
   second.hp = Math.max(0, second.hp - firstDamage);
-  first.attackBoost = 0;
-  second.attackBoost = 0;
+  consumeDogAttackModifiers(first);
+  consumeDogAttackModifiers(second);
 
   next.events.push(
     { type: 'dog-duel-cast', from: caster.id, targets: [first.id, second.id] },
@@ -1084,12 +1152,13 @@ function resolveDogDuel(next, caster, row, col, random) {
   return true;
 }
 
-export function canTeleportDogTo(game, dogId, row, col) {
+export function canTeleportDogTo(game, dogId, row, col, maxDistance = 2) {
   const dog = game.dogs.find((unit) => unit.id === dogId && unit.hp > 0);
   if (!dog || !Number.isInteger(row) || !Number.isInteger(col)
     || row < 0 || row >= ROWS || col < 0 || col >= COLS) return false;
+  const distanceLimit = Math.max(1, Math.min(4, Math.floor(Number(maxDistance) || 1)));
   const distance = Math.abs(row - dog.row) + Math.abs(col - dog.col);
-  return distance >= 1 && distance <= 2
+  return distance >= 1 && distance <= distanceLimit
     && !game.cats.some((cat) => cat.hp > 0 && cat.row === row && cat.col === col)
     && !game.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === row && decoy.col === col)
     && dogCountAt(game.dogs, row, col, dog.id) < DOG_CELL_CAPACITY;
@@ -1107,11 +1176,15 @@ export function useActiveAbility(game, casterId, target = {}) {
   if (active === 'freeze') {
     const dog = next.dogs.find((unit) => unit.id === target.dogId && unit.hp > 0 && !unit.frozenActions);
     if (dog) {
+      const levelPower = catLevelMultiplier(caster.level);
       const actionsLeftThisRound = Math.max(0, ACTIONS_PER_ROUND - game.section);
-      dog.frozenActions = actionsLeftThisRound + ACTIONS_PER_ROUND;
-      dog.frozenRoundsRemaining = 2;
-      dog.shatterDamage = caster.level === 1 ? 0 : caster.level === 2 ? 2 : 4;
-      next.events.push({ type: 'freeze-cast', from: caster.id, to: dog.id, row: dog.row, col: dog.col });
+      dog.frozenActions = actionsLeftThisRound + ((levelPower - 1) * ACTIONS_PER_ROUND);
+      dog.frozenRoundsRemaining = levelPower;
+      dog.shatterDamage = levelPower;
+      next.events.push({
+        type: 'freeze-cast', from: caster.id, to: dog.id, row: dog.row, col: dog.col,
+        rounds: levelPower, shatterDamage: levelPower,
+      });
       used = true;
     }
   } else if (active === 'teleport') {
@@ -1123,19 +1196,26 @@ export function useActiveAbility(game, casterId, target = {}) {
       && !next.dogs.some((dog) => dog.hp > 0 && dog.row === target.row && dog.col === target.col)
       && !next.decoys.some((decoy) => decoyIsActive(decoy) && decoy.row === target.row && decoy.col === target.col);
     if (ally && allyDestinationIsLegal) {
+      const levelPower = catLevelMultiplier(caster.level);
       const fromRow = ally.row; const fromCol = ally.col;
       ally.row = target.row; ally.col = target.col;
       if (!ally.tacticsMoved) ally.tacticsOrigin = { row: ally.row, col: ally.col };
-      if (caster.level >= 2) ally.guard = Math.max(ally.guard ?? 0, 2);
-      if (caster.level >= 3) ally.nextAttackBonus = Math.max(ally.nextAttackBonus ?? 0, 2);
+      ally.portalGuardLevel = Math.max(ally.portalGuardLevel ?? 0, levelPower);
+      ally.portalAttackBonusLevel = Math.max(ally.portalAttackBonusLevel ?? 0, levelPower);
       next.events.push({ type: 'teleport', unitType: 'cat', from: caster.id, to: ally.id, fromRow, fromCol, row: ally.row, col: ally.col });
       used = true;
-    } else if (enemy && canTeleportDogTo(next, enemy.id, target.row, target.col)) {
+    } else if (enemy && canTeleportDogTo(next, enemy.id, target.row, target.col, portalEffectForLevel(caster.level).enemyRange)) {
+      const levelPower = catLevelMultiplier(caster.level);
+      const effect = portalEffectForLevel(levelPower);
       const fromRow = enemy.row; const fromCol = enemy.col;
       enemy.row = target.row; enemy.col = target.col;
+      enemy.portalAttackPenaltyLevel = Math.max(enemy.portalAttackPenaltyLevel ?? 0, levelPower);
       next.events.push({
         type: 'teleport', unitType: 'dog', from: caster.id, to: enemy.id,
         fromRow, fromCol, row: enemy.row, col: enemy.col,
+        attackPenalty: portalEffectAmount(enemy.attack, levelPower),
+        attackPenaltyPercent: effect.percent,
+        attackPenaltyMinimum: effect.minimum,
       });
       used = true;
     }
@@ -1145,7 +1225,7 @@ export function useActiveAbility(game, casterId, target = {}) {
       && target.row >= CAT_ZONE_START && target.row < ROWS && target.col >= 0 && target.col < COLS
       && !next.cats.some((cat) => cat.row === target.row && cat.col === target.col);
     if (legal) {
-      const blocks = Math.max(1, Math.min(3, caster.level ?? 1)) + 1;
+      const blocks = 2 * catLevelMultiplier(caster.level);
       if (existingDecoy) {
         const previousBlocks = existingDecoy.blocks ?? 0;
         const previousMaxBlocks = existingDecoy.maxBlocks ?? previousBlocks;
@@ -1449,7 +1529,9 @@ export function startRound(game) {
     cat.hasEnteredBattle = true;
     cat.activeUsed = false;
     cat.guard = 0;
+    cat.portalGuardLevel = 0;
     cat.nextAttackBonus = 0;
+    cat.portalAttackBonusLevel = 0;
     cat.nextAttackPenalty = 0;
   });
   const queuedWave = next.nextWave?.length ? next.nextWave : generateWave(next.round, game.random);
@@ -1472,10 +1554,13 @@ export function openTacticsWindow(game) {
   const next = copy(game);
   next.phase = 'tactics';
   next.cats.forEach((cat) => {
+    if (next.round === MAX_ROUNDS) cat.activeUsed = false;
     cat.tacticsOrigin = { row: cat.row, col: cat.col };
     cat.tacticsMoved = false;
   });
-  next.message = 'TACTICS: move each cat once, use supplies or abilities, then continue.';
+  next.message = next.round === MAX_ROUNDS
+    ? 'FINAL ROUND TACTICS: abilities refreshed. Move each cat once, use supplies, then continue.'
+    : 'TACTICS: move each cat once, use supplies or abilities, then continue.';
   return next;
 }
 
@@ -1647,11 +1732,11 @@ function pushMissEvent(events, type, from, extra = {}) {
 }
 
 function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
-  const attack = extra.damage ?? (dog.attack + (dog.attackBoost ?? 0));
+  const attack = extra.damage ?? effectiveDogAttack(dog);
   if (target.kind === 'phantom-cat') {
     const blocksBefore = target.blocks ?? 0;
     target.blocks = Math.max(0, blocksBefore - 1);
-    dog.attackBoost = 0;
+    consumeDogAttackModifiers(dog);
     next.events.push({
       type,
       from: dog.id,
@@ -1673,7 +1758,10 @@ function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
   const hpBefore = target.hp;
   const armour = target.equipment?.armour;
   const armourBlocked = armour?.block ?? 0;
-  const guardBlocked = target.guard ?? 0;
+  const percentageGuardBlocked = (target.portalGuardLevel ?? 0) > 0
+    ? portalEffectAmount(attack, target.portalGuardLevel)
+    : 0;
+  const guardBlocked = Math.max(target.guard ?? 0, percentageGuardBlocked);
   const blocked = Math.min(armourBlocked + guardBlocked, Math.max(0, attack - 1));
   const damage = Math.max(1, attack - blocked);
   let armourBroken = false;
@@ -1687,8 +1775,9 @@ function applyDogDamage(next, dog, target, type = 'melee', extra = {}) {
     }
   }
   if (target.guard) target.guard = 0;
+  if (target.portalGuardLevel) target.portalGuardLevel = 0;
   target.hp = Math.max(0, target.hp - damage);
-  dog.attackBoost = 0;
+  consumeDogAttackModifiers(dog);
   next.events.push({
     type,
     from: dog.id,
@@ -1826,9 +1915,14 @@ function advanceDog(next, dog) {
   }
 
   const route = chooseDogRoute(next, dog, dogMoveDistance(dog));
-  if (dog.tangled && route.path.length) {
-    dog.tangled = false;
-    next.events.push({ type: 'tangle-skip', id: dog.id, row: dog.row, col: dog.col });
+  const tangledMoves = dog.tangledMovesRemaining ?? (dog.tangled ? 1 : 0);
+  if (tangledMoves > 0 && route.path.length) {
+    dog.tangledMovesRemaining = tangledMoves - 1;
+    dog.tangled = dog.tangledMovesRemaining > 0;
+    next.events.push({
+      type: 'tangle-skip', id: dog.id, row: dog.row, col: dog.col,
+      remainingMoves: dog.tangledMovesRemaining,
+    });
     return;
   }
 
@@ -1860,9 +1954,13 @@ export function resolveSection(game) {
   // Cats always act. If nothing is in range they still shoot/swing (miss animations).
   // Purrcy = high column damage, Hissiletoe = medium homing, Clawdius = low front melee.
   for (const cat of next.cats) {
-    if (cat.nextAttackBonus || cat.nextAttackPenalty) {
+    if (cat.portalAttackBonusLevel || cat.nextAttackBonus || cat.nextAttackPenalty) {
       cat.attackBeforeActiveBonus = cat.attack;
-      cat.attack = Math.max(1, cat.attack + (cat.nextAttackBonus ?? 0) - (cat.nextAttackPenalty ?? 0));
+      const portalBonus = (cat.portalAttackBonusLevel ?? 0) > 0
+        ? portalEffectAmount(cat.attack, cat.portalAttackBonusLevel)
+        : 0;
+      cat.attack = Math.max(1, cat.attack + portalBonus + (cat.nextAttackBonus ?? 0) - (cat.nextAttackPenalty ?? 0));
+      cat.portalAttackBonusLevel = 0;
       cat.nextAttackBonus = 0;
       cat.nextAttackPenalty = 0;
     }
@@ -1893,6 +1991,7 @@ export function resolveSection(game) {
           style: 'tangle',
         });
         if (target.hp > 0 && !target.tangledOnce) {
+          target.tangledMovesRemaining = catLevelMultiplier(cat.level);
           target.tangled = true;
           target.tangledOnce = true;
         }
@@ -2069,7 +2168,7 @@ export function resolveSection(game) {
         .sort((left, right) => (left.row - dog.row) - (right.row - dog.row)
           || Math.abs(left.col - dog.col) - Math.abs(right.col - dog.col))[0];
       if (rangedTarget) {
-        const rangedDamage = Math.max(1, Math.ceil((dog.attack + (dog.attackBoost ?? 0)) * 0.7));
+        const rangedDamage = Math.max(1, Math.ceil(effectiveDogAttack(dog) * 0.7));
         applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'frisbee', damage: rangedDamage });
         continue;
       }
@@ -2082,7 +2181,7 @@ export function resolveSection(game) {
           && target.row - dog.row <= 3)
         .sort((left, right) => left.row - right.row)[0];
       if (rangedTarget) {
-        const rangedDamage = Math.max(1, Math.ceil((dog.attack + (dog.attackBoost ?? 0)) * 0.6));
+        const rangedDamage = Math.max(1, Math.ceil(effectiveDogAttack(dog) * 0.6));
         applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'tennis', damage: rangedDamage });
         continue;
       }
@@ -2095,7 +2194,7 @@ export function resolveSection(game) {
           && target.row - dog.row <= 5)
         .sort((left, right) => left.row - right.row)[0];
       if (rangedTarget) {
-        const bombDamage = Math.max(1, Math.floor((dog.attack + (dog.attackBoost ?? 0)) * 0.6));
+        const bombDamage = Math.max(1, Math.floor(effectiveDogAttack(dog) * 0.6));
         applyDogDamage(next, dog, rangedTarget, 'dog-shot', { style: 'bone-bomb', damage: bombDamage });
         const splashTargets = [...next.cats, ...next.decoys]
           .filter((target) => target.id !== rangedTarget.id
@@ -2168,7 +2267,9 @@ export function finishRound(game) {
     cat.prepOrigin = { row: cat.row, col: cat.col };
     cat.prepMoved = false;
     cat.guard = 0;
+    cat.portalGuardLevel = 0;
     cat.nextAttackBonus = 0;
+    cat.portalAttackBonusLevel = 0;
   });
   next.workers.forEach((worker) => {
     if (!worker) return;
