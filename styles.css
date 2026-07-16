@@ -668,7 +668,6 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .house-wing .production-cell { border: 1px solid rgba(255,248,220,.5); box-shadow: none; }
 .house-wing .production-grid { position: relative; }
 .house-wing .production-cell small { display: none; }
-.house-wing .worker-slot.empty .empty-plus { font-family: var(--px); font-size: 14px; }
 .house-wing::before {
   content: '';
   position: absolute;
@@ -828,9 +827,19 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
 .adoption-pet canvas { width: 54px; height: 54px; image-rendering: pixelated; }
 .adoption-coin { position: absolute; z-index: 13; right: 14px; top: 50%; color: #ffe15e; font-family: var(--px); font-size: 12px; text-shadow: 2px 2px 0 var(--ink); animation: adoption-coin-pop .72s steps(5) forwards; }
 .gold-gained { animation: gold-gain .6s steps(4); }
+.coin-spent { animation: coin-spent .4s steps(5); transform-origin: center; }
 @keyframes cat-into-box { 0% { transform: translateY(-45px) scale(1); opacity: 1; } 65% { transform: translateY(0) scale(.82); opacity: 1; } 100% { transform: translateY(24px) scale(.45); opacity: 0; } }
 @keyframes adoption-coin-pop { 0% { transform: translateY(16px) scale(.5); opacity: 0; } 35% { transform: translateY(-8px) scale(1.25); opacity: 1; } 100% { transform: translateY(-34px) scale(.8); opacity: 0; } }
 @keyframes gold-gain { 50% { color: #fff36b; transform: scale(1.35); } }
+@keyframes coin-spent {
+  0%,100% { color: inherit; transform: translateY(0) scale(1); }
+  35% { color: #c97024; transform: translateY(2px) scale(.82); }
+  70% { color: #ffe15e; transform: translateY(-1px) scale(1.16); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coin-spent { animation: coin-spent-reduced .18s linear; }
+  @keyframes coin-spent-reduced { 50% { color: #c97024; } }
+}
 
 .shop-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 .shop-slot { grid-column: span 2; display: grid; gap: 4px; min-width: 0; }
@@ -2891,16 +2900,24 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   }
   .mobile-hud-stat {
     min-width: 0;
-    display: grid;
-    align-content: center;
-    justify-items: center;
+    display: flex;
+    align-items: stretch;
     color: var(--ink);
   }
   .mobile-hud-stat + .mobile-hud-stat { border-left: 2px dashed #9f7654; }
-  .mobile-hud-stat strong { font-size: 13px; line-height: 1; }
-  .mobile-hud-stat small { margin-top: 5px; font-family: var(--px); font-size: 5px; line-height: 1; }
-  .mobile-hud-stat.gold strong::before { content: '●'; margin-right: 2px; color: #c48808; }
-  .mobile-hud-stat.lives strong::before { content: '♥'; margin-right: 2px; color: #d84a45; }
+  .mobile-hud-stat strong {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 20px;
+    line-height: 1;
+    text-align: center;
+  }
+  .mobile-hud-stat small { display: none; }
+  .mobile-hud-stat.gold strong::before { content: '●'; color: #c48808; }
+  .mobile-hud-stat.lives strong::before { content: '♥'; color: #d84a45; }
   .mobile-plank-actions { height: 47px; display: grid; grid-template-columns: minmax(0, 1fr) 31px; gap: 4px; }
   .mobile-plank-button {
     min-width: 0;
@@ -2914,11 +2931,28 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
     font-size: 15px;
     line-height: 1;
   }
-  .mobile-tutorial-button { align-content: center; gap: 4px; }
-  .mobile-tutorial-button b { font-size: 15px; line-height: 1; }
-  .mobile-tutorial-button small { font-family: var(--px); font-size: 5px; line-height: 1; }
+  .mobile-tutorial-button {
+    font-family: var(--px);
+    font-size: 6px;
+    line-height: 1.35;
+  }
   .phase-control-wing > .phase-status-panel { display: none; }
-  .field-house-layout { width: min(100%, 820px, calc((100vh - 200px) * 11 / 14)); }
+  .field-house-layout {
+    width: min(100%, 820px, calc((100vh - 200px) * 11 / 14));
+    margin-bottom: 145px;
+  }
+  .field-house-layout > .planning-supplies-panel {
+    position: absolute;
+    z-index: 4;
+    top: calc(100% + 36px);
+    left: calc(100% * 5 / 11);
+    width: calc(100% * 6 / 11);
+    min-height: 92px;
+  }
+  .field-house-layout > .planning-supplies-panel .panel-heading { margin-bottom: 7px; }
+  .field-house-layout > .planning-supplies-panel .panel-heading h2 { font-size: 11px; }
+  .field-house-layout > .planning-supplies-panel .planning-inventory-item { min-height: 54px; }
+  .field-house-layout > .planning-supplies-panel .planning-inventory-item canvas { width: 50px; height: 50px; }
   .control-panel { position: static; max-height: none; width: min(100%, 470px); order: 3; }
   .glossary-modal { padding: 8px; }
   .glossary-card { width: calc(100vw - 16px); height: calc(100vh - 16px); padding: 11px; }
@@ -3412,6 +3446,9 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   .phase-hud-chip.hud-chip { min-height: 40px; padding: 5px 3px; }
   .phase-hud-chip.hud-chip strong { font-size: 15px; }
   .phase-control-wing .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .phase-control-wing .shop-slot { gap: 0; }
+  .phase-control-wing .shop-card { padding-bottom: 0; overflow: hidden; }
+  .phase-control-wing .shop-card canvas { margin-bottom: -3px; }
   .phase-control-wing .panel-heading h2 { font-size: 11px; }
   .phase-control-wing .shop-card > strong,
   .phase-control-wing .worker-slot > small,

@@ -30,6 +30,18 @@ test('mobile uses one wooden status plank above the fence and hides duplicate ca
   assert.match(app, /\$\('#mobile-settings'\)\?\.addEventListener\('click'/);
 });
 
+test('mobile shop cats stand directly on their compact card edge', () => {
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-slot\s*{\s*gap:\s*0;\s*}/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card\s*{[^}]*padding-bottom:\s*0;[^}]*overflow:\s*hidden;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card canvas\s*{\s*margin-bottom:\s*-3px;\s*}/s);
+});
+
+test('Cat Workbench omits the redundant capacity counter', () => {
+  assert.match(html, /<h2>Cat Workbench<\/h2>/);
+  assert.doesNotMatch(html, /id="bench-count"|Cat Workbench\s*<small>0\/3<\/small>/);
+  assert.doesNotMatch(app, /bench-count/);
+});
+
 test('worker cat offers use a pastel violet background', () => {
   assert.match(css, /\.shop-slot\.worker-offer \.shop-card\s*{[^}]*background:\s*#e6d7f5/);
 });
@@ -135,6 +147,39 @@ test('the green planning wing shows two production item counts only when it rema
   assert.match(app, /planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1/);
   assert.match(app, /suppliesPanel\.hidden = false;\s*if \(planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1\) suppliesPanel\.hidden = true;/);
   assert.match(app, /<strong>×\$\{item\.quantity\}<\/strong>/);
+});
+
+test('mobile calls supplies Items and places them below the battlefield', () => {
+  assert.match(html, /id="planning-supplies"[^>]*aria-label="Items"[\s\S]*<h2>Items<\/h2>/);
+  assert.match(html, /id="planning-supplies-anchor"/);
+  assert.match(app, /function syncPlanningSuppliesPlacement\(\)[\s\S]*matchMedia\('\(max-width: 880px\)'\)[\s\S]*fieldLayout\.append\(suppliesPanel\)/);
+  assert.match(css, /\.field-house-layout > \.planning-supplies-panel\s*{[^}]*top:\s*calc\(100% \+ 36px\);[^}]*left:\s*calc\(100% \* 5 \/ 11\);[^}]*width:\s*calc\(100% \* 6 \/ 11\);/s);
+});
+
+test('mobile scoreboard centers each icon and value together', () => {
+  assert.match(css, /\.mobile-hud-stat strong\s*{[^}]*display:\s*inline-flex;[^}]*justify-content:\s*center;[^}]*gap:\s*5px;[^}]*font-size:\s*20px;[^}]*text-align:\s*center;/s);
+  assert.match(css, /\.mobile-hud-stat\.gold strong::before\s*{\s*content:\s*'●';\s*color:\s*#c48808;/);
+  assert.match(css, /\.mobile-hud-stat\.lives strong::before\s*{\s*content:\s*'♥';\s*color:\s*#d84a45;/);
+});
+
+test('mobile scoreboard omits labels and Tutorial omits the question mark', () => {
+  assert.match(css, /\.mobile-hud-stat small\s*{\s*display:\s*none;\s*}/);
+  assert.match(html, /id="mobile-tutorial"[^>]*>TUTORIAL<\/button>/);
+  assert.doesNotMatch(html, /id="mobile-tutorial"[^>]*>[\s\S]*?\?[\s\S]*?<\/button>/);
+  assert.match(css, /\.mobile-tutorial-button\s*{[^}]*font-family:\s*var\(--px\);[^}]*font-size:\s*6px;/s);
+});
+
+test('successful shop spending animates the coin number and plays its spend sound', () => {
+  assert.match(app, /function showCoinSpendFeedback\(\)[\s\S]*playCoinSpend\(\)[\s\S]*classList\.add\('coin-spent'\)/);
+  assert.match(app, /const goldBefore = game\.gold;[\s\S]*if \(changed && game\.gold < goldBefore\) showCoinSpendFeedback\(\);/);
+  assert.match(app, /id === 'refresh'[\s\S]*if \(game !== previousGame\) showCoinSpendFeedback\(\);/);
+  assert.match(css, /\.coin-spent\s*{[^}]*animation:\s*coin-spent \.4s steps\(5\)/);
+  assert.match(css, /@keyframes coin-spent\s*{[\s\S]*scale\(\.82\)[\s\S]*scale\(1\.16\)/);
+});
+
+test('empty production slots do not show plus signs', () => {
+  assert.doesNotMatch(app, /class="empty-plus">\+<\/span>/);
+  assert.match(app, /slot\.setAttribute\('aria-label', `Empty production slot \$\{index \+ 1\}`\);/);
 });
 
 test('empty Cat Workbench slots stay visually blank', () => {

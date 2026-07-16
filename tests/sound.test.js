@@ -6,7 +6,7 @@ import {
   IMPACT_SOUNDS, LEVEL_MUSIC_DURATION_SECONDS, LEVEL_MUSIC_URL, playImpact, playArmourBlock, SFX_GAIN,
   playMerge, playCatDeath, playDogDeath, playWaveStart,
   playRoundComplete, playVictory, playDefeat, playHeal, playHowl,
-  playAppleCrunch, playItemUse,
+  playAppleCrunch, playCoinSpend, playItemUse,
 } from '../src/sound.js';
 import { HURT_FX } from '../src/battle-fx.js';
 
@@ -42,7 +42,7 @@ test('synthesized SFX carry at least a 2x master gain', () => {
 test('event sounds exist and are safe without an audio context', () => {
   const eventSounds = {
     playMerge, playCatDeath, playDogDeath, playWaveStart,
-    playRoundComplete, playVictory, playDefeat, playHeal, playHowl, playAppleCrunch,
+    playRoundComplete, playVictory, playDefeat, playHeal, playHowl, playAppleCrunch, playCoinSpend,
   };
   for (const [name, play] of Object.entries(eventSounds)) {
     assert.equal(typeof play, 'function', `${name} is not exported as a function`);

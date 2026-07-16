@@ -15,7 +15,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
-import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCoinSpend, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catCanCrossTerritoryBoundary, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeProductionUpgrade, describeUpgrade } from './upgrade-animation.js';
@@ -199,6 +199,22 @@ function visibleHudChip(kind) {
   const values = hudValueElements(kind);
   const value = values.find((element) => element.getClientRects().length) ?? values[0];
   return value?.closest('.hud-chip, .mobile-hud-stat') ?? null;
+}
+
+const coinSpendTimers = new WeakMap();
+
+function showCoinSpendFeedback() {
+  playCoinSpend();
+  hudValueElements('gold').forEach((element) => {
+    window.clearTimeout(coinSpendTimers.get(element));
+    element.classList.remove('coin-spent');
+    void element.offsetWidth;
+    element.classList.add('coin-spent');
+    coinSpendTimers.set(element, window.setTimeout(() => {
+      element.classList.remove('coin-spent');
+      coinSpendTimers.delete(element);
+    }, 420));
+  });
 }
 
 function tooltipCardMarkup(info, index) {
@@ -1145,6 +1161,7 @@ async function finishDrag(event, cancelled = false) {
   }
 
   const fieldWasFull = game.cats.length >= MAX_FIELD_CATS;
+  const goldBefore = game.gold;
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
@@ -1174,6 +1191,7 @@ async function finishDrag(event, cancelled = false) {
     if (isBattlefieldDropAction(action)) playCatDrop();
   }
   render();
+  if (changed && game.gold < goldBefore) showCoinSpendFeedback();
   if (changed && (action.type === 'use-food' || action.type === 'equip')) {
     playItemUseEffect(action.type === 'use-food' ? 'food' : state.source.itemKind,
       action.targetId, state.source.tier ?? 1);
@@ -1275,7 +1293,7 @@ function productionWorkerSlot(index) {
   slot.style.gridColumn = String(index + 1);
   slot.style.gridRow = '1';
   if (!worker) {
-    slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
+    slot.setAttribute('aria-label', `Empty production slot ${index + 1}`);
     return slot;
   }
   slot.dataset.unitId = worker.id;
@@ -1380,7 +1398,7 @@ function renderProduction() {
     const slot = document.createElement('div');
     slot.className = `planning-inventory-item ${item ? 'filled' : 'empty'}`;
     if (!item) {
-      slot.setAttribute('aria-label', `Empty production item slot ${index + 1}`);
+      slot.setAttribute('aria-label', `Empty item slot ${index + 1}`);
       slot.innerHTML = '<span><small>EMPTY</small></span>';
       planningInventoryEl.append(slot);
       return;
@@ -1400,6 +1418,18 @@ function syncPlanningSuppliesVisibility() {
   if (planningPanel.hidden || planningPanel.scrollHeight > planningPanel.clientHeight + 1) return;
   suppliesPanel.hidden = false;
   if (planningPanel.scrollHeight > planningPanel.clientHeight + 1) suppliesPanel.hidden = true;
+}
+
+function syncPlanningSuppliesPlacement() {
+  const suppliesPanel = $('#planning-supplies');
+  const desktopAnchor = $('#planning-supplies-anchor');
+  const fieldLayout = document.querySelector('.field-house-layout');
+  if (!suppliesPanel || !desktopAnchor || !fieldLayout) return;
+  if (window.matchMedia('(max-width: 880px)').matches) {
+    if (suppliesPanel.parentElement !== fieldLayout) fieldLayout.append(suppliesPanel);
+  } else if (suppliesPanel.nextElementSibling !== desktopAnchor) {
+    desktopAnchor.before(suppliesPanel);
+  }
 }
 
 function renderWorkbench() {
@@ -1896,7 +1926,6 @@ function renderHud() {
   hudValueElements('gold').forEach((element) => { element.textContent = game.gold; });
   hudValueElements('lives').forEach((element) => { element.textContent = game.lives; });
   hudValueElements('round').forEach((element) => { element.textContent = `${game.round}/${MAX_ROUNDS}`; });
-  $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
@@ -3663,6 +3692,7 @@ window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
 window.addEventListener('resize', () => {
+  syncPlanningSuppliesPlacement();
   syncPlanningSuppliesVisibility();
   if (tutorialActive) { hideDragHint(); hideTutorialFocus(); syncTutorial(); }
 });
@@ -3682,6 +3712,7 @@ $('#refresh').addEventListener('click', () => {
   }
   selected = null;
   render();
+  if (game !== previousGame) showCoinSpendFeedback();
 });
 function onDoneClick() {
   // In the tutorial, if you'd start a round with money on the table, nudge once first.
@@ -3780,6 +3811,7 @@ game = loadGameProgress() ?? game;
 loadVolumeSettings();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
+syncPlanningSuppliesPlacement();
 render();
 
 // Dev-only QA hook. Vite strips this from production builds. Combat effects are hard to

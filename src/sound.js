@@ -394,6 +394,17 @@ export function playRefreshClick() {
   });
 }
 
+/** Quick downward coin clink whenever gold is successfully spent. */
+export function playCoinSpend() {
+  if (!soundEnabled) return;
+  tone({ frequency: 1180, slideTo: 760, duration: 0.07, type: 'square', volume: 0.035, attack: 0.001, decay: 0.04 });
+  later(42, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 820, slideTo: 520, duration: 0.09, type: 'triangle', volume: 0.032, attack: 0.001, decay: 0.05 });
+  });
+  noiseBurst({ duration: 0.025, volume: 0.015, filterFreq: 4200, filterType: 'highpass' });
+}
+
 /** Soft “plop” when a cat is placed or moved onto the board. */
 export function playCatDrop() {
   if (!soundEnabled) return;
