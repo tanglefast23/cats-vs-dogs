@@ -6,6 +6,10 @@ export function catMoveLimit(cat) {
   return cat?.ability === 'melee' ? BIG_MELEE_MOVE_LIMIT : SMALL_CAT_MOVE_LIMIT;
 }
 
+export function catCanCrossTerritoryBoundary(cat) {
+  return cat?.ability === 'melee' && Boolean(cat?.hasEnteredBattle);
+}
+
 export function catMoveLimitMessage(catOrLimit) {
   const limit = typeof catOrLimit === 'number' ? catOrLimit : catMoveLimit(catOrLimit);
   return `This cat can only move ${limit} ${limit === 1 ? 'square' : 'squares'}.`;

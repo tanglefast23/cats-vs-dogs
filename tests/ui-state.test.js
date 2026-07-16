@@ -10,7 +10,7 @@ import {
 import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
-import { UPGRADE_TIMING, describeProductionLevelUp, describeUpgrade } from '../src/upgrade-animation.js';
+import { UPGRADE_TIMING, describeProductionUpgrade, describeUpgrade } from '../src/upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from '../src/melee-animation.js';
 
 test('cat pickup advice explains free placement before its first battle', () => {
@@ -21,6 +21,20 @@ test('cat pickup advice explains free placement before its first battle', () => 
       'prep',
     ),
     'Level 1 Purrcy Pew-Pew selected. Before its first battle, you can freely place or reposition this cat anywhere in cat territory.',
+  );
+});
+
+test('veteran melee cat advice explains movement beyond cat territory', () => {
+  const cat = { level: 1, ability: 'melee', hasEnteredBattle: true };
+  const info = { name: 'Clawdius', blurb: 'Extreme HP' };
+
+  assert.equal(
+    catSelectionAdvice(cat, info, 'prep'),
+    'Level 1 Clawdius selected (Extreme HP). Move it to an empty tile, including beyond cat territory, or merge only onto the same color + level.',
+  );
+  assert.equal(
+    catSelectionAdvice(cat, info, 'tactics'),
+    'Level 1 Clawdius selected. Move it to an empty tile, including beyond cat territory, for its battle-break movement.',
   );
 });
 
@@ -638,13 +652,15 @@ test('level two and level three promotions receive stronger reveal classificatio
   assert.ok(UPGRADE_TIMING.totalMs >= UPGRADE_TIMING.smokeMs);
 });
 
-test('production cats celebrate only when a stack crosses into a new level', () => {
-  assert.equal(
-    describeProductionLevelUp({ level: 1, copies: 1 }, { level: 1, copies: 2 }),
-    null,
+test('production cats use the same stack and level-up reveals as battlefield cats', () => {
+  assert.deepEqual(
+    describeProductionUpgrade({ level: 1, copies: 1 }, { level: 1, copies: 2 }),
+    {
+      kind: 'stack', level: 1, label: '2 / 3', intensity: 'standard',
+    },
   );
   assert.deepEqual(
-    describeProductionLevelUp({ level: 1, copies: 2 }, { level: 2, copies: 1 }),
+    describeProductionUpgrade({ level: 1, copies: 2 }, { level: 2, copies: 1 }),
     {
       kind: 'level-up', level: 2, label: 'LEVEL 2!', intensity: 'level-up',
       note: 'PRODUCTION BOOST!',

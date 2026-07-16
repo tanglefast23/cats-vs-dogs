@@ -28,8 +28,10 @@ export function describeUpgrade(before, after) {
   };
 }
 
-export function describeProductionLevelUp(before, after) {
+export function describeProductionUpgrade(before, after) {
   const reveal = describeUpgrade(before, after);
-  if (reveal?.kind !== 'level-up') return null;
-  return { ...reveal, note: 'PRODUCTION BOOST!' };
+  if (!reveal) return null;
+  return reveal.kind === 'level-up'
+    ? { ...reveal, note: 'PRODUCTION BOOST!' }
+    : reveal;
 }

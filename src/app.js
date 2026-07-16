@@ -17,8 +17,8 @@ import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, sho
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
 import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
-import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
-import { UPGRADE_TIMING, describeProductionLevelUp, describeUpgrade } from './upgrade-animation.js';
+import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catCanCrossTerritoryBoundary, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
+import { UPGRADE_TIMING, describeProductionUpgrade, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
   ATTACK_FX, HURT_FX, attackDogFx, attackSignature, attackGroupKey, blastFootprint,
@@ -525,10 +525,10 @@ function queueUpgradeReveal(beforeState, afterState, targetType, targetId) {
   return reveal;
 }
 
-function queueProductionLevelUp(beforeState, afterState, targetType, targetId) {
+function queueProductionUpgrade(beforeState, afterState, targetType, targetId) {
   const before = upgradeUnitFromState(beforeState, targetType, targetId);
   const after = upgradeUnitFromState(afterState, targetType, targetId);
-  const reveal = describeProductionLevelUp(before, after);
+  const reveal = describeProductionUpgrade(before, after);
   if (!reveal) return null;
   pendingUpgrade = { ...reveal, targetType, targetId, production: true };
   return reveal;
@@ -543,10 +543,10 @@ const PRODUCTION_UPGRADE_TARGET_TYPES = Object.freeze({
   'merge-bench-worker': 'bench',
 });
 
-function queueProductionLevelUpForAction(beforeState, afterState, action) {
+function queueProductionUpgradeForAction(beforeState, afterState, action) {
   const targetType = PRODUCTION_UPGRADE_TARGET_TYPES[action.type];
   if (!targetType || !action.targetId) return null;
-  return queueProductionLevelUp(beforeState, afterState, targetType, action.targetId);
+  return queueProductionUpgrade(beforeState, afterState, targetType, action.targetId);
 }
 
 function upgradeAnchor(targetType, targetId) {
@@ -938,7 +938,7 @@ function applyDropAction(action, source) {
   } else if (action.type === 'sell') {
     game = sellCat(game, source.type, source.id);
   }
-  if (game !== before) queueProductionLevelUpForAction(before, game, action);
+  if (game !== before) queueProductionUpgradeForAction(before, game, action);
   return game !== before;
 }
 
@@ -1122,7 +1122,6 @@ async function finishDrag(event, cancelled = false) {
         ? 'Cat reserved on the Cat Workbench.'
         : 'Cat deployed!';
     if (isBattlefieldDropAction(action)) playCatDrop();
-    if (action.type === 'merge-worker' || action.type === 'merge-bench-worker') playMerge();
   }
   render();
   if (changed && (action.type === 'use-food' || action.type === 'equip')) {
@@ -1419,7 +1418,7 @@ const ACTIVE_COPY = {
   teleport: ['PORTAL', `Choose an ally or enemy. Allies can go anywhere and gain ${PORTAL_PERCENTAGE_SCALE_TEXT} one-hit guard plus ${PORTAL_PERCENTAGE_SCALE_TEXT} next-attack damage, with ${PORTAL_MINIMUM_SCALE_TEXT} minimums. Enemies move ${PORTAL_RANGE_SCALE_TEXT} squares and lose ${PORTAL_PERCENTAGE_SCALE_TEXT} damage on their next attack, with the same minimums. Effects do not stack.`],
   decoy: ['DECOY', 'Choose an empty cat square or an existing phantom. Each cast adds 2/4/6 blocks by level; the combined total loses 1 each later round.'],
   storm: ['STORM', 'Choose a dog column. The strike deals 2/4/6 damage by level.'],
-  duel: ['DOG DUEL', 'Choose two nearby dogs. They deal 1×/2×/3× their own attack damage by Meowstro\'s level.'],
+  duel: ['DOG DUEL', 'Choose two nearby dogs. They deal 1×/1.5×/3× their own attack damage by Meowstro\'s level, rounded up.'],
 };
 
 function activeTargetingInstruction(targeting) {
@@ -1571,6 +1570,12 @@ function tryActiveTarget(row, col, cat, dog) {
   return true;
 }
 
+function finishAbilityPlayback() {
+  playing = false;
+  render();
+  if (game.phase === 'victory' || game.phase === 'gameover') showResult();
+}
+
 async function playBombAbility(nextGame) {
   playing = true;
   snapshotUnits(game);
@@ -1585,8 +1590,7 @@ async function playBombAbility(nextGame) {
       await animateMove(event);
     }
   } finally {
-    playing = false;
-    render();
+    finishAbilityPlayback();
   }
 }
 
@@ -1603,8 +1607,7 @@ async function playStormAbility(nextGame) {
       await animateMove(event);
     }
   } finally {
-    playing = false;
-    render();
+    finishAbilityPlayback();
   }
 }
 
@@ -1625,8 +1628,7 @@ async function playDuelAbility(nextGame) {
     await playDeaths(attacks);
   } finally {
     $('#board')?.classList.remove('ability-cast');
-    playing = false;
-    render();
+    finishAbilityPlayback();
   }
 }
 
@@ -1746,9 +1748,9 @@ function renderBoard() {
         if ((game.phase !== 'prep' && game.phase !== 'tactics') || playing) return;
         if (cat) {
           if (game.phase === 'tactics' || !tryMerge('cat', cat.id)) selectCat('cat', cat);
-        } else if (selected && row < CAT_ZONE_START) {
+        } else if (selected && row < CAT_ZONE_START && !catCanCrossTerritoryBoundary(ownedCat(selected.type, selected.id))) {
           // A silent no-op reads as a broken game — shake and say why instead.
-          game.message = 'Cats stay in the four glowing rows at the bottom of the yard.';
+          game.message = 'Only melee cats that have already battled can cross beyond the four glowing rows.';
           const board = $('#board');
           board?.classList.remove('board-shake');
           void board?.offsetWidth;

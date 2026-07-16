@@ -1,4 +1,5 @@
 import { portalEffectForLevel } from './game-engine.js';
+import { catCanCrossTerritoryBoundary } from './movement-rules.js';
 
 export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
@@ -6,10 +7,16 @@ export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
 
 export function catSelectionAdvice(cat, info, phase) {
   if (phase === 'tactics') {
+    if (catCanCrossTerritoryBoundary(cat)) {
+      return `Level ${cat.level} ${info.name} selected. Move it to an empty tile, including beyond cat territory, for its battle-break movement.`;
+    }
     return `Level ${cat.level} ${info.name} selected. Move it to an empty glowing tile for its battle-break movement.`;
   }
   if (!cat.hasEnteredBattle) {
     return `Level ${cat.level} ${info.name} selected. Before its first battle, you can freely place or reposition this cat anywhere in cat territory.`;
+  }
+  if (catCanCrossTerritoryBoundary(cat)) {
+    return `Level ${cat.level} ${info.name} selected (${info.blurb}). Move it to an empty tile, including beyond cat territory, or merge only onto the same color + level.`;
   }
   return `Level ${cat.level} ${info.name} selected (${info.blurb}). Tap an empty cat-territory tile to place it, or merge only onto the same color + level.`;
 }

@@ -108,6 +108,37 @@ test('melee cats move one square and smaller cats move two during setup, once pe
   assert.equal(moveCat(game, rangedId, 11, 4), game, 'a ranged cat still relocates only once per prep');
 });
 
+test('veteran melee cats can cross beyond cat territory during setup and tactics', () => {
+  let setupGame = createGame(() => 0.5);
+  setupGame = placeCoat(setupGame, CAT_COAT.GREY, CAT_ZONE_START, 1);
+  const setupMeleeId = setupGame.cats[0].id;
+  setupGame = startRound(setupGame);
+  setupGame = finishRound(setupGame);
+  setupGame = moveCat(setupGame, setupMeleeId, CAT_ZONE_START - 1, 1);
+  assert.equal(setupGame.cats[0].row, CAT_ZONE_START - 1);
+
+  let tacticsGame = createGame(() => 0.5);
+  tacticsGame = placeCoat(tacticsGame, CAT_COAT.GREY, CAT_ZONE_START, 2);
+  const tacticsMeleeId = tacticsGame.cats[0].id;
+  tacticsGame = startRound(tacticsGame);
+  tacticsGame = openTacticsWindow(tacticsGame);
+  tacticsGame = moveCatInTactics(tacticsGame, tacticsMeleeId, CAT_ZONE_START - 1, 2);
+  assert.equal(tacticsGame.cats[0].row, CAT_ZONE_START - 1);
+});
+
+test('rookie melee cats and veteran ranged cats stay inside cat territory', () => {
+  let rookieGame = createGame(() => 0.5);
+  rookieGame = placeCoat(rookieGame, CAT_COAT.GREY, CAT_ZONE_START, 1);
+  assert.equal(moveCat(rookieGame, rookieGame.cats[0].id, CAT_ZONE_START - 1, 1), rookieGame);
+
+  let rangedGame = createGame(() => 0.5);
+  rangedGame = placeCoat(rangedGame, CAT_COAT.ORANGE, CAT_ZONE_START, 2);
+  const rangedId = rangedGame.cats[0].id;
+  rangedGame = startRound(rangedGame);
+  rangedGame = finishRound(rangedGame);
+  assert.equal(moveCat(rangedGame, rangedId, CAT_ZONE_START - 1, 2), rangedGame);
+});
+
 test('a newly deployed cat can reposition anywhere until its first battle starts', () => {
   let game = createGame(() => 0.5);
   game = placeCoat(game, CAT_COAT.ORANGE, 12, 2);
@@ -568,6 +599,23 @@ test('Thunderpaws storm damage scales 2, 4, and 6 by level', () => {
   }
 });
 
+test('Thunderpaws immediately wins when storm clears the final wave', () => {
+  let game = createGame(() => 0.5);
+  game.cats = [createCat(1, CAT_COAT.STORM)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  const finalDog = createDog(1, 5, 4);
+  finalDog.hp = 2;
+  game.dogs = [finalDog];
+  game.round = MAX_ROUNDS;
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, game.cats[0].id, { col: 4 });
+
+  assert.equal(game.dogs.length, 0);
+  assert.equal(game.phase, 'victory');
+  assert.equal(game.events.some((event) => event.type === 'level-clear'), true);
+});
+
 test('Bombay Boom special hits a five-square plus — full damage at the centre, half to the sides', () => {
   let game = createGame(() => 0.5);
   game.cats = [createCat(2, CAT_COAT.BLACK)];
@@ -687,13 +735,16 @@ test('Meowstro does not spend the ability on an isolated dog', () => {
   assert.equal(game.cats[0].activeUsed, false);
 });
 
-test('Meowstro multiplies forced duel damage 1x, 2x, and 3x by level', () => {
+test('Meowstro scales forced duel damage 1x, 1.5x, and 3x by level and rounds up', () => {
+  const expectedDamageByLevel = [[5, 7], [8, 11], [15, 21]];
   for (const level of [1, 2, 3]) {
     let game = createGame(() => 0.5);
     game.cats = [createCat(level, CAT_COAT.ENCORE)];
     game.cats[0].row = 13; game.cats[0].col = 0;
     const first = createDog(1, 5, 2);
     const second = createDog(2, 5, 2);
+    first.attack = 5;
+    second.attack = 7;
     first.hp = 100; first.maxHp = 100;
     second.hp = 100; second.maxHp = 100;
     game.dogs = [first, second];
@@ -703,7 +754,7 @@ test('Meowstro multiplies forced duel damage 1x, 2x, and 3x by level', () => {
 
     assert.deepEqual(
       game.events.filter((event) => event.type === 'dog-duel').map((event) => event.damage),
-      [4 * level, 6 * level],
+      expectedDamageByLevel[level - 1],
     );
   }
 });
@@ -836,5 +887,44 @@ test('drag rules allow each cat normal tactics movement but reject merges and de
     drop({ type: 'bench', id: 'bench-1', level: 1, coat: CAT_COAT.ORANGE }, { kind: 'cell', row: 12, col: 3, occupied: null }).type,
     'invalid',
     'no mid-combat deployment',
+  );
+});
+
+test('drag rules expose dog-yard movement only to veteran melee cats', () => {
+  const target = { kind: 'cell', row: CAT_ZONE_START - 1, col: 2, occupied: null };
+  const common = {
+    target,
+    catZoneStart: CAT_ZONE_START,
+    rows: ROWS,
+    cols: COLS,
+    phase: 'prep',
+  };
+  const veteranMelee = {
+    type: 'cat', id: 'melee-1', ability: 'melee', hasEnteredBattle: true,
+    row: CAT_ZONE_START, col: 2, prepOrigin: { row: CAT_ZONE_START, col: 2 }, prepMoved: false,
+  };
+
+  assert.deepEqual(
+    getDropAction({ ...common, source: veteranMelee }),
+    { type: 'move', row: CAT_ZONE_START - 1, col: 2 },
+  );
+  assert.equal(
+    getDropAction({ ...common, source: { ...veteranMelee, ability: 'homing' } }).type,
+    'invalid',
+  );
+  assert.equal(
+    getDropAction({ ...common, source: { ...veteranMelee, hasEnteredBattle: false } }).type,
+    'invalid',
+  );
+  assert.deepEqual(
+    getDropAction({
+      ...common,
+      source: { type: 'shop-fighter', id: 'shop-melee', level: 1, coat: CAT_COAT.GREY },
+      target: {
+        ...target,
+        occupied: { id: 'advanced-melee', level: 1, coat: CAT_COAT.GREY },
+      },
+    }),
+    { type: 'purchase-merge', targetType: 'cat', targetId: 'advanced-melee' },
   );
 });

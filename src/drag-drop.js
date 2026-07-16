@@ -1,4 +1,4 @@
-import { catMoveLimit } from './movement-rules.js';
+import { catCanCrossTerritoryBoundary, catMoveLimit } from './movement-rules.js';
 
 export const DRAG_FEEDBACK = Object.freeze({
   thresholdPx: 7,
@@ -94,8 +94,9 @@ export function getDropAction({
   if (target.kind === 'cell') {
     if (source.type !== 'shop-fighter' && source.type !== 'bench' && source.type !== 'cat') return invalid();
     const inBounds = target.row >= 0 && target.row < rows && target.col >= 0 && target.col < cols;
-    if (!inBounds || target.row < catZoneStart) return invalid();
+    if (!inBounds) return invalid();
     if (phase === 'tactics') {
+      if (target.row < catZoneStart && !catCanCrossTerritoryBoundary(source)) return invalid();
       if (source.type !== 'cat' || target.occupied) return invalid();
       if (source.tacticsMoved) return invalid('prep-moved');
       const origin = source.tacticsOrigin ?? { row: source.row, col: source.col };
@@ -110,6 +111,7 @@ export function getDropAction({
         ? { type: 'purchase-merge', targetType: 'cat', targetId: target.occupied.id }
         : { type: 'merge', targetType: 'cat', targetId: target.occupied.id };
     }
+    if (target.row < catZoneStart && !catCanCrossTerritoryBoundary(source)) return invalid();
     const restrictedSetupMove = (source.type === 'cat' || source.type === 'bench') && source.hasEnteredBattle;
     if (restrictedSetupMove && source.prepMoved) return invalid('prep-moved');
     const moveOrigin = source.prepOrigin

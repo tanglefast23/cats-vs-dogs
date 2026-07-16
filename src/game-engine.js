@@ -2,7 +2,7 @@ import {
   WORKER_ROLE, WORKER_INFO, workerShopEntries, outputForWorker,
   sameInventoryItem, WEAPON_INFO, ARMOUR_INFO, FOOD_HEAL,
 } from './production-rules.js';
-import { catMoveLimit } from './movement-rules.js';
+import { catCanCrossTerritoryBoundary, catMoveLimit } from './movement-rules.js';
 
 export { WORKER_ROLE, WORKER_INFO } from './production-rules.js';
 
@@ -143,7 +143,7 @@ export const CAT_COAT_INFO = {
   10: {
     name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'duel',
     role: 'Enemy-control specialist', strength: 'Forces two nearby dogs to attack each other', weakness: 'Very low personal damage',
-    blurb: 'Dog duel · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can make two nearby dogs deal 1×/2×/3× their own attack damage to each other at levels 1/2/3.', shopTier: 2, unlockRound: 4,
+    blurb: 'Dog duel · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can make two nearby dogs deal 1×/1.5×/3× their own attack damage to each other at levels 1/2/3, rounded up.', shopTier: 2, unlockRound: 4,
   },
 };
 
@@ -324,6 +324,10 @@ export function normalizeCoat(coat = 0) {
 function catLevelMultiplier(level = 1) {
   const value = Math.floor(Number(level) || 1);
   return Math.max(1, Math.min(3, value));
+}
+
+function meowstroDuelMultiplier(level = 1) {
+  return [1, 1.5, 3][catLevelMultiplier(level) - 1];
 }
 
 export function portalEffectForLevel(level = 1) {
@@ -1123,9 +1127,9 @@ function resolveDogDuel(next, caster, row, col, random) {
   }
 
   const [first, second] = fighters;
-  const multiplier = catLevelMultiplier(caster.level);
-  const firstDamage = effectiveDogAttack(first) * multiplier;
-  const secondDamage = effectiveDogAttack(second) * multiplier;
+  const multiplier = meowstroDuelMultiplier(caster.level);
+  const firstDamage = Math.ceil(effectiveDogAttack(first) * multiplier);
+  const secondDamage = Math.ceil(effectiveDogAttack(second) * multiplier);
   const firstHpBefore = first.hp;
   const secondHpBefore = second.hp;
   first.hp = Math.max(0, first.hp - secondDamage);
@@ -1281,6 +1285,11 @@ export function useActiveAbility(game, casterId, target = {}) {
   caster.activeUsed = true;
   const castName = active === 'bomb-cross' ? 'PLUS BOMB' : active === 'duel' ? 'DOG DUEL' : active.toUpperCase();
   next.message = `${CAT_COAT_INFO[normalizeCoat(caster.coat)].name} cast ${castName}!`;
+  if (next.dogs.length === 0 && next.round >= MAX_ROUNDS) {
+    next.phase = 'victory';
+    next.message = 'All dogs cleared! Level 1 complete.';
+    next.events.push({ type: 'level-clear' });
+  }
   return next;
 }
 
@@ -1378,11 +1387,12 @@ export function mergeUnitOnto(game, sourceType, sourceId, targetType, targetId) 
 }
 
 export function placeCat(game, benchIndex, row, col) {
-  if (game.phase !== 'prep' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  if (game.phase !== 'prep' || row < 0 || row >= ROWS || col < 0 || col >= COLS) return game;
   if (game.cats.length >= MAX_FIELD_CATS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col)) return game;
   const source = game.bench[benchIndex];
   if (!source || source.kind === 'production-cat') return game;
+  if (row < CAT_ZONE_START && !catCanCrossTerritoryBoundary(source)) return game;
   if (source.hasEnteredBattle && source.prepOrigin) {
     const distance = Math.abs(row - source.prepOrigin.row) + Math.abs(col - source.prepOrigin.col);
     if (source.prepMoved || distance > catMoveLimit(source)) return game;
@@ -1399,10 +1409,11 @@ export function placeCat(game, benchIndex, row, col) {
 }
 
 export function moveCat(game, catId, row, col) {
-  if (game.phase !== 'prep' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  if (game.phase !== 'prep' || row < 0 || row >= ROWS || col < 0 || col >= COLS) return game;
   if (game.cats.some((cat) => cat.row === row && cat.col === col && cat.id !== catId)) return game;
   const source = game.cats.find((unit) => unit.id === catId);
   if (!source || (source.hasEnteredBattle && source.prepMoved)) return game;
+  if (row < CAT_ZONE_START && !catCanCrossTerritoryBoundary(source)) return game;
   const origin = source.prepOrigin ?? { row: source.row, col: source.col };
   const distance = Math.abs(row - origin.row) + Math.abs(col - origin.col);
   if (source.hasEnteredBattle && distance > catMoveLimit(source)) return game;
@@ -1416,9 +1427,10 @@ export function moveCat(game, catId, row, col) {
 }
 
 export function moveCatInTactics(game, catId, row, col) {
-  if (game.phase !== 'tactics' || row < CAT_ZONE_START || row >= ROWS || col < 0 || col >= COLS) return game;
+  if (game.phase !== 'tactics' || row < 0 || row >= ROWS || col < 0 || col >= COLS) return game;
   const source = game.cats.find((cat) => cat.id === catId);
   if (!source || source.tacticsMoved) return game;
+  if (row < CAT_ZONE_START && !catCanCrossTerritoryBoundary(source)) return game;
   const blocked = game.cats.some((cat) => cat.id !== catId && cat.row === row && cat.col === col)
     || game.decoys.some((decoy) => decoy.row === row && decoy.col === col)
     || game.dogs.some((dog) => dog.hp > 0 && dog.row === row && dog.col === col);
