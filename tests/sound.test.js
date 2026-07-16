@@ -10,46 +10,6 @@ import {
 } from '../src/sound.js';
 import { HURT_FX } from '../src/battle-fx.js';
 
-function readMusicWav() {
-  const wav = readFileSync(new URL('../src/assets/audio/backyard-bounce.wav', import.meta.url));
-  assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
-  assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
-
-  let offset = 12;
-  let dataOffset = -1;
-  let dataSize = 0;
-  while (offset + 8 <= wav.length) {
-    const chunkId = wav.toString('ascii', offset, offset + 4);
-    const chunkSize = wav.readUInt32LE(offset + 4);
-    if (chunkId === 'data') {
-      dataOffset = offset + 8;
-      dataSize = chunkSize;
-      break;
-    }
-    offset += 8 + chunkSize + (chunkSize % 2);
-  }
-
-  assert.ok(dataOffset > 0, 'music WAV has no data chunk');
-  return {
-    wav,
-    dataOffset,
-    dataSize,
-    channels: wav.readUInt16LE(22),
-    sampleRate: wav.readUInt32LE(24),
-    byteRate: wav.readUInt32LE(28),
-    bitsPerSample: wav.readUInt16LE(34),
-  };
-}
-
-function windowRms(wav, offset, sampleCount) {
-  let squaredTotal = 0;
-  for (let index = 0; index < sampleCount; index += 1) {
-    const sample = wav.readInt16LE(offset + index * 2);
-    squaredTotal += sample * sample;
-  }
-  return Math.sqrt(squaredTotal / sampleCount);
-}
-
 // The same contract the graphics have: every impact the renderer can show must land
 // with its own sound, or a new attack ships silent without anyone noticing.
 test('every hurt impact the graphics can show has its own sound', () => {
@@ -152,30 +112,50 @@ test('eating an apple layers a sharp crack over two crunchy chew beats', async (
   assert.equal(events.filter((event) => event === 'oscillator').length, 3);
 });
 
-test('level music is a three-minute arrangement with a balanced loop seam', () => {
-  const music = readMusicWav();
-  assert.equal(music.channels, 1);
-  assert.equal(music.bitsPerSample, 16);
-  assert.equal(music.dataSize / music.byteRate, LEVEL_MUSIC_DURATION_SECONDS);
-
-  const seamWindowSamples = Math.round(music.sampleRate * 0.1);
-  const headRms = windowRms(music.wav, music.dataOffset, seamWindowSamples);
-  const tailOffset = music.dataOffset + music.dataSize - seamWindowSamples * 2;
-  const tailRms = windowRms(music.wav, tailOffset, seamWindowSamples);
-  const seamBalance = Math.max(headRms, tailRms) / Math.max(1, Math.min(headRms, tailRms));
-  assert.ok(seamBalance < 2, `loop seam changes volume too sharply (${seamBalance.toFixed(2)}x)`);
-
-  const firstSample = music.wav.readInt16LE(music.dataOffset);
-  const lastSample = music.wav.readInt16LE(music.dataOffset + music.dataSize - 2);
-  assert.ok(Math.abs(firstSample - lastSample) < 2500, 'loop seam has an audible sample jump');
-});
-
-test('the browser ships a compressed level-music derivative instead of the PCM master', () => {
-  const mp3 = readFileSync(new URL('../src/assets/audio/backyard-bounce.mp3', import.meta.url));
+test('the browser ships Paws and Plans as the level soundtrack', () => {
+  const mp3 = readFileSync(new URL('../src/assets/audio/paws-and-plans.mp3', import.meta.url));
   const hasId3Header = mp3.toString('ascii', 0, 3) === 'ID3';
   const hasMpegFrameSync = mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0;
 
-  assert.match(LEVEL_MUSIC_URL, /backyard-bounce\.mp3$/);
+  assert.match(LEVEL_MUSIC_URL, /paws-and-plans\.mp3$/);
+  assert.ok(LEVEL_MUSIC_DURATION_SECONDS > 157 && LEVEL_MUSIC_DURATION_SECONDS < 158);
   assert.ok(hasId3Header || hasMpegFrameSync, 'compressed music is not a valid MP3 stream');
-  assert.ok(mp3.length < 2_000_000, `compressed music is unexpectedly large (${mp3.length} bytes)`);
+  assert.ok(mp3.length < 1_700_000, `Paws and Plans is not web-optimized (${mp3.length} bytes)`);
+});
+
+test('level music loops the Paws and Plans track', async () => {
+  let player = null;
+  class FakeAudio {
+    constructor(src) {
+      this.src = src;
+      player = this;
+    }
+
+    play() { return Promise.resolve(); }
+    pause() {}
+  }
+
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    Audio: FakeAudio,
+    navigator: { webdriver: false },
+    addEventListener() {},
+    removeEventListener() {},
+    document: {
+      hidden: false,
+      visibilityState: 'visible',
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+  try {
+    const freshSound = await import(`../src/sound.js?level-music-loop=${Date.now()}`);
+    assert.equal(freshSound.startLevelMusic(), true);
+    assert.match(player.src, /paws-and-plans\.mp3$/);
+    assert.equal(player.loop, true);
+    freshSound.stopLevelMusic();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });

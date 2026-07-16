@@ -5,11 +5,8 @@ export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
 export const SOUND_VOLUME_SETTING_KEY = 'cvd-sound-volume';
 export const MUSIC_VOLUME_SETTING_KEY = 'cvd-music-volume';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
-// Keep the lossless WAV as the editable master, but ship the compressed derivative.
-// The browser downloads this track on the first interaction, so serving PCM would
-// transfer nearly 8 MB before the music can begin.
-export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.mp3', import.meta.url).href;
-export const LEVEL_MUSIC_DURATION_SECONDS = 180;
+export const LEVEL_MUSIC_URL = new URL('./assets/audio/paws-and-plans.mp3', import.meta.url).href;
+export const LEVEL_MUSIC_DURATION_SECONDS = 157.387708;
 export const DEFAULT_VOLUME = 50;
 export const SOUND_OUTPUT_CAP = 0.8;
 export const MUSIC_OUTPUT_CAP = 0.4;
@@ -261,7 +258,7 @@ function musicPlayer() {
   return levelMusic;
 }
 
-/** Start the three-minute Level 1 arrangement after a user gesture permits playback. */
+/** Start the level soundtrack after a user gesture permits playback. */
 export function startLevelMusic() {
   levelMusicRequested = true;
   if (!claimMusicOwnership()) return false;
