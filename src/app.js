@@ -76,16 +76,6 @@ function loadCombatSpeed() {
   return prefersReducedMotion ? 2 : 1;
 }
 
-function setCombatSpeed(speed) {
-  combatSpeed = speed;
-  timing = combatTiming(speed);
-  try {
-    window.localStorage?.setItem(SPEED_SETTING_KEY, String(speed));
-  } catch {
-    // Keep in-memory only.
-  }
-}
-
 function loadGameProgress() {
   try {
     const raw = window.localStorage?.getItem(GAME_SAVE_KEY);
@@ -1871,15 +1861,8 @@ function renderHud() {
   $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
-  $('#squad-count').textContent = `${game.cats.length}/${MAX_FIELD_CATS}`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
-  const speedChip = $('#speed-toggle');
-  if (speedChip) {
-    speedChip.classList.toggle('is-fast', combatSpeed === 2);
-    speedChip.setAttribute('aria-pressed', combatSpeed === 2 ? 'true' : 'false');
-    $('#speed-label').textContent = `${combatSpeed}×`;
-  }
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
@@ -2916,10 +2899,6 @@ function isGamePaused() {
 
 function syncPauseState() {
   const paused = isGamePaused();
-  const pauseButton = $('#pause-toggle');
-  pauseButton?.classList.toggle('is-paused', paused);
-  pauseButton?.setAttribute('aria-pressed', String(paused));
-  if ($('#pause-label')) $('#pause-label').textContent = paused ? '▶' : 'Ⅱ';
   if (paused && pausedAnimations.length === 0) {
     pausedAnimations = document.getAnimations().filter((animation) => animation.playState === 'running');
     pausedAnimations.forEach((animation) => animation.pause());
@@ -3703,17 +3682,6 @@ restartButton?.addEventListener('click', () => {
   resetGame();
 });
 $('#play-again').addEventListener('click', resetGame);
-$('#speed-toggle')?.addEventListener('click', () => {
-  setCombatSpeed(combatSpeed === 1 ? 2 : 1);
-  game.message = combatSpeed === 2 ? 'Combat speed 2× — replays fly by.' : 'Combat speed 1×.';
-  renderHud();
-});
-$('#pause-toggle')?.addEventListener('click', () => {
-  manualPaused = !manualPaused;
-  syncPauseState();
-  game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
-  renderHud();
-});
 $('#cart-info')?.addEventListener('click', () => openGlossary($('#cart-info')));
 $('#glossary-close')?.addEventListener('click', closeGlossary);
 glossaryModalEl?.addEventListener('click', (event) => {

@@ -521,8 +521,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 }
 .phase-hud-chip.hud-chip {
   min-width: 0;
-  min-height: 48px;
-  aspect-ratio: 1 / 1;
+  min-height: 40px;
   padding: 4px;
   border-width: 2px;
   box-shadow: 2px 2px 0 var(--ink);
@@ -721,13 +720,6 @@ h1 span { color: var(--orange); font-size: .75em; }
 .hud-icon { font-size: 17px; }
 .coin { color: #e4a928; text-shadow: 1px 1px #8c5c25; }
 .heart { color: var(--red); }
-.speed-chip { grid-template-columns: 1fr; cursor: pointer; }
-.speed-chip:hover { background: #fff3b8; }
-.speed-chip strong { font-family: var(--px); font-size: 12px; }
-.speed-chip.is-fast { background: #ffe9a8; box-shadow: 2px 2px 0 var(--ink), inset 0 0 0 2px var(--amber); }
-.pause-chip { grid-template-columns: 1fr; cursor: pointer; }
-.pause-chip strong { font-family: var(--px); font-size: 12px; }
-.pause-chip.is-paused { background: #ffd96a; box-shadow: 2px 2px 0 var(--ink), inset 0 0 0 2px var(--orange-dark); }
 
 .shop-panel { border: 3px solid var(--ink); background: rgba(255,248,220,.96); box-shadow: 3px 3px 0 var(--ink); padding: 9px; margin-bottom: 10px; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
@@ -3192,7 +3184,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   font-size: 21px;
 }
 .phase-hud { gap: 7px; }
-.phase-hud-chip.hud-chip { min-height: 70px; aspect-ratio: auto; padding: 7px 5px; }
+.phase-hud-chip.hud-chip { min-height: 48px; padding: 5px; }
 .phase-hud-chip .hud-icon { font-size: 17px; }
 .phase-hud-chip.hud-chip strong { font-size: 18px; }
 .phase-hud-chip.hud-chip small { font-size: 8px; line-height: 1.25; }
@@ -3333,7 +3325,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 @media (max-width: 880px) {
   .phase-titlebar h1 { font-size: 11px; }
   .phase-settings-button.icon-button { flex-basis: 34px; width: 34px; height: 34px; }
-  .phase-hud-chip.hud-chip { min-height: 52px; padding: 5px 3px; }
+  .phase-hud-chip.hud-chip { min-height: 40px; padding: 5px 3px; }
   .phase-hud-chip.hud-chip strong { font-size: 15px; }
   .phase-control-wing .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phase-control-wing .panel-heading h2 { font-size: 11px; }
