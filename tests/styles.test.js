@@ -32,7 +32,8 @@ test('mobile uses one wooden status plank above the fence and hides duplicate ca
 
 test('mobile shop cats stand directly on their compact card edge', () => {
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-slot\s*{\s*gap:\s*0;\s*}/s);
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card\s*{[^}]*padding-bottom:\s*0;[^}]*overflow:\s*hidden;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card\s*{[^}]*padding:\s*4px 2px 0;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card\s*{[^}]*overflow:\s*hidden;/s);
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card canvas\s*{\s*margin-bottom:\s*-3px;\s*}/s);
 });
 
