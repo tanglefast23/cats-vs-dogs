@@ -7,7 +7,7 @@ import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
+import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
@@ -174,6 +174,7 @@ test('Cat Cart summaries contain only badge, name, and cost', () => {
 test('worker cats expose production hover details', () => {
   assert.deepEqual(workerTooltipInfo({ level: 1, role: 'armourer' }, WORKER_INFO.armourer), {
     kind: 'cat',
+    category: 'WORK',
     title: 'L1 Pawladin',
     stats: 'Produces 1 T1 armour every 2 battles',
     detailLabel: 'Production',
@@ -246,6 +247,13 @@ test('combat timing leaves enough time to read travel, impact, and HP loss', () 
   assert.ok(COMBAT_TIMING.projectileMs >= 700);
   assert.ok(COMBAT_TIMING.impactMs >= 300);
   assert.ok(COMBAT_TIMING.hpPauseMs >= 250);
+});
+
+test('Knotty yarn holds five extra seconds before fading for two seconds', () => {
+  assert.deepEqual(TANGLE_BIND_TIMING, {
+    holdExtensionMs: 5000,
+    fadeMs: 2000,
+  });
 });
 
 test('Thunderpaws charges, flashes, and spans exactly one selected board column', () => {
@@ -788,6 +796,58 @@ test('UI click sound stays quieter than gameplay feedback', async () => {
   assert.doesNotThrow(() => sound.playUiClick());
 });
 
+test('the sound slider scales synthesized effects inside the safe output cap', async () => {
+  const peaks = [];
+  class FakeAudioContext {
+    constructor() {
+      this.currentTime = 0;
+      this.destination = {};
+      this.state = 'running';
+    }
+
+    createOscillator() {
+      return {
+        frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    }
+
+    createGain() {
+      return {
+        gain: {
+          setValueAtTime() {},
+          exponentialRampToValueAtTime(value) {
+            if (value > 0.0001) peaks.push(value);
+          },
+        },
+        connect() {},
+      };
+    }
+  }
+
+  globalThis.window = { AudioContext: FakeAudioContext };
+  const sound = await import(`../src/sound.js?sound-volume=${Date.now()}-${Math.random()}`);
+
+  sound.setSoundVolume(100);
+  sound.playUiClick();
+  const maxGain = Math.max(...peaks);
+  // SFX carry a master gain of SFX_GAIN at the default slider position, scale
+  // linearly with the slider, and can never exceed the absolute output cap.
+  assert.equal(maxGain, Math.min(
+    sound.SOUND_OUTPUT_CAP,
+    sound.UI_CLICK_VOLUME * sound.SFX_GAIN * (100 / sound.DEFAULT_VOLUME),
+  ));
+
+  peaks.length = 0;
+  sound.setSoundVolume(50);
+  sound.playUiClick();
+  assert.equal(Math.max(...peaks), maxGain * 0.5);
+
+  delete globalThis.window;
+});
+
 test('refresh has its own safe mechanical click sound', async () => {
   const sound = await import('../src/sound.js');
   assert.equal(typeof sound.playRefreshClick, 'function');
@@ -867,7 +927,7 @@ test('sound helpers no-op safely without a browser audio context', async () => {
   assert.doesNotThrow(() => sound.stopLevelMusic());
 });
 
-test('sound setting can be toggled and remembered', async () => {
+test('sound and music volumes default to the midpoint and are remembered independently', async () => {
   const memory = new Map();
   globalThis.window = {
     localStorage: {
@@ -880,21 +940,45 @@ test('sound setting can be toggled and remembered', async () => {
   };
 
   const sound = await import(`../src/sound.js?settings=${Date.now()}`);
-  sound.setSoundEnabled(false);
-  assert.equal(sound.isSoundEnabled(), false);
-  assert.equal(memory.get(sound.SOUND_SETTING_KEY), '0');
+  assert.equal(sound.DEFAULT_VOLUME, 50);
+  assert.deepEqual(sound.loadVolumeSettings(), { sound: 50, music: 50 });
+
+  sound.setSoundVolume(27);
+  sound.setMusicVolume(76);
+  assert.equal(sound.getSoundVolume(), 27);
+  assert.equal(sound.getMusicVolume(), 76);
+  assert.equal(memory.get(sound.SOUND_VOLUME_SETTING_KEY), '27');
+  assert.equal(memory.get(sound.MUSIC_VOLUME_SETTING_KEY), '76');
+
+  sound.setSoundVolume(-12);
+  sound.setMusicVolume(140);
+  assert.equal(sound.getSoundVolume(), 0);
+  assert.equal(sound.getMusicVolume(), 100);
   assert.doesNotThrow(() => sound.playCatDrop());
   assert.doesNotThrow(() => sound.playHit());
 
-  sound.setSoundEnabled(true);
-  assert.equal(sound.isSoundEnabled(), true);
-  assert.equal(memory.get(sound.SOUND_SETTING_KEY), '1');
-  assert.equal(sound.loadSoundEnabled(), true);
+  assert.ok(sound.SOUND_OUTPUT_CAP <= 0.8, 'sound effects max should use a conservative cap');
+  assert.ok(sound.MUSIC_OUTPUT_CAP <= 0.4, 'music max should use a conservative cap');
 
   delete globalThis.window;
 });
 
-test('level music loops quietly and follows the shared sound setting', async () => {
+test('the old shared mute setting migrates to both volume sliders', async () => {
+  const memory = new Map([['cvd-sound-enabled', '0']]);
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (memory.has(key) ? memory.get(key) : null),
+      setItem: (key, value) => { memory.set(key, String(value)); },
+    },
+  };
+
+  const sound = await import(`../src/sound.js?legacy-settings=${Date.now()}-${Math.random()}`);
+  assert.deepEqual(sound.loadVolumeSettings(), { sound: 0, music: 0 });
+
+  delete globalThis.window;
+});
+
+test('level music loops quietly and follows its own capped volume', async () => {
   const players = [];
   class FakeAudio {
     constructor(src) {
@@ -927,13 +1011,16 @@ test('level music loops quietly and follows the shared sound setting', async () 
   assert.equal(players.length, 1);
   assert.equal(players[0].loop, true);
   assert.equal(players[0].preload, 'auto');
-  assert.equal(players[0].volume, sound.LEVEL_MUSIC_VOLUME);
-  assert.ok(sound.LEVEL_MUSIC_VOLUME >= 0.35, 'music should remain clearly audible');
+  assert.equal(players[0].volume, sound.MUSIC_OUTPUT_CAP * 0.5);
   assert.equal(players[0].playCount, 1);
 
-  sound.setSoundEnabled(false);
+  sound.setSoundVolume(0);
+  assert.equal(players[0].pauseCount, 0, 'muting effects must not mute music');
+
+  sound.setMusicVolume(0);
   assert.equal(players[0].pauseCount, 1);
-  sound.setSoundEnabled(true);
+  sound.setMusicVolume(100);
+  assert.equal(players[0].volume, sound.MUSIC_OUTPUT_CAP);
   assert.equal(players[0].playCount, 2);
 
   sound.stopLevelMusic();
@@ -966,16 +1053,12 @@ test('automated browser checks never start audible game music', async () => {
   delete globalThis.window;
 });
 
-test('background tabs pause music and resume only when visible again', async () => {
+test('hidden tabs pause music and resume when visible again', async () => {
   const players = [];
   let visibilityHandler = null;
-  let focusHandler = null;
-  let blurHandler = null;
-  let focused = false;
   const document = {
-    hidden: true,
-    visibilityState: 'hidden',
-    hasFocus: () => focused,
+    hidden: false,
+    visibilityState: 'visible',
     addEventListener(type, handler) {
       if (type === 'visibilitychange') visibilityHandler = handler;
     },
@@ -999,35 +1082,59 @@ test('background tabs pause music and resume only when visible again', async () 
   globalThis.window = {
     document,
     Audio: FakeAudio,
-    addEventListener(type, handler) {
-      if (type === 'focus') focusHandler = handler;
-      if (type === 'blur') blurHandler = handler;
-    },
+    addEventListener: () => {},
   };
 
   const sound = await import(`../src/sound.js?visibility=${Date.now()}-${Math.random()}`);
-  assert.equal(sound.startLevelMusic(), false);
-  assert.equal(players.length, 0);
-
-  focused = true;
-  document.hidden = false;
-  document.visibilityState = 'visible';
-  visibilityHandler();
+  assert.equal(sound.startLevelMusic(), true);
   assert.equal(players.length, 1);
   assert.equal(players[0].playCount, 1);
-
-  focused = false;
-  blurHandler();
-  assert.equal(players[0].pauseCount, 1);
-
-  focused = true;
-  focusHandler();
-  assert.equal(players[0].playCount, 2);
 
   document.hidden = true;
   document.visibilityState = 'hidden';
   visibilityHandler();
-  assert.equal(players[0].pauseCount, 2);
+  assert.equal(players[0].pauseCount, 1);
+
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  visibilityHandler();
+  assert.equal(players[0].playCount, 2);
+
+  delete globalThis.window;
+});
+
+test('embedded webviews that report unfocused or hidden still play music', async () => {
+  // Regression: app preview panes render the game on screen while the page
+  // reports visibilityState "hidden" and hasFocus() false — audio must not
+  // be gated on those signals or real play sessions go silent.
+  const players = [];
+  globalThis.window = {
+    document: {
+      hidden: true,
+      visibilityState: 'hidden',
+      hasFocus: () => false,
+      addEventListener: () => {},
+    },
+    Audio: class FakeAudio {
+      constructor() {
+        this.playCount = 0;
+        players.push(this);
+      }
+
+      play() {
+        this.playCount += 1;
+        return Promise.resolve();
+      }
+
+      pause() {}
+    },
+    addEventListener: () => {},
+  };
+
+  const sound = await import(`../src/sound.js?embedded=${Date.now()}-${Math.random()}`);
+  assert.equal(sound.startLevelMusic(), true);
+  assert.equal(players.length, 1);
+  assert.equal(players[0].playCount, 1);
 
   delete globalThis.window;
 });

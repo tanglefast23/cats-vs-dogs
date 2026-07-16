@@ -113,9 +113,20 @@ test('cat unlock rounds are independent from the odd-round stat tier curve', () 
   assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
-test('Knotty Kitty is presented as a tier-one shop cat', () => {
-  assert.equal(CAT_COAT_INFO[CAT_COAT.CALICO].shopTier, 1);
+test('battle cats use the player-facing T1, T2, and T3 categories', () => {
+  assert.deepEqual(
+    [CAT_COAT.ORANGE, CAT_COAT.GREY, CAT_COAT.WHITE, CAT_COAT.CALICO]
+      .map((coat) => CAT_COAT_INFO[coat].shopTier),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    [CAT_COAT.BLACK, CAT_COAT.FROST, CAT_COAT.RIFT, CAT_COAT.MIRAGE, CAT_COAT.STORM, CAT_COAT.ENCORE]
+      .map((coat) => CAT_COAT_INFO[coat].shopTier),
+    [2, 2, 2, 2, 2, 2],
+  );
+  assert.equal(CAT_COAT_INFO[CAT_COAT.PRISM].shopTier, 3);
   assert.equal(CAT_COAT_INFO[CAT_COAT.CALICO].unlockRound, 1);
+  assert.equal(CAT_COAT_INFO[CAT_COAT.PRISM].unlockRound, 7);
 });
 
 test('every cat has one explicit strength and a real weakness at every level', () => {
@@ -1069,8 +1080,18 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
-  assert.equal(brawler.stats, 'Health 12/12 · Attack 1/action · 2/round');
-  assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7/action · 14/round');
+  assert.equal(tabby.category, 'T1');
+  assert.equal(catTooltipInfo({ level: 1, coat: CAT_COAT.PRISM }).category, 'T3');
+  assert.equal(tabby.stats, 'Health 6/6 · Attack 2+1+1');
+  assert.equal(catTooltipInfo({ level: 2, coat: CAT_COAT.ORANGE }).stats, 'Health 13/13 · Attack 5+5+4');
+  assert.equal(brawler.stats, 'Health 12/12 · Attack 1');
+  assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7');
+});
+
+test('cat tooltips get straight to the attack description', () => {
+  Object.values(CAT_COAT_INFO).forEach((info) => {
+    assert.doesNotMatch(info.attackDetail, /^Each action,/i);
+  });
 });
 
 test('cat tooltips fully explain equipment, temporary buffs, and active ability state', () => {

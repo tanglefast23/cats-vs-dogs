@@ -2,14 +2,25 @@
 import { DROP_IMPACT } from './drag-drop.js';
 
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
+export const SOUND_VOLUME_SETTING_KEY = 'cvd-sound-volume';
+export const MUSIC_VOLUME_SETTING_KEY = 'cvd-music-volume';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
-export const LEVEL_MUSIC_VOLUME = 0.4;
+export const LEVEL_MUSIC_DURATION_SECONDS = 180;
+export const DEFAULT_VOLUME = 50;
+export const SOUND_OUTPUT_CAP = 0.8;
+export const MUSIC_OUTPUT_CAP = 0.4;
+export const LEVEL_MUSIC_VOLUME = MUSIC_OUTPUT_CAP;
 export const UI_CLICK_VOLUME = 0.024;
+/** Master gain applied to every synthesized SFX (music is untouched) — recipes keep
+ * their relative balance while the whole effects layer sits louder in the mix. */
+export const SFX_GAIN = 2;
 
 let audioCtx = null;
 let unlocked = false;
-let soundEnabled = true;
+let soundVolume = DEFAULT_VOLUME;
+let musicVolume = DEFAULT_VOLUME;
+let soundEnabled = soundVolume > 0;
 let levelMusic = null;
 let levelMusicRequested = false;
 let ownsMusic = false;
@@ -44,15 +55,37 @@ function isAutomatedBrowser() {
   return getWindow()?.navigator?.webdriver === true;
 }
 
-function isPageVisible() {
-  const doc = getWindow()?.document;
-  if (!doc) return true;
-  if (doc.visibilityState === 'hidden' || doc.hidden === true) return false;
-  return typeof doc.hasFocus !== 'function' || doc.hasFocus();
+function normalizeVolume(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_VOLUME;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
 }
 
-function canUseAudioOutput() {
-  return soundEnabled && !isAutomatedBrowser() && isPageVisible();
+function soundOutputGain(recipeVolume) {
+  // SFX_GAIN doubles every recipe at the DEFAULT slider position — the loudness the
+  // 2x-louder request settled on — and the slider scales around that. SOUND_OUTPUT_CAP
+  // stays as the absolute ceiling so cranked sliders can't clip.
+  return Math.min(SOUND_OUTPUT_CAP, Math.max(0.0001, recipeVolume * SFX_GAIN * (soundVolume / DEFAULT_VOLUME)));
+}
+
+function musicOutputGain() {
+  return MUSIC_OUTPUT_CAP * (musicVolume / 100);
+}
+
+// Only the tab-level visibility signal — embedded webviews (e.g. app preview panes)
+// report hasFocus() false and even visibilityState "hidden" while fully on screen,
+// so focus must never gate audio.
+function isPageHidden() {
+  const doc = getWindow()?.document;
+  return Boolean(doc && (doc.visibilityState === 'hidden' || doc.hidden === true));
+}
+
+function canUseSoundOutput() {
+  return soundEnabled && !isAutomatedBrowser();
+}
+
+function canUseMusicOutput() {
+  return musicVolume > 0 && !isAutomatedBrowser();
 }
 
 function pauseLevelMusic() {
@@ -60,7 +93,7 @@ function pauseLevelMusic() {
 }
 
 function claimMusicOwnership() {
-  if (!canUseAudioOutput()) return false;
+  if (!canUseMusicOutput()) return false;
   const storage = getStorage();
   if (!storage) {
     ownsMusic = true;
@@ -94,13 +127,13 @@ function onMusicOwnershipChange(event) {
   if (event?.key !== MUSIC_OWNER_KEY || event.newValue === musicOwnerId) return;
   ownsMusic = false;
   pauseLevelMusic();
-  if (event.newValue === null && levelMusicRequested && canUseAudioOutput()) {
+  if (event.newValue === null && levelMusicRequested && canUseMusicOutput()) {
     startLevelMusic();
   }
 }
 
 function onAudioVisibilityChange() {
-  if (!isPageVisible()) {
+  if (isPageHidden()) {
     releaseMusicOwnership();
     pauseLevelMusic();
     return;
@@ -113,55 +146,105 @@ function onPageHide() {
   pauseLevelMusic();
 }
 
-function bindAudioFocusListeners() {
+function bindAudioLifecycleListeners() {
   const win = getWindow();
   win?.addEventListener?.('storage', onMusicOwnershipChange);
-  win?.addEventListener?.('focus', onAudioVisibilityChange);
-  win?.addEventListener?.('blur', onPageHide);
   win?.addEventListener?.('pagehide', onPageHide);
   win?.document?.addEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
 
-function unbindAudioFocusListeners() {
+function unbindAudioLifecycleListeners() {
   const win = getWindow();
   win?.removeEventListener?.('storage', onMusicOwnershipChange);
-  win?.removeEventListener?.('focus', onAudioVisibilityChange);
-  win?.removeEventListener?.('blur', onPageHide);
   win?.removeEventListener?.('pagehide', onPageHide);
   win?.document?.removeEventListener?.('visibilitychange', onAudioVisibilityChange);
 }
 
-export function loadSoundEnabled() {
+export function loadVolumeSettings() {
   const storage = getStorage();
-  if (!storage) return soundEnabled;
-  const raw = storage.getItem(SOUND_SETTING_KEY);
-  if (raw === null) return true;
-  soundEnabled = raw !== '0' && raw !== 'false';
-  return soundEnabled;
+  if (!storage) return { sound: soundVolume, music: musicVolume };
+
+  let fallback = DEFAULT_VOLUME;
+  try {
+    const legacy = storage.getItem(SOUND_SETTING_KEY);
+    if (legacy === '0' || legacy === 'false') fallback = 0;
+    const storedSound = storage.getItem(SOUND_VOLUME_SETTING_KEY);
+    const storedMusic = storage.getItem(MUSIC_VOLUME_SETTING_KEY);
+    soundVolume = storedSound === null ? fallback : normalizeVolume(storedSound);
+    musicVolume = storedMusic === null ? fallback : normalizeVolume(storedMusic);
+  } catch {
+    // Private mode / quota — retain the in-memory values.
+  }
+
+  soundEnabled = soundVolume > 0;
+  if (levelMusic) levelMusic.volume = musicOutputGain();
+  return { sound: soundVolume, music: musicVolume };
+}
+
+export function getSoundVolume() {
+  return soundVolume;
+}
+
+export function getMusicVolume() {
+  return musicVolume;
+}
+
+function storeVolume(key, value) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(key, String(value));
+  } catch {
+    // Private mode / quota — keep the in-memory value.
+  }
+}
+
+export function setSoundVolume(value) {
+  soundVolume = normalizeVolume(value);
+  soundEnabled = soundVolume > 0;
+  storeVolume(SOUND_VOLUME_SETTING_KEY, soundVolume);
+  if (soundEnabled) unlockAudio();
+  return soundVolume;
+}
+
+export function setMusicVolume(value) {
+  const wasMuted = musicVolume === 0;
+  musicVolume = normalizeVolume(value);
+  storeVolume(MUSIC_VOLUME_SETTING_KEY, musicVolume);
+  if (levelMusic) levelMusic.volume = musicOutputGain();
+
+  if (musicVolume === 0) {
+    releaseMusicOwnership();
+    pauseLevelMusic();
+  } else if (wasMuted && levelMusicRequested) {
+    startLevelMusic();
+  }
+  return musicVolume;
+}
+
+// Compatibility for older callers and the former shared checkbox setting.
+export function loadSoundEnabled() {
+  loadVolumeSettings();
+  return isSoundEnabled();
 }
 
 export function isSoundEnabled() {
-  return soundEnabled;
+  return soundVolume > 0 || musicVolume > 0;
 }
 
 export function setSoundEnabled(enabled) {
-  soundEnabled = Boolean(enabled);
+  const nextVolume = enabled ? DEFAULT_VOLUME : 0;
   const storage = getStorage();
   if (storage) {
     try {
-      storage.setItem(SOUND_SETTING_KEY, soundEnabled ? '1' : '0');
+      storage.setItem(SOUND_SETTING_KEY, enabled ? '1' : '0');
     } catch {
       // Private mode / quota — keep in-memory only.
     }
   }
-  if (soundEnabled) {
-    unlockAudio();
-    if (levelMusicRequested) startLevelMusic();
-  } else {
-    releaseMusicOwnership();
-    pauseLevelMusic();
-  }
-  return soundEnabled;
+  setSoundVolume(nextVolume);
+  setMusicVolume(nextVolume);
+  return isSoundEnabled();
 }
 
 function musicPlayer() {
@@ -171,11 +254,11 @@ function musicPlayer() {
   levelMusic = new win.Audio(LEVEL_MUSIC_URL);
   levelMusic.loop = true;
   levelMusic.preload = 'auto';
-  levelMusic.volume = LEVEL_MUSIC_VOLUME;
+  levelMusic.volume = musicOutputGain();
   return levelMusic;
 }
 
-/** Start the original Level 1 loop after a user gesture permits playback. */
+/** Start the three-minute Level 1 arrangement after a user gesture permits playback. */
 export function startLevelMusic() {
   levelMusicRequested = true;
   if (!claimMusicOwnership()) return false;
@@ -204,7 +287,7 @@ export function stopLevelMusic() {
 
 function context() {
   const win = getWindow();
-  if (!win || !canUseAudioOutput()) return null;
+  if (!win || !canUseSoundOutput()) return null;
   const AC = win.AudioContext || win.webkitAudioContext;
   if (!AC) return null;
   if (!audioCtx) audioCtx = new AC();
@@ -246,7 +329,7 @@ function tone({
   }
 
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + attack);
+  gain.gain.exponentialRampToValueAtTime(soundOutputGain(volume), now + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(attack + 0.01, duration - decay));
 
   osc.connect(gain);
@@ -275,7 +358,7 @@ function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200 } = {}) 
   filter.frequency.value = filterFreq;
   const gain = ctx.createGain();
   const now = ctx.currentTime;
-  gain.gain.setValueAtTime(volume, now);
+  gain.gain.setValueAtTime(soundOutputGain(volume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   source.connect(filter);
@@ -527,18 +610,140 @@ export function playCelebration() {
   });
 }
 
+/** Two quick rising notes when matching cats stack; a run up the octave plus a sparkle when they evolve. */
+export function playMerge({ levelUp = false } = {}) {
+  if (!soundEnabled) return;
+  if (!levelUp) {
+    tone({ frequency: 520, slideTo: 760, duration: 0.09, type: 'triangle', volume: 0.05, attack: 0.002, decay: 0.05 });
+    later(70, () => {
+      if (!soundEnabled) return;
+      tone({ frequency: 780, slideTo: 1080, duration: 0.11, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.06 });
+    });
+    return;
+  }
+  const run = [392, 523, 659, 784, 1047]; // G–C–E–G–C sprint up the octave
+  run.forEach((freq, i) => later(i * 70, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.13, type: 'triangle', volume: 0.055, attack: 0.002, decay: 0.06 });
+  }));
+  later(run.length * 70 + 20, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1568, duration: 0.22, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.12 });
+    noiseBurst({ duration: 0.08, volume: 0.02, filterFreq: 6400 });
+  });
+}
+
+/** A small, wilting meow when a cat goes down. */
+export function playCatDeath() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(640), slideTo: 400, duration: 0.16, type: 'triangle', volume: 0.055, attack: 0.012, decay: 0.09 });
+  later(130, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(430), slideTo: 200, duration: 0.24, type: 'sine', volume: 0.05, attack: 0.01, decay: 0.15 });
+  });
+}
+
+/** A startled yelp — sharp up, whining down — when a dog is knocked out. */
+export function playDogDeath() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(500), slideTo: 980, duration: 0.07, type: 'sawtooth', volume: 0.04, attack: 0.004, decay: 0.03 });
+  later(65, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(920), slideTo: 250, duration: 0.2, type: 'triangle', volume: 0.055, attack: 0.004, decay: 0.12 });
+  });
+}
+
+/** Two low paw-thumps and a rising horn as the next wave walks in. */
+export function playWaveStart() {
+  if (!soundEnabled) return;
+  tone({ frequency: 130, slideTo: 70, duration: 0.11, type: 'square', volume: 0.05 });
+  noiseBurst({ duration: 0.07, volume: 0.035, filterFreq: 500 });
+  later(150, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 130, slideTo: 70, duration: 0.11, type: 'square', volume: 0.055 });
+    noiseBurst({ duration: 0.07, volume: 0.04, filterFreq: 500 });
+  });
+  later(330, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 220, slideTo: 330, duration: 0.24, type: 'square', volume: 0.035, attack: 0.01, decay: 0.14 });
+  });
+}
+
+/** Bright three-note flourish when a battle round is cleared and prep returns. */
+export function playRoundComplete() {
+  if (!soundEnabled) return;
+  const notes = [523, 659, 784];
+  notes.forEach((freq, i) => later(i * 90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.14, type: 'triangle', volume: 0.055, attack: 0.003, decay: 0.07 });
+  }));
+  later(300, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1047, slideTo: 1319, duration: 0.18, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.1 });
+  });
+}
+
+/** The full victory fanfare when the level is won. */
+export function playVictory() {
+  if (!soundEnabled) return;
+  const call = [523, 659, 784, 1047, 784, 1047];
+  call.forEach((freq, i) => later(i * 110, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.18, type: 'triangle', volume: 0.06, attack: 0.003, decay: 0.09 });
+  }));
+  later(call.length * 110 + 40, () => {
+    if (!soundEnabled) return;
+    [1047, 1319, 1568].forEach((freq) => tone({ frequency: freq, duration: 0.42, type: 'sine', volume: 0.035, attack: 0.01, decay: 0.3 }));
+    noiseBurst({ duration: 0.1, volume: 0.022, filterFreq: 6000 });
+  });
+}
+
+/** Three sagging notes when the dogs win the yard. */
+export function playDefeat() {
+  if (!soundEnabled) return;
+  const slump = [392, 330, 262];
+  slump.forEach((freq, i) => later(i * 200, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, slideTo: freq * 0.92, duration: 0.26, type: 'triangle', volume: 0.055, attack: 0.008, decay: 0.14 });
+  }));
+  later(640, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 196, slideTo: 130, duration: 0.5, type: 'square', volume: 0.04, attack: 0.01, decay: 0.3 });
+  });
+}
+
+/** A soft, glinting chime when healing lands. */
+export function playHeal() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(760), slideTo: 1140, duration: 0.12, type: 'sine', volume: 0.035, attack: 0.004, decay: 0.08 });
+  later(90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(1180), duration: 0.1, type: 'triangle', volume: 0.025, attack: 0.003, decay: 0.06 });
+  });
+}
+
+/** The pack leader's low rallying howl. */
+export function playHowl() {
+  if (!soundEnabled) return;
+  tone({ frequency: 180, slideTo: 300, duration: 0.28, type: 'square', volume: 0.03, attack: 0.03, decay: 0.16 });
+  later(220, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 290, slideTo: 170, duration: 0.34, type: 'square', volume: 0.028, attack: 0.02, decay: 0.2 });
+  });
+}
+
 export function isAudioUnlocked() {
   return unlocked && Boolean(audioCtx) && audioCtx.state === 'running';
 }
 
 // Initialize from storage once this module loads in the browser.
-loadSoundEnabled();
-bindAudioFocusListeners();
+loadVolumeSettings();
+bindAudioLifecycleListeners();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     releaseMusicOwnership();
     pauseLevelMusic();
-    unbindAudioFocusListeners();
+    unbindAudioLifecycleListeners();
   });
 }

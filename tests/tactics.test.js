@@ -36,7 +36,7 @@ function placeCoat(game, coat, row, col) {
   return placeCat(game, game.bench.length - 1, row, col);
 }
 
-test('six active Tier 3 cats unlock on round four', () => {
+test('six active Tier 2 cats unlock on round four', () => {
   const activeCoats = [
     CAT_COAT.BLACK,
     CAT_COAT.FROST,
@@ -46,7 +46,7 @@ test('six active Tier 3 cats unlock on round four', () => {
     CAT_COAT.ENCORE,
   ];
   assert.deepEqual(activeCoats, [4, 6, 7, 8, 9, 10]);
-  assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].shopTier === 3), true);
+  assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].shopTier === 2), true);
   assert.equal(activeCoats.every((coat) => CAT_COAT_INFO[coat].activeAbility), true);
   assert.equal(activeCoats.every((coat) => !availableCatCoatsForRound(3).includes(coat)), true);
   assert.equal(activeCoats.every((coat) => availableCatCoatsForRound(4).includes(coat)), true);
@@ -272,15 +272,61 @@ function summonPhantom(level, row = 11, col = 3) {
   return useActiveAbility(game, game.cats[0].id, { row, col });
 }
 
-test('Faux Paw phantom has one attack block per level and no HP', () => {
+test('Faux Paw phantom starts with one more attack block than its level and no HP', () => {
   for (const level of [1, 2, 3]) {
     const game = summonPhantom(level);
+    const expectedBlocks = level + 1;
     assert.equal(game.decoys.length, 1);
-    assert.equal(game.decoys[0].blocks, level);
-    assert.equal(game.decoys[0].maxBlocks, level);
+    assert.equal(game.decoys[0].blocks, expectedBlocks);
+    assert.equal(game.decoys[0].maxBlocks, expectedBlocks);
     assert.equal('hp' in game.decoys[0], false);
     assert.equal('maxHp' in game.decoys[0], false);
   }
+});
+
+test('two same-round Faux Paw casts stack their full values on one square', () => {
+  let game = createGame(() => 0.5);
+  game.cats = [createCat(1, CAT_COAT.MIRAGE), createCat(1, CAT_COAT.MIRAGE)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  game.cats[1].row = 13; game.cats[1].col = 1;
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, game.cats[0].id, { row: 11, col: 3 });
+  game = useActiveAbility(game, game.cats[1].id, { row: 11, col: 3 });
+
+  assert.equal(game.decoys.length, 1);
+  assert.equal(game.decoys[0].blocks, 4);
+  assert.equal(game.decoys[0].maxBlocks, 4);
+
+  game = continueCombat(game);
+  assert.equal(game.decoys[0].blocks, 4, 'the combined total stays full during its summoning round');
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.decoys[0].blocks, 3, 'the combined square decays only once next round');
+});
+
+test('adding to an older decoy still decays the combined square only once', () => {
+  let game = summonPhantom(1);
+  const casterId = game.cats[0].id;
+  const decoyId = game.decoys[0].id;
+
+  game = continueCombat(game);
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.decoys[0].blocks, 1);
+
+  game = startRound(game);
+  game.dogs = [];
+  game = openTacticsWindow(game);
+  game = useActiveAbility(game, casterId, { row: 11, col: 3 });
+  assert.equal(game.decoys.length, 1);
+  assert.equal(game.decoys[0].id, decoyId);
+  assert.equal(game.decoys[0].blocks, 3, 'the new +2 adds to the older remaining block');
+  assert.equal(game.decoys[0].maxBlocks, 4);
+
+  game = continueCombat(game);
+  game = finishRound(game);
+  assert.equal(game.decoys[0].blocks, 2, 'old and new blocks share one round decay');
 });
 
 test('Faux Paw phantom spends exactly one block on every damaging dog attack kind', () => {
@@ -306,10 +352,10 @@ test('Faux Paw phantom spends exactly one block on every damaging dog attack kin
     assert.equal(block.style, attack.style);
     assert.equal(block.decoyBlock, true);
     assert.equal(block.damage, 0);
-    assert.equal(block.blocksBefore, 1);
-    assert.equal(block.blocksAfter, 0);
+    assert.equal(block.blocksBefore, 2);
+    assert.equal(block.blocksAfter, 1);
     assert.ok(block.blocked > 0);
-    assert.equal(game.decoys.length, 0);
+    assert.equal(game.decoys.length, 1);
   }
 });
 
@@ -329,11 +375,32 @@ test('Faux Paw phantom also blocks bone bomb splash damage', () => {
   const block = game.events.find((event) => event.to === decoyId);
   assert.equal(block?.style, 'bone-bomb-secondary');
   assert.equal(block?.decoyBlock, true);
-  assert.equal(block?.blocksAfter, 0);
-  assert.equal(game.decoys.length, 0);
+  assert.equal(block?.blocksAfter, 1);
+  assert.equal(game.decoys.length, 1);
 });
 
-test('Faux Paw phantom keeps unused blocks through round end and the next round start', () => {
+test('Faux Paw phantom keeps its full count this round, then decays once per later round', () => {
+  let game = summonPhantom(1);
+  const decoyId = game.decoys[0].id;
+  game.cats = [];
+  game = continueCombat(game);
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
+
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.phase, 'prep');
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 1);
+
+  game = startRound(game);
+  assert.equal(game.phase, 'combat');
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 1);
+
+  game.dogs = [];
+  game = finishRound(game);
+  assert.equal(game.decoys.some((decoy) => decoy.id === decoyId), false);
+});
+
+test('Faux Paw phantom decays from its remaining count after taking a hit', () => {
   let game = summonPhantom(3);
   const decoyId = game.decoys[0].id;
   game.cats = [];
@@ -342,15 +409,10 @@ test('Faux Paw phantom keeps unused blocks through round end and the next round 
   dog.maxHp = 100;
   game.dogs = [dog];
   game = resolveSection(continueCombat(game));
-  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
+  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 3);
 
   game.dogs = [];
   game = finishRound(game);
-  assert.equal(game.phase, 'prep');
-  assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
-
-  game = startRound(game);
-  assert.equal(game.phase, 'combat');
   assert.equal(game.decoys.find((decoy) => decoy.id === decoyId)?.blocks, 2);
 });
 
@@ -405,16 +467,68 @@ test('Bombay Boom plus footprint clips cleanly at battlefield edges', () => {
   assert.equal(plusCells(5, 2).length, 5);
 });
 
-test('Encore Maestro grants one reduced-strength immediate allied attack', () => {
+test('Meowstro makes two dogs on the selected square attack each other simultaneously', () => {
   let game = createGame(() => 0.5);
-  game.cats = [createCat(1, CAT_COAT.ENCORE), createCat(1, CAT_COAT.WHITE)];
+  game.cats = [createCat(1, CAT_COAT.ENCORE)];
   game.cats[0].row = 13; game.cats[0].col = 0;
-  game.cats[1].row = 13; game.cats[1].col = 1;
-  game.dogs = [createDog(2, 3, 1)];
+  game.dogs = [createDog(1, 5, 2), createDog(2, 5, 2)];
+  const [firstId, secondId] = game.dogs.map((dog) => dog.id);
   game.phase = 'tactics';
-  game = useActiveAbility(game, game.cats[0].id, { targetCatId: game.cats[1].id });
-  assert.equal(game.dogs[0].hp, 12);
-  assert.equal(game.events.some((event) => event.type === 'encore'), true);
+
+  game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+  assert.equal(game.dogs.find((dog) => dog.id === firstId).hp, 2, 'takes the T2 dog\'s 6 attack');
+  assert.equal(game.dogs.find((dog) => dog.id === secondId).hp, 9, 'takes the T1 dog\'s 4 attack');
+  assert.deepEqual(
+    game.events.filter((event) => event.type === 'dog-duel').map((event) => [event.from, event.to, event.damage]),
+    [[firstId, secondId, 4], [secondId, firstId, 6]],
+  );
+  assert.equal(game.cats[0].activeUsed, true);
+});
+
+test('Meowstro pairs a lone selected dog with one randomly chosen orthogonal neighbor', () => {
+  let game = createGame(() => 0.75);
+  game.cats = [createCat(1, CAT_COAT.ENCORE)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  const selected = createDog(1, 5, 2);
+  const above = createDog(1, 4, 2);
+  const right = createDog(2, 5, 3);
+  const diagonal = createDog(4, 4, 3);
+  game.dogs = [selected, above, right, diagonal];
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+  assert.equal(game.dogs.find((dog) => dog.id === selected.id).hp, 2, 'random 0.75 chooses the second adjacent option');
+  assert.equal(game.dogs.find((dog) => dog.id === above.id).hp, above.maxHp, 'the other adjacent option is untouched');
+  assert.equal(game.dogs.find((dog) => dog.id === right.id).hp, 9);
+  assert.equal(game.dogs.find((dog) => dog.id === diagonal.id).hp, diagonal.maxHp, 'diagonal dogs are not adjacent');
+});
+
+test('Meowstro always uses the only adjacent occupied square when there is one option', () => {
+  let game = createGame(() => 0);
+  game.cats = [createCat(1, CAT_COAT.ENCORE)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  const selected = createDog(1, 5, 2);
+  const onlyNeighbor = createDog(2, 6, 2);
+  game.dogs = [selected, onlyNeighbor, createDog(4, 5, 4)];
+  game.phase = 'tactics';
+
+  game = useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 });
+
+  assert.equal(game.dogs.find((dog) => dog.id === selected.id).hp, 2);
+  assert.equal(game.dogs.find((dog) => dog.id === onlyNeighbor.id).hp, 9);
+});
+
+test('Meowstro does not spend the ability on an isolated dog', () => {
+  const game = createGame(() => 0.5);
+  game.cats = [createCat(1, CAT_COAT.ENCORE)];
+  game.cats[0].row = 13; game.cats[0].col = 0;
+  game.dogs = [createDog(1, 5, 2), createDog(1, 4, 3)];
+  game.phase = 'tactics';
+
+  assert.equal(useActiveAbility(game, game.cats[0].id, { row: 5, col: 2 }), game);
+  assert.equal(game.cats[0].activeUsed, false);
 });
 
 test('starting a battle resets active casts without healing survivors between rounds', () => {

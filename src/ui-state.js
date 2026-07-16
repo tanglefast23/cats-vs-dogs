@@ -203,6 +203,7 @@ export function workerTooltipInfo(worker, info) {
   const timing = productionRounds === 1 ? 'after each battle' : `every ${productionRounds} battles`;
   return {
     kind: 'cat',
+    category: 'WORK',
     title: `L${level} ${info.name}`,
     stats: `Produces ${output.quantity}${tier} ${output.kind} ${timing}`,
     detailLabel: 'Production',

@@ -133,14 +133,29 @@
         </div>
         <button id="settings-close" class="icon-button" aria-label="Close settings" title="Close">×</button>
       </div>
-      <label class="settings-row" for="setting-sound">
-        <span>
-          <strong>Sound &amp; music</strong>
-          <small>Backyard music, cat drops, and combat hits</small>
+      <label class="settings-row settings-volume-row" for="setting-sound-volume">
+        <span class="settings-row-heading">
+          <span>
+            <strong>Sound effects</strong>
+            <small id="setting-sound-help">Cat drops, combat hits, and button clicks</small>
+          </span>
+          <output id="setting-sound-value" for="setting-sound-volume">50%</output>
         </span>
-        <input id="setting-sound" type="checkbox" checked />
+        <input id="setting-sound-volume" class="settings-slider settings-slider-sound" type="range" min="0" max="100" step="1" value="50" aria-describedby="setting-sound-help" />
+        <span class="settings-range-labels" aria-hidden="true"><span>MUTE</span><span>SAFE MAX</span></span>
       </label>
-      <p class="settings-hint">Settings are saved in this browser.</p>
+      <label class="settings-row settings-volume-row" for="setting-music-volume">
+        <span class="settings-row-heading">
+          <span>
+            <strong>Music</strong>
+            <small id="setting-music-help">Backyard Bounce level soundtrack</small>
+          </span>
+          <output id="setting-music-value" for="setting-music-volume">50%</output>
+        </span>
+        <input id="setting-music-volume" class="settings-slider settings-slider-music" type="range" min="0" max="100" step="1" value="50" aria-describedby="setting-music-help" />
+        <span class="settings-range-labels" aria-hidden="true"><span>MUTE</span><span>SAFE MAX</span></span>
+      </label>
+      <p class="settings-hint">Saved in this browser · Maximum volume is safely capped.</p>
     </div>
   </div>
 
@@ -157,6 +172,7 @@
   <div id="tutorial-overlay" class="tutorial-overlay" hidden>
     <div class="tutorial-spotlight" id="tutorial-spotlight"></div>
     <div class="tutorial-muted-region" id="tutorial-muted-region" hidden></div>
+    <div id="tutorial-focus-highlights"></div>
     <div id="tutorial-drag-hints"></div>
     <div class="tutorial-bubble" id="tutorial-bubble" role="dialog" aria-live="polite">
       <p id="tutorial-text"></p>

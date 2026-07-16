@@ -32,7 +32,7 @@ under `src/` stays browser-pure (no Electron/Node imports).
 - Cats only stack/merge with the **same color and level**
 - Shop pets can be **Saved** through refresh and into the next round
 - HUD **SPEED** chip toggles 1×/2× combat (persisted; reduced-motion users default to 2×)
-- Settings includes sound on/off
+- Settings includes independent sound-effects and music volume sliders
 - Layout stacks below ~880px, so narrow windows and phones stay playable
 
 ## Deploy
