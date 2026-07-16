@@ -417,20 +417,22 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   width: 100%;
   aspect-ratio: 6 / 14;
 }
-/* Timber encloses only the Production House. The right rail sits inside the
-   house edge so the battlefield grid remains fully visible. */
-.field-house-layout::after,
+/* Timber encloses only the Production House. The bottom rail belongs to the
+   house so it follows responsive vertical shifts; the right rail sits inside
+   the house edge so the battlefield grid remains fully visible. */
 .house-wing::after,
+.house-wing .production-grid::before,
 .house-wing .production-grid::after {
   content: '';
   position: absolute;
   pointer-events: none;
 }
-.field-house-layout::after {
+.house-wing .production-grid::before {
   left: -16px;
-  right: calc(100% * 6 / 11);
-  bottom: 0;
+  right: 0;
+  bottom: -16px;
   height: 16px;
+  z-index: 6;
   background:
     repeating-linear-gradient(90deg, #4b352e 0 4px, transparent 4px 44px),
     linear-gradient(180deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px);
@@ -2874,7 +2876,7 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   .mobile-status-plank {
     position: relative;
     z-index: 4;
-    width: min(100%, 820px, calc((100vh - 200px) * 11 / 14));
+    width: min(100%, 820px, calc((100vh - 200px) * 10 / 14));
     min-height: 70px;
     display: grid;
     grid-template-columns: 76px minmax(0, 1fr) 88px;
@@ -2956,8 +2958,12 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
     line-height: 1.35;
   }
   .phase-control-wing > .phase-status-panel { display: none; }
+  /* Protect the six-column battlefield as a narrow window closes in. The
+     utility wing gives up one share first, changing 5:6 into 4:6. */
   .field-house-layout {
-    width: min(100%, 820px, calc((100vh - 200px) * 11 / 14));
+    grid-template-columns: 4fr 6fr;
+    width: min(100%, 820px, calc((100vh - 200px) * 10 / 14));
+    aspect-ratio: 10 / 14;
     margin-bottom: 84px;
   }
   .field-house-layout.is-crowded-mobile { margin-top: 0; }
@@ -3455,6 +3461,21 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   /* Battlefield pets must read from their silhouette, clothing and armor. The
      large yellow level tiles obscure most of a 32px sprite on phone layouts. */
   .board .unit-badge { display: none; }
+  /* The command wing is intentionally the first side to become dense. */
+  .phase-control-wing { padding: 8px; }
+  .phase-control-wing .shop-panel,
+  .phase-control-wing .workbench-panel { padding: 7px; }
+  .phase-control-wing .panel-heading { gap: 4px; margin-bottom: 6px; }
+  .phase-control-wing .panel-heading h2 { font-size: 9px; }
+  .phase-control-wing .cart-actions { gap: 4px; }
+  .phase-control-wing .cart-info-button { width: 28px; min-width: 28px; font-size: 9px; }
+  .phase-control-wing .refresh-button { padding: 5px; font-size: 8px; }
+  .phase-control-wing .shop-grid { gap: 5px; }
+  .phase-control-wing .shop-card { padding: 4px 2px 0; }
+  .phase-control-wing .shop-card canvas { width: 48px; height: 48px; }
+  .phase-control-wing .shop-tier { padding: 1px 2px; font-size: 8px; }
+  .phase-control-wing .shop-save { padding: 4px 2px; font-size: 8px; }
+  .phase-control-wing .workbench-grid { gap: 5px; }
   .worker-slot {
     --slot-sprite-size: 32px;
     --slot-sprite-half: 16px;
@@ -3485,7 +3506,6 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   .phase-control-wing .shop-slot { gap: 0; }
   .phase-control-wing .shop-card { padding-bottom: 0; overflow: hidden; }
   .phase-control-wing .shop-card canvas { margin-bottom: -3px; }
-  .phase-control-wing .panel-heading h2 { font-size: 11px; }
   .phase-control-wing .shop-card > strong,
   .phase-control-wing .worker-slot > small,
   .phase-control-wing .bench-slot > small { display: none; }

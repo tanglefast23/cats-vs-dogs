@@ -36,6 +36,12 @@ test('mobile shop cats stand directly on their compact card edge', () => {
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing \.shop-card canvas\s*{\s*margin-bottom:\s*-3px;\s*}/s);
 });
 
+test('mobile preserves the battlefield while the command wing shrinks first', () => {
+  assert.match(css, /\.field-house-layout\s*{[^}]*grid-template-columns:\s*5fr 6fr;[^}]*aspect-ratio:\s*11 \/ 14;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\s*{[^}]*grid-template-columns:\s*4fr 6fr;[^}]*width:\s*min\(100%, 820px, calc\(\(100vh - 200px\) \* 10 \/ 14\)\);[^}]*aspect-ratio:\s*10 \/ 14;/s);
+  assert.match(css, /\.mobile-status-plank\s*{[^}]*width:\s*min\(100%, 820px, calc\(\(100vh - 200px\) \* 10 \/ 14\)\);/s);
+});
+
 test('Cat Workbench omits the redundant capacity counter', () => {
   assert.match(html, /<h2>Cat Workbench<\/h2>/);
   assert.doesNotMatch(html, /id="bench-count"|Cat Workbench\s*<small>0\/3<\/small>/);
@@ -273,11 +279,12 @@ test('the Cat Cart wing and fence align with the left wood rail', () => {
 });
 
 test('wood paneling encloses only the Production House', () => {
-  assert.match(css, /\.field-house-layout::after\s*{[^}]*right:\s*calc\(100% \* 6 \/ 11\);[^}]*bottom:\s*0;/s);
+  assert.match(css, /\.house-wing \.production-grid::before\s*{[^}]*left:\s*-16px;[^}]*right:\s*0;[^}]*bottom:\s*-16px;[^}]*height:\s*16px;/s);
   assert.match(css, /\.house-wing\s*{[^}]*transform:\s*translateY\(-16px\);/s);
   assert.match(css, /\.phase-control-wing\.is-battle \.phase-action\s*{[^}]*margin-bottom:\s*6px;/s);
   assert.match(css, /\.house-wing::after\s*{[^}]*left:\s*-16px;[^}]*top:\s*0;/s);
   assert.match(css, /\.house-wing \.production-grid::after\s*{[^}]*right:\s*0;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*16px;/s);
+  assert.doesNotMatch(css, /\.field-house-layout::after/);
   assert.doesNotMatch(css, /\.board-frame::after/);
   const houseRoof = css.match(/\.house-wing::before\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
