@@ -2,7 +2,7 @@ import {
   ROWS, COLS, CAT_ZONE_START, BENCH_SIZE, PRODUCTION_CAPACITY, MAX_FIELD_CATS, MAX_ROUNDS, ACTIONS_PER_ROUND,
   CAT_COAT_INFO, DOG_ROLE_INFO, catStatsFor, dogStatsFor, normalizeCoat, catTooltipInfo, dogTooltipInfo,
   PORTAL_PERCENTAGE_SCALE_TEXT, PORTAL_MINIMUM_SCALE_TEXT, PORTAL_RANGE_SCALE_TEXT, portalEffectForLevel,
-  WORKER_INFO, createGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
+  WORKER_INFO, createGame, restoreGame, refreshShop, toggleSaveShopSlot, placeCat, moveCat, moveCatInTactics,
   returnCatToBench, mergeUnitOnto, startRound, resolveSection, finishRound,
   openTacticsWindow, continueCombat, useActiveAbility, canTeleportDogTo,
   plusCells,
@@ -13,7 +13,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
 import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
@@ -39,6 +39,7 @@ let dragHoverElement = null;
 let pendingUpgrade = null;
 let activeTargeting = null;
 let glossaryTab = 'battle';
+let glossaryReturnFocus = null;
 let manualPaused = false;
 let glossaryPaused = false;
 let pausedAnimations = [];
@@ -58,6 +59,7 @@ let gameSessionId = 0;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
+const GAME_SAVE_KEY = 'cvd-game-save-v1';
 const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 let combatSpeed = loadCombatSpeed();
 let timing = combatTiming(combatSpeed);
@@ -80,6 +82,28 @@ function setCombatSpeed(speed) {
     window.localStorage?.setItem(SPEED_SETTING_KEY, String(speed));
   } catch {
     // Keep in-memory only.
+  }
+}
+
+function loadGameProgress() {
+  try {
+    const raw = window.localStorage?.getItem(GAME_SAVE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved?.version !== 1) return null;
+    return restoreGame(saved.game, Math.random);
+  } catch {
+    return null;
+  }
+}
+
+function saveGameProgress() {
+  if (playing || !['prep', 'tactics'].includes(game.phase)) return;
+  try {
+    const { random, events, ...snapshot } = game;
+    window.localStorage?.setItem(GAME_SAVE_KEY, JSON.stringify({ version: 1, game: snapshot }));
+  } catch {
+    // Storage can be unavailable in private browsing; the active run still works in memory.
   }
 }
 
@@ -338,11 +362,12 @@ function renderShop() {
     const info = isWorker ? WORKER_INFO[slot.role] : CAT_COAT_INFO[normalizeCoat(slot.coat)];
     const summary = shopCardSummary(slot, info);
     const hasOwnedMatch = shopOfferHasOwnedMatch(slot, ownedCats);
+    const hasFieldCatType = shopOfferHasFieldCatType(slot, game.cats);
     const interactive = !slot.sold && game.phase === 'prep' && !playing;
     const canBuy = interactive && game.gold >= 3;
     const reason = slot.sold ? 'sold' : game.gold < 3 ? 'gold' : 'ready';
     const wrap = document.createElement('div');
-    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${hasOwnedMatch ? 'has-owned-match' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
+    wrap.className = `shop-slot ${slot.saved ? 'saved' : ''} ${slot.sold ? 'sold' : ''} ${reason === 'gold' ? 'unaffordable' : ''} ${hasOwnedMatch ? 'has-owned-match' : hasFieldCatType ? 'has-field-cat-type' : ''} ${isWorker ? 'worker-offer' : 'fighter-offer'}`;
 
     const button = document.createElement('button');
     button.className = 'shop-card';
@@ -357,6 +382,9 @@ function renderShop() {
     if (hasOwnedMatch) {
       button.title = 'Matching cat owned — drag this shop cat onto it to stack.';
       button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Matching cat owned; drag onto it to stack.`);
+    } else if (hasFieldCatType) {
+      button.title = `You have ${info.name} on the battlefield at another level — only matching levels can stack.`;
+      button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Same cat type on the battlefield at another level; these levels cannot stack yet.`);
     }
     if (shopOfferMatchingFieldCatIds(slot, game.cats).length) {
       button.addEventListener('pointerenter', () => showShopMatchTargets(slot));
@@ -676,8 +704,8 @@ function dragSource(type, cat) {
 }
 
 function targetFromElement(element) {
-  const adoptionBox = element?.closest?.('.adoption-box');
-  if (adoptionBox) return { element: adoptionBox, descriptor: { kind: 'sell' } };
+  const nextWaveZone = element?.closest?.('.next-wave-zone');
+  if (nextWaveZone) return { element: nextWaveZone, descriptor: { kind: 'sell' } };
   const workerSlot = element?.closest?.('.worker-slot');
   if (workerSlot) {
     const index = Number(workerSlot.dataset.workerIndex);
@@ -795,7 +823,7 @@ function positionDragVisual(x, y) {
 }
 
 function showValidDropTargets(source) {
-  document.querySelectorAll('.cell, .worker-slot, .bench-slot, .adoption-box').forEach((element) => {
+  document.querySelectorAll('.cell, .worker-slot, .bench-slot, .next-wave-zone').forEach((element) => {
     const { descriptor } = targetFromElement(element);
     if (dropAction(source, descriptor).type !== 'invalid') element.classList.add('drag-valid');
   });
@@ -804,6 +832,7 @@ function showValidDropTargets(source) {
 function startDragVisual(event) {
   if (!dragState || dragState.started) return;
   dragState.started = true;
+  if (dragState.source.type !== 'item') hideTutorialOverlay();
   if (dragState.source.type === 'cat') clearTutorialMoveFocus();
   suppressNextPetClick = true;
   hideUnitTooltip();
@@ -815,13 +844,18 @@ function startDragVisual(event) {
   dragState.ghost = visuals.ghost;
   dragState.shadow = visuals.shadow;
   document.body.classList.add('pet-dragging');
-  if (dragState.source.type === 'cat' || dragState.source.type === 'bench') {
+  if (game.phase === 'prep' && (dragState.source.type === 'cat' || dragState.source.type === 'bench')) {
     document.body.classList.add('cat-sell-dragging');
-    const adoptionBox = $('#adoption-box');
-    adoptionBox?.classList.toggle('sale-blocked', !dragState.source.sellable);
+    const nextWaveZone = $('#next-wave-zone');
+    const adoptionPanel = $('#next-wave-adoption');
+    if (adoptionPanel) adoptionPanel.hidden = false;
+    nextWaveZone?.classList.toggle('sale-blocked', !dragState.source.sellable);
+    nextWaveZone?.setAttribute('aria-label', dragState.source.sellable
+      ? `Adoption Box sell target, worth ${dragState.source.sellValue} gold`
+      : dragState.source.sellReason);
     $('#adoption-box-value').textContent = `+${dragState.source.sellValue}`;
     $('#adoption-box-hint').textContent = dragState.source.sellable
-      ? `Release to adopt · +${dragState.source.sellValue} gold`
+      ? `Drop to sell · +${dragState.source.sellValue} gold`
       : dragState.source.sellReason;
   }
   positionDragVisual(event.clientX, event.clientY);
@@ -1026,21 +1060,24 @@ function showDropWeight(action, descriptor) {
 }
 
 function showAdoptionFeedback(cat, value) {
-  const box = $('#adoption-box');
-  if (!box) return;
+  const zone = $('#next-wave-zone');
+  const panel = $('#next-wave-adoption');
+  if (!zone || !panel) return;
+  panel.hidden = false;
   const pet = document.createElement('span');
   pet.className = 'adoption-pet';
   pet.append(unitCanvas('cat', cat));
   const coin = document.createElement('b');
   coin.className = 'adoption-coin';
   coin.textContent = `● +${value}`;
-  box.append(pet, coin);
-  box.classList.add('adoption-success');
+  zone.append(pet, coin);
+  zone.classList.add('adoption-success');
   $('#gold')?.classList.add('gold-gained');
   window.setTimeout(() => {
     pet.remove();
     coin.remove();
-    box.classList.remove('adoption-success');
+    zone.classList.remove('adoption-success');
+    if (!document.body.classList.contains('cat-sell-dragging')) panel.hidden = true;
     $('#gold')?.classList.remove('gold-gained');
   }, 760);
 }
@@ -1050,7 +1087,11 @@ function cleanupDragVisual(state) {
   state.shadow?.remove();
   document.body.classList.remove('pet-dragging');
   document.body.classList.remove('cat-sell-dragging');
-  $('#adoption-box')?.classList.remove('sale-blocked');
+  const nextWaveZone = $('#next-wave-zone');
+  nextWaveZone?.classList.remove('sale-blocked');
+  nextWaveZone?.setAttribute('aria-label', 'Next dog wave preview');
+  const adoptionPanel = $('#next-wave-adoption');
+  if (adoptionPanel) adoptionPanel.hidden = true;
   hideMoveLimitTooltip();
   clearDragHighlights();
 }
@@ -1392,24 +1433,24 @@ function renderWorkbench() {
 }
 
 function renderDogPreview() {
-  if (!dogPreviewEl) return;
+  const zone = $('#next-wave-zone');
+  if (!dogPreviewEl || !zone) return;
+  const isPlanning = game.phase === 'prep';
+  zone.hidden = !isPlanning;
   dogPreviewEl.innerHTML = '';
-  const queuedDogs = dogPreviewQueue(game.nextWave);
-  const firstVisibleSlot = 3; // The Scout Report sign occupies the first grid row.
-  for (let index = 0; index < 36; index += 1) {
+  if (!isPlanning) return;
+  for (const { dog, row, col } of dogPreviewPlacements(game.nextWave)) {
     const cell = document.createElement('div');
-    cell.className = 'dog-preview-cell';
-    const dog = queuedDogs[index - firstVisibleSlot];
-    if (dog) {
-      cell.classList.add('incoming');
-      cell.append(unitCanvas('dog', dog));
-      cell.insertAdjacentHTML('beforeend', `<b>T${dog.tier}</b>`);
-      bindTooltip(cell, () => dogTooltipInfo(dog));
-    }
+    cell.className = 'dog-preview-cell incoming';
+    cell.style.gridRow = String(row + 1);
+    cell.style.gridColumn = String(col + 1);
+    cell.append(unitCanvas('dog', dog));
+    cell.insertAdjacentHTML('beforeend', `<b>T${dog.tier}</b>`);
+    bindTooltip(cell, () => dogTooltipInfo(dog));
     dogPreviewEl.append(cell);
   }
   const label = $('#preview-round');
-  if (label) label.textContent = game.nextWave?.length ? `ROUND ${game.round}` : 'DEPLOYED';
+  if (label) label.textContent = `ROUND ${game.round}`;
 }
 
 const ACTIVE_COPY = {
@@ -1474,10 +1515,21 @@ function clearAbilityTargetPreview() {
 gridEl.addEventListener('pointerleave', clearAbilityTargetPreview);
 
 function renderTacticsPanel() {
+  const wing = $('#phase-control-wing');
+  const planningPanel = $('#planning-panel');
   const panel = $('#tactics-panel');
   const host = $('#active-abilities');
-  if (!panel || !host) return;
-  panel.hidden = game.phase !== 'tactics';
+  if (!wing || !planningPanel || !panel || !host) return;
+  const isPlanning = game.phase === 'prep';
+  const isBattle = game.phase === 'combat' || game.phase === 'tactics';
+  const tacticsOpen = game.phase === 'tactics';
+  planningPanel.hidden = !isPlanning;
+  panel.hidden = !isBattle;
+  wing.classList.toggle('is-planning', isPlanning);
+  wing.classList.toggle('is-battle', isBattle);
+  wing.classList.toggle('is-combat', game.phase === 'combat');
+  wing.classList.toggle('is-tactics-open', tacticsOpen);
+  wing.setAttribute('aria-label', isPlanning ? 'Planning controls' : 'Battle tactics');
   host.innerHTML = '';
   if (panel.hidden) return;
   const activeCats = game.cats.filter((cat) => cat.activeAbility);
@@ -1486,7 +1538,7 @@ function renderTacticsPanel() {
     const copy = ACTIVE_COPY[cat.activeAbility] ?? ['CAST', 'Choose a target.'];
     const button = document.createElement('button');
     button.className = `active-ability ${cat.activeUsed ? 'used' : ''} ${activeTargeting?.casterId === cat.id ? 'targeting' : ''}`;
-    button.disabled = cat.activeUsed || playing;
+    button.disabled = !tacticsOpen || cat.activeUsed || playing;
     button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
     button.title = copy[1];
     button.addEventListener('click', () => {
@@ -1499,9 +1551,12 @@ function renderTacticsPanel() {
     host.append(button);
   });
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
-  $('#tactics-help').textContent = activeTargeting
-    ? activeTargetingInstruction(activeTargeting)
-    : 'Move each cat once, drag supplies onto a cat, or cast one available ability.';
+  $('#tactics-kicker').textContent = tacticsOpen ? 'BETWEEN COMBAT EXCHANGES' : 'BATTLE IN PROGRESS';
+  $('#tactics-help').textContent = !tacticsOpen
+    ? 'Watch the fight. Movement, supplies, and abilities unlock after this exchange.'
+    : activeTargeting
+      ? activeTargetingInstruction(activeTargeting)
+      : 'Move each cat once, drag supplies onto a cat, or cast one available ability.';
 }
 
 function tryActiveTarget(row, col, cat, dog) {
@@ -1814,28 +1869,18 @@ function renderHud() {
     $('#speed-label').textContent = `${combatSpeed}×`;
   }
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
-  const selectedUnit = selected ? ownedCat(selected.type, selected.id) : null;
-  const sale = selectedUnit ? catSaleQuote(game, selected.type, selected.id) : null;
-  const adoptionBox = $('#adoption-box');
-  if (adoptionBox) adoptionBox.hidden = game.phase !== 'prep';
-  adoptionBox?.classList.toggle('has-selected-cat', Boolean(selectedUnit));
-  if (!document.body.classList.contains('cat-sell-dragging')) {
-    $('#adoption-box-value').textContent = `+${sale?.value ?? 1}`;
-    $('#adoption-box-hint').textContent = sale
-      ? sale.canSell ? `Selected cat · worth ${sale.value} gold` : sale.reason
-      : 'Drag an owned cat here';
-  }
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
   if (!tutorialActive || game.round !== 1 || game.phase !== 'prep') {
     doneButton.classList.remove('tutorial-start-cue');
   }
-  doneButton.hidden = game.phase === 'prep' && game.cats.length === 0;
+  doneButton.hidden = game.phase === 'combat'
+    || !['prep', 'tactics'].includes(game.phase)
+    || (game.phase === 'prep' && game.cats.length === 0);
   doneButton.disabled = playing || (!canContinueTactics && (game.phase !== 'prep' || game.cats.length === 0));
   $('#done-label').textContent = canContinueTactics
     ? 'CONTINUE FIGHT'
     : `START ROUND ${game.round}`;
-  $('#shop-panel').style.opacity = game.phase === 'prep' ? '1' : '.62';
 }
 
 function findUnitElement(id) {
@@ -2963,8 +3008,9 @@ function renderGlossary() {
   }
 }
 
-function openGlossary() {
+function openGlossary(returnFocus = document.activeElement) {
   hideUnitTooltip();
+  glossaryReturnFocus = returnFocus?.focus ? returnFocus : $('#cart-info');
   glossaryTab = 'battle';
   glossaryPaused = true;
   renderGlossary();
@@ -2978,7 +3024,8 @@ function closeGlossary() {
   glossaryModalEl.hidden = true;
   glossaryPaused = false;
   syncPauseState();
-  $('#glossary-open')?.focus();
+  (glossaryReturnFocus?.isConnected ? glossaryReturnFocus : $('#cart-info'))?.focus();
+  glossaryReturnFocus = null;
 }
 
 // --- Tutorial overlay: spotlight a target element + show a coach bubble. ---
@@ -3114,7 +3161,7 @@ function hideTutorialFocus() {
 }
 
 function clearTutorialMoveFocus() {
-  if (!tutorialActive || tutorialCurrentTip?.id !== 'tip-move') return;
+  if (!tutorialActive || CORE_STEPS[tutorialStepIndex]?.id !== 'r2-move') return;
   tutorialMoveFocusCleared = true;
   hideTutorialFocus();
 }
@@ -3341,10 +3388,10 @@ function syncTutorial() {
   if (game.phase === 'prep' && game.cats.length >= MAX_FIELD_CATS
       && tutorialStepIndex >= CORE_STEPS.length
       && !tutorialCurrentTip && !tutorialSeenTips.has('squad-full')) {
-    tutorialCurrentTip = { id: 'squad-full', spotlight: '#adoption-box',
+    tutorialCurrentTip = { id: 'squad-full', spotlight: '#next-wave-zone',
       completeOnActions: ['made-squad-room'],
       isDone: (state) => state.cats.length < MAX_FIELD_CATS,
-      text: "Squad's full at 5! To add another cat, make room: combine three matching cats into one, park one on the Workbench, or sell your weakest in the Adoption Box." };
+      text: "Squad's full at 5! To sell your weakest cat, pick it up and hover over NEXT WAVE. When it becomes the Adoption Box, drop the cat there for gold and a free slot." };
   }
   while (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
@@ -3367,9 +3414,19 @@ function syncTutorial() {
         ? step.text(game, tutorialCompletedMergeTasks)
         : step.text;
       const spotlight = typeof step.spotlight === 'function' ? step.spotlight(game) : step.spotlight;
+      const focusSelectors = typeof step.focusSelectors === 'function'
+        ? step.focusSelectors(game)
+        : [];
       const isDrag = dragHints.length > 0;
       showTutorialBubble(text, spotlight, step.mode === 'tap',
-        { dim: step.mode === 'tap', showSpotlight: !isDrag, mutedRegion: step.mutedRegion });
+        {
+          dim: step.mode === 'tap',
+          showSpotlight: !isDrag && focusSelectors.length === 0,
+          mutedRegion: step.mutedRegion,
+          anchorSelectors: focusSelectors,
+        });
+      if (focusSelectors.length && !tutorialMoveFocusCleared) showTutorialFocus(focusSelectors);
+      else hideTutorialFocus();
       if (isDrag) showDragHints(dragHints);
       else hideDragHint();
       return;
@@ -3422,6 +3479,7 @@ function render() {
   renderLegend();
   playPendingUpgrade();
   if (tutorialActive) syncTutorial();
+  saveGameProgress();
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -3594,7 +3652,6 @@ function onDoneClick() {
   playRound();
 }
 $('#done').addEventListener('click', onDoneClick);
-$('#tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
 $('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
 
@@ -3637,12 +3694,16 @@ $('#pause-toggle')?.addEventListener('click', () => {
   game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
   renderHud();
 });
-$('#glossary-open')?.addEventListener('click', openGlossary);
+$('#cart-info')?.addEventListener('click', () => openGlossary($('#cart-info')));
 $('#glossary-close')?.addEventListener('click', closeGlossary);
 glossaryModalEl?.addEventListener('click', (event) => {
   if (event.target === glossaryModalEl) closeGlossary();
 });
 $('#settings')?.addEventListener('click', () => { unlockAudio(); openSettings(); });
+$('#settings-glossary')?.addEventListener('click', () => {
+  closeSettings();
+  openGlossary($('#settings'));
+});
 $('#settings-close')?.addEventListener('click', closeSettings);
 settingsModalEl?.addEventListener('click', (event) => {
   if (event.target === settingsModalEl) closeSettings();
@@ -3673,6 +3734,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 
+game = loadGameProgress() ?? game;
 loadVolumeSettings();
 syncSettingsUi();
 drawBackyard($('#yard-art'));

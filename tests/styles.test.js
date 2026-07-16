@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 function zIndexFor(selector) {
   const start = css.indexOf(`${selector} {`);
@@ -72,6 +73,56 @@ test('repositionable cats use a separate faint tutorial glow', () => {
 
 test('tutorial buttons cannot intercept a cat drop through the nearby bubble', () => {
   assert.match(css, /body\.pet-dragging \.tutorial-next,\s*body\.pet-dragging \.tutorial-skip\s*{\s*pointer-events:\s*none;/s);
+});
+
+test('starting any cat drag dismisses the visible tutorial overlay', () => {
+  assert.match(app, /dragState\.started = true;\s*if \(dragState\.source\.type !== 'item'\) hideTutorialOverlay\(\);/);
+});
+
+test('the Next Wave panel replaces the standalone Adoption Box while a cat is dragged', () => {
+  assert.doesNotMatch(html, /<section id="adoption-box"/);
+  assert.match(html, /<div id="board"[\s\S]*<aside id="next-wave-zone"[\s\S]*<section id="next-wave-adoption"/);
+  assert.match(app, /closest\?\.\('\.next-wave-zone'\)/);
+  assert.match(app, /querySelectorAll\('\.cell, \.worker-slot, \.bench-slot, \.next-wave-zone'\)/);
+  assert.doesNotMatch(css, /^\.adoption-box\s*\{/m);
+  assert.match(css, /body\.cat-sell-dragging \.next-wave-zone\.drag-over \.next-wave-adoption\s*{[^}]*opacity:\s*1;/s);
+});
+
+test('the left wing swaps planning controls for persistent battle tactics', () => {
+  assert.match(html, /id="phase-control-wing"[\s\S]*id="planning-panel"[\s\S]*id="shop-panel"[\s\S]*class="workbench-panel"[\s\S]*id="tactics-panel"[\s\S]*class="round-controls phase-action"/);
+  assert.match(app, /const isBattle = game\.phase === 'combat' \|\| game\.phase === 'tactics';/);
+  assert.match(app, /planningPanel\.hidden = !isPlanning;\s*panel\.hidden = !isBattle;/);
+  assert.match(app, /doneButton\.hidden = game\.phase === 'combat'/);
+  assert.match(app, /zone\.hidden = !isPlanning;/);
+});
+
+test('tutorial selectors follow the relocated planning, scout, adoption, and tactics UI', () => {
+  assert.match(html, /id="planning-panel"[\s\S]*id="shop"[\s\S]*id="workbench"/);
+  assert.match(html, /id="board"[\s\S]*id="dog-preview-grid"/);
+  assert.match(html, /id="tactics-panel"/);
+  assert.doesNotMatch(html, /class="dog-preview-wing/);
+});
+
+test('the compact status strip is above the fence at every resolution', () => {
+  assert.match(html, /class="top-status-strip"[\s\S]*id="gold"[\s\S]*id="lives"[\s\S]*id="round"[\s\S]*id="squad-count"[\s\S]*id="settings"/);
+  assert.match(css, /\.top-status-strip\s*{[^}]*position:\s*absolute;[^}]*top:\s*-80px;[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\) 46px;/s);
+  assert.doesNotMatch(html, /id="tutorial"/);
+  assert.doesNotMatch(html, /id="restart"/);
+  assert.doesNotMatch(html, /id="speed-toggle"|id="pause-toggle"/);
+});
+
+test('the glossary opens from Cat Cart and Settings', () => {
+  assert.match(html, /class="cart-actions"[\s\S]*id="cart-info"[\s\S]*id="refresh"/);
+  assert.match(html, /id="settings-glossary"[\s\S]*Cat &amp; Dog Glossary/);
+  assert.match(app, /\$\('#cart-info'\)\?\.addEventListener\('click', \(\) => openGlossary\(\$\('#cart-info'\)\)\)/);
+  assert.match(app, /\$\('#settings-glossary'\)\?\.addEventListener\('click'/);
+});
+
+test('stable game progress is restored and saved locally', () => {
+  assert.match(app, /const GAME_SAVE_KEY = 'cvd-game-save-v1';/);
+  assert.match(app, /return restoreGame\(saved\.game, Math\.random\);/);
+  assert.match(app, /if \(playing \|\| !\['prep', 'tactics'\]\.includes\(game\.phase\)\) return;/);
+  assert.match(app, /if \(tutorialActive\) syncTutorial\(\);\s*saveGameProgress\(\);/);
 });
 
 test('tutorial text bubble keeps ten clear pixels beyond the spotlight ring', () => {

@@ -13,12 +13,48 @@
 
     <section class="battle-column" aria-label="Backyard battlefield">
       <div class="field-house-layout">
-        <aside class="dog-preview-wing" aria-label="Next dog wave preview">
-          <div class="preview-sign">
-            <span class="tiny-label">SCOUT REPORT</span>
-            <strong>NEXT WAVE <small id="preview-round">ROUND 1</small></strong>
-          </div>
-          <div id="dog-preview-grid" class="dog-preview-grid"></div>
+        <section class="top-status-strip" aria-label="Game status">
+          <div class="top-status-item"><span class="hud-icon coin" aria-hidden="true">●</span><span><small>GOLD</small><strong id="gold">10</strong></span></div>
+          <div class="top-status-item"><span class="hud-icon heart" aria-hidden="true">♥</span><span><small>LIVES</small><strong id="lives">3</strong></span></div>
+          <div class="top-status-item"><span><small>ROUND</small><strong id="round">1/10</strong></span></div>
+          <div class="top-status-item"><span><small>SQUAD</small><strong id="squad-count">0/5</strong></span></div>
+          <button id="settings" class="icon-button top-settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+        </section>
+        <aside id="phase-control-wing" class="phase-control-wing is-planning" aria-label="Planning controls">
+          <section id="planning-panel" class="planning-panel">
+            <section id="shop-panel" class="shop-panel">
+              <div class="panel-heading">
+                <div><span class="tiny-label">PICK YOUR DEFENDERS</span><h2>Cat Cart</h2></div>
+                <div class="cart-actions">
+                  <button id="cart-info" class="cart-info-button" type="button" aria-label="Open Cat and Dog Glossary" title="Cat &amp; Dog Glossary">i</button>
+                  <button id="refresh" class="refresh-button"><span>↻</span> Refresh <b>1</b></button>
+                </div>
+              </div>
+              <div id="shop" class="shop-grid"></div>
+            </section>
+
+            <section class="workbench-panel" aria-label="Cat Workbench">
+              <div class="panel-heading compact">
+                <div><span class="tiny-label">RESERVE · MERGE · DEPLOY</span><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
+              </div>
+              <div id="workbench" class="workbench-grid"></div>
+              <p class="workbench-help">Hold, merge, then deploy.</p>
+            </section>
+          </section>
+
+          <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
+            <div class="tactics-heading">
+              <span id="tactics-kicker" class="tiny-label">BATTLE IN PROGRESS</span>
+              <h2>Tactics Window</h2>
+            </div>
+            <p id="tactics-help">Tactics unlock between combat exchanges.</p>
+            <div id="active-abilities" class="active-abilities"></div>
+          </section>
+
+          <section class="round-controls phase-action">
+            <p id="message" class="message" role="status">Build your team, then start the round.</p>
+            <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
+          </section>
         </aside>
         <aside class="house-wing" aria-label="Production House">
           <div id="production-grid" class="production-grid" aria-label="Two production cats and House storage">
@@ -31,6 +67,22 @@
           <div id="board" class="board">
             <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
             <div id="grid" class="grid"></div>
+            <aside id="next-wave-zone" class="dog-lawn-preview next-wave-zone" aria-label="Next dog wave preview">
+              <div class="preview-sign">
+                <span class="tiny-label">SCOUT REPORT</span>
+                <strong>NEXT WAVE <small id="preview-round">ROUND 1</small></strong>
+              </div>
+              <div id="dog-preview-grid" class="dog-preview-grid"></div>
+              <section id="next-wave-adoption" class="next-wave-adoption" aria-label="Adoption Box sell target" hidden>
+                <span class="adoption-box-icon" aria-hidden="true">▱</span>
+                <span class="adoption-box-copy">
+                  <small>SAFE CAT SELLING</small>
+                  <strong>ADOPTION BOX</strong>
+                  <em id="adoption-box-hint">Drop to sell this cat</em>
+                </span>
+                <b id="adoption-box-value">+1</b>
+              </section>
+            </aside>
             <div id="effects" class="effects" aria-hidden="true"></div>
           </div>
           <div id="wave-banner" class="wave-banner" role="status" hidden></div>
@@ -39,75 +91,6 @@
       </div>
     </section>
 
-    <aside class="control-panel">
-      <section class="information-section" aria-label="Game information">
-      <header class="titlebar">
-        <div>
-          <p class="eyebrow">LEVEL 1 · HOME TURF</p>
-          <h1>CATS <span>VS</span> DOGS</h1>
-        </div>
-        <div class="titlebar-actions">
-          <button id="tutorial" class="icon-button tutorial-button" aria-label="Start the tutorial" title="Tutorial">TUTORIAL</button>
-          <button id="settings" class="icon-button" aria-label="Open settings" title="Settings">⚙</button>
-          <button id="restart" class="icon-button" aria-label="Restart game" title="Restart">↻</button>
-        </div>
-      </header>
-
-      <section class="hud" aria-label="Game status">
-        <div class="hud-chip"><span class="hud-icon coin">●</span><strong id="gold">10</strong><small>GOLD</small></div>
-        <div class="hud-chip"><span class="hud-icon heart">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
-        <div class="hud-chip"><strong id="round">1/10</strong><small>ROUND</small></div>
-        <div class="hud-chip"><strong id="squad-count">0/5</strong><small>SQUAD</small></div>
-        <button id="speed-toggle" class="hud-chip speed-chip" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
-        <button id="pause-toggle" class="hud-chip pause-chip" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
-      </section>
-      <button id="glossary-open" class="glossary-open" type="button">CAT &amp; DOG GLOSSARY</button>
-      </section>
-
-      <section class="gameplay-section" aria-label="Gameplay controls">
-      <section id="shop-panel" class="shop-panel">
-        <div class="panel-heading">
-          <div><span class="tiny-label">PICK YOUR DEFENDERS</span><h2>Cat Cart</h2></div>
-          <button id="refresh" class="refresh-button"><span>↻</span> Refresh <b>1</b></button>
-        </div>
-        <div id="shop" class="shop-grid"></div>
-      </section>
-
-      <section class="workbench-panel" aria-label="Cat Workbench">
-        <div class="panel-heading compact">
-          <div><span class="tiny-label">RESERVE · MERGE · DEPLOY</span><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
-        </div>
-        <div id="workbench" class="workbench-grid"></div>
-        <p class="workbench-help">Any cat can wait here. Stack 3 matching cats to level up, then deploy fighters to the yard or production cats to the House.</p>
-      </section>
-
-      <section id="adoption-box" class="adoption-box" aria-label="Adoption Box sell target">
-        <span class="adoption-box-icon" aria-hidden="true">▱</span>
-        <span class="adoption-box-copy">
-          <small>SAFE CAT SELLING</small>
-          <strong>ADOPTION BOX</strong>
-          <em id="adoption-box-hint">Drag an owned cat here</em>
-        </span>
-        <b id="adoption-box-value">+1</b>
-      </section>
-
-      <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
-        <div class="tactics-heading">
-          <span class="tiny-label">BETWEEN COMBAT EXCHANGES</span>
-          <h2>Tactics Window</h2>
-        </div>
-        <p id="tactics-help">Move each cat once, use supplies, or cast an ability.</p>
-        <div id="active-abilities" class="active-abilities"></div>
-      </section>
-
-      <section class="round-controls">
-        <p id="message" class="message" role="status">Build your team, then start the round.</p>
-        <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
-      </section>
-      </section>
-
-
-    </aside>
   </main>
 
   <div id="glossary-modal" class="glossary-modal" hidden>
@@ -155,7 +138,11 @@
         <input id="setting-music-volume" class="settings-slider settings-slider-music" type="range" min="0" max="100" step="1" value="50" aria-describedby="setting-music-help" />
         <span class="settings-range-labels" aria-hidden="true"><span>MUTE</span><span>SAFE MAX</span></span>
       </label>
-      <p class="settings-hint">Saved in this browser · Maximum volume is safely capped.</p>
+      <button id="settings-glossary" class="settings-link-button" type="button">
+        <span><small>FIELD GUIDE</small><strong>Cat &amp; Dog Glossary</strong></span>
+        <b aria-hidden="true">i</b>
+      </button>
+      <p class="settings-hint">Game progress and volume are saved in this browser · Maximum volume is safely capped.</p>
     </div>
   </div>
 

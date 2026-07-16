@@ -18,6 +18,7 @@ import {
   DOG_CELL_CAPACITY,
   MAX_SHOP_SIZE,
   createGame,
+  restoreGame,
   makeShop,
   availableCatCoatsForRound,
   shopTierForRound,
@@ -48,6 +49,23 @@ import {
   catSaleQuote,
   sellCat,
 } from '../src/game-engine.js';
+
+test('saved runs restore only stable phases and reseed generated IDs', () => {
+  const original = createGame(() => 0.5);
+  const snapshot = JSON.parse(JSON.stringify({ ...original, random: undefined }));
+  snapshot.cats.push({ ...createCat(), id: 'cat-999999', row: 10, col: 0 });
+  snapshot.events = [{ type: 'stale-animation' }];
+
+  const random = () => 0.25;
+  const restored = restoreGame(snapshot, random);
+
+  assert.equal(restored.phase, 'prep');
+  assert.equal(restored.random, random);
+  assert.deepEqual(restored.events, []);
+  assert.ok(Number(createCat().id.split('-').at(-1)) > 999999);
+  assert.equal(restoreGame({ ...snapshot, phase: 'combat' }, random), null);
+  assert.equal(restoreGame({ ...snapshot, inventory: [] }, random), null);
+});
 
 test('desktop board uses six columns, fourteen rows, a five-cat squad, and two actions', () => {
   assert.equal(COLS, 6);

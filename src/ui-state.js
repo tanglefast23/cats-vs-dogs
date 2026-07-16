@@ -37,6 +37,14 @@ export function shopOfferHasOwnedMatch(slot, ownedCats = []) {
   return offerKey != null && ownedCats.some((cat) => petMergeKey(cat) === offerKey);
 }
 
+export function shopOfferHasFieldCatType(slot, fieldCats = []) {
+  if (!slot || slot.sold || slot.category === 'worker' || slot.coat == null) return false;
+  const offerCoat = Number(slot.coat);
+  return fieldCats.some((cat) => cat?.kind !== 'production-cat'
+    && cat?.coat != null
+    && Number(cat.coat) === offerCoat);
+}
+
 export function shopOfferMatchingFieldCatIds(slot, fieldCats = []) {
   if (!slot || slot.sold || slot.category === 'worker') return [];
   const offerKey = petMergeKey(slot);
@@ -160,6 +168,22 @@ export function dogPreviewQueue(dogs = []) {
       || left.index - right.index
     ))
     .map(({ dog }) => dog);
+}
+
+/** Place scout-report dogs over their future battlefield lanes without mutating them. */
+export function dogPreviewPlacements(dogs = [], rows = 10, cols = 6) {
+  const occupied = new Set();
+  return dogPreviewQueue(dogs).map((dog, index) => {
+    const fallbackCol = index % cols;
+    const col = Number.isInteger(dog.col)
+      ? Math.max(0, Math.min(cols - 1, dog.col))
+      : fallbackCol;
+    const arrival = Math.max(0, Math.floor(Number(dog.appearanceIndex) || 0));
+    let row = Math.min(rows - 1, 2 + arrival * 2);
+    while (row < rows - 1 && occupied.has(`${row}:${col}`)) row += 1;
+    occupied.add(`${row}:${col}`);
+    return { dog, row, col };
+  });
 }
 
 /** Living dogs Storm would hit in the hovered battlefield column. */

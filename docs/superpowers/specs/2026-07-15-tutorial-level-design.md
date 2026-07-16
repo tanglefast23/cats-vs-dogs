@@ -29,7 +29,7 @@ A light **scripted setup** runs underneath (fixed opening wave + a curated shop 
 8. **The between-battle pause** — a breather mid-round; heal or act here, then Continue.
 9. **Merge = power spike** — stack 3 matching cats into one much stronger cat.
 10. **Squad cap (5)** — when full, you must merge, bench, or sell to make room.
-11. **Sell / adoption** — drag your weakest cat to the Adoption Box for gold + a free slot.
+11. **Sell / adoption** — pick up a cat, hover over **NEXT WAVE** to turn the Scout Report into the Adoption Box, then drop for gold + a free slot.
 12. **Workbench** — park cats on the side (3 slots) to hold pairs and overflow.
 13. **Stronger cats + mid-fight abilities** — round-4 cats unlock; some have a button you press *in the pause*.
 
@@ -98,12 +98,12 @@ The heal is taught in R3 **prep**, not in the pause. Reason (found in verificati
 
 ## Just-in-time tips (round 2 onward — fire once, when the situation first happens)
 
-Each is a single coached pop-up (spotlight + one line + dismiss). No forced sequence.
+Round 2 includes one required adoption practice: deploy Hissiletoe, pick the cat up, then drop it on the Adoption Box that appears over **NEXT WAVE**. The later tips are single coached pop-ups (spotlight + one line + dismiss), with no forced sequence.
 
 | Tip | Fires the first time… | Coach line |
 |---|---|---|
 | **Squad full** | player has 5 cats on the board and tries to add a 6th | "Your Elite Squad maxes at **5**. Merge two, bench one, or sell one to make room." |
-| **Sell** | (shown alongside Squad-full) | "Drag your weakest cat to the **Adoption Box** — gold back, and a free slot." |
+| **Sell** | reinforced alongside Squad-full after the Round 2 practice | "Pick up your weakest cat and hover over **NEXT WAVE**. When it becomes the Adoption Box, drop the cat there for gold and a free slot." |
 | **Workbench** | player has a spare cat / a pair with no third yet | "Park cats on the **Workbench** (3 slots) to hold a pair until the third shows up." |
 | **Ability cat** | player owns a cat with a mid-fight ability (round-4 unlock) | "This cat has a special move. It only fires in the **pause** — open the Tactics window and use it." |
 | **Coins** | player collects from Cashmere Cat for the first time | "Coins go straight to your gold — more coins, more cats." |

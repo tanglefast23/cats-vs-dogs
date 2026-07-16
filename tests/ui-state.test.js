@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -58,6 +58,23 @@ test('sold and max-level shop cats never advertise an unusable match', () => {
   assert.equal(shopOfferHasOwnedMatch({ category: 'fighter', coat: 2, level: 3, sold: true }, ownedCats), false);
 });
 
+test('shop offers recognize the same battlefield cat type even when its level differs', () => {
+  const thunderpawsOffer = { category: 'fighter', coat: 9, level: 2 };
+  const fieldCats = [
+    { id: 'thunder-one', kind: 'alley-cat', coat: 9, level: 1 },
+    { id: 'frost-two', kind: 'alley-cat', coat: 6, level: 2 },
+  ];
+
+  assert.equal(shopOfferHasOwnedMatch(thunderpawsOffer, fieldCats), false,
+    'different levels must not claim they can merge');
+  assert.equal(shopOfferHasFieldCatType(thunderpawsOffer, fieldCats), true,
+    'the same base cat on the field still earns the green shop cue');
+  assert.equal(shopOfferHasFieldCatType({ ...thunderpawsOffer, coat: 6 }, fieldCats), true);
+  assert.equal(shopOfferHasFieldCatType({ ...thunderpawsOffer, coat: 8 }, fieldCats), false);
+  assert.equal(shopOfferHasFieldCatType({ ...thunderpawsOffer, sold: true }, fieldCats), false);
+  assert.equal(shopOfferHasFieldCatType({ category: 'worker', role: 'cook', level: 2 }, fieldCats), false);
+});
+
 test('shop hover identifies every matching battlefield cat and no invalid targets', () => {
   const fieldCats = [
     { id: 'white-one', kind: 'alley-cat', coat: 2, level: 1 },
@@ -81,6 +98,23 @@ test('next-wave dogs fill from top-left in chronological and left-to-right order
   assert.deepEqual(
     dogPreviewQueue([laterLeft, nowRight, nowLeft]).map((dog) => dog.id),
     ['now-left', 'now-right', 'later-left'],
+  );
+});
+
+test('next-wave dogs preview over their future lawn lanes without overlapping', () => {
+  const dogs = [
+    { id: 'left-first', col: 0 },
+    { id: 'right', col: 5 },
+    { id: 'left-second', col: 0 },
+  ];
+
+  assert.deepEqual(
+    dogPreviewPlacements(dogs).map(({ dog, row, col }) => ({ id: dog.id, row, col })),
+    [
+      { id: 'left-first', row: 2, col: 0 },
+      { id: 'left-second', row: 3, col: 0 },
+      { id: 'right', row: 2, col: 5 },
+    ],
   );
 });
 

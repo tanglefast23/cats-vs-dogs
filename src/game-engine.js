@@ -577,6 +577,34 @@ export function createGame(random = Math.random) {
   };
 }
 
+/** Rehydrate a locally saved run and keep future generated IDs collision-free. */
+export function restoreGame(snapshot, random = Math.random) {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  if (!['prep', 'tactics'].includes(snapshot.phase)) return null;
+  if (!Number.isInteger(snapshot.round) || snapshot.round < 1 || snapshot.round > MAX_ROUNDS) return null;
+  if (!Number.isFinite(snapshot.gold) || !Number.isFinite(snapshot.lives)) return null;
+  const arrayKeys = ['cats', 'dogs', 'decoys', 'bench', 'workers', 'inventory', 'shop', 'nextWave'];
+  if (arrayKeys.some((key) => !Array.isArray(snapshot[key]))) return null;
+  if (snapshot.workers.length !== PRODUCTION_CAPACITY || snapshot.inventory.length !== STORAGE_CAPACITY) return null;
+
+  const visitIds = (value) => {
+    if (typeof value === 'string') {
+      const match = value.match(/^[a-z][a-z-]*-(\d+)$/i);
+      if (match) nextId = Math.max(nextId, Number(match[1]) + 1);
+      return;
+    }
+    if (Array.isArray(value)) value.forEach(visitIds);
+    else if (value && typeof value === 'object') Object.values(value).forEach(visitIds);
+  };
+  visitIds(snapshot);
+
+  return {
+    ...snapshot,
+    events: [],
+    random: typeof random === 'function' ? random : Math.random,
+  };
+}
+
 /** The centre square plus its four orthogonal neighbours, clipped to the battlefield. */
 export function plusCells(row, col, rows = ROWS, cols = COLS) {
   return [

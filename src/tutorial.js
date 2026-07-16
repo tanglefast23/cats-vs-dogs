@@ -90,6 +90,8 @@ export const anyWoundedCat = (game) => game.cats.some((cat) => cat.hp < cat.maxH
 export const ownsAbilityCat = (game) => game.cats.some((cat) => Boolean(cat.activeAbility));
 export const inventoryHasItem = (game) => game.inventory.some(Boolean);
 export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.role === role);
+export const ownsFighterCoat = (game, coat) => [...game.cats, ...game.bench]
+  .some((cat) => cat.kind !== 'production-cat' && cat.coat === coat);
 export const ownsAdvancedCat = (game) => [...game.cats, ...game.bench]
   .some((cat) => cat.kind !== 'production-cat' && CAT_COAT_INFO[cat.coat]?.unlockRound >= 4);
 
@@ -130,6 +132,13 @@ export function tutorialMergeTaskForDrop(action, source) {
 
 const boardCatSelector = (cat) => `#board .cell[data-row="${cat.row}"][data-col="${cat.col}"]`;
 const boardCatCanvasSelector = (cat) => `${boardCatSelector(cat)} .unit:not(.dog-unit):not(.decoy-unit) > canvas`;
+
+export function tutorialOwnedCatSelector(game, coat) {
+  const fieldCat = game.cats.find((cat) => cat.coat === coat);
+  if (fieldCat) return boardCatSelector(fieldCat);
+  const benchCat = game.bench.find((cat) => cat?.kind !== 'production-cat' && cat.coat === coat);
+  return benchCat ? `#workbench .bench-slot[data-unit-id="${benchCat.id}"]` : null;
+}
 
 export function tutorialMovableCatSelectors(game) {
   if (game.phase !== 'prep' && game.phase !== 'tactics') return [];
@@ -191,7 +200,7 @@ export const CORE_STEPS = [
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,
-    mutedRegion: '.dog-preview-wing',
+    mutedRegion: '.dog-lawn-preview',
     text: "You have 10 gold and cats cost 3. Drag Purrcy Pew-Pew from the shop onto the battlefield.",
     isDone: (g) => catOnBoard(g, CAT_COAT.ORANGE) },
   { id: 'r1-buy2', round: 1, mode: 'gate', spotlight: '#shop',
@@ -225,12 +234,27 @@ export const CORE_STEPS = [
     isDone: (_g, completedTasks) => completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD)
       && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
-    text: "Power spike! One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
+    text: 'Power spike! Level 2 cats hit harder and survive longer than Level 1 cats. Combining three into one also clears two spaces for your squad.' },
+  { id: 'r2-adopt-buy', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
+    dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.WHITE),
+    dragTo: tutorialOpenLaneSelector,
+    text: 'Now learn how to make room. Drag Hissiletoe from the Cat Cart onto an open battlefield lane.',
+    isDone: (g) => ownsFighterCoat(g, CAT_COAT.WHITE) },
+  { id: 'r2-adopt', round: 2, mode: 'gate', spotlight: '#next-wave-zone', showWhen: (g) => g.phase === 'prep',
+    completeOnActions: ['sell'],
+    dragFrom: (g) => tutorialOwnedCatSelector(g, CAT_COAT.WHITE),
+    dragTo: '#next-wave-zone',
+    text: 'Pick Hissiletoe up, then hover over NEXT WAVE. It turns into the Adoption Box while you hold a cat — drop Hissiletoe there to sell the cat for gold and free the squad slot.',
+    isDone: () => false },
   { id: 'r2-spend', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     text: (g) => `You still have ${g.gold} gold. Buy cats or refresh the Cat Cart until it's gone — every unspent coin is lost when battle begins.`,
     isDone: (g) => g.gold === 0 },
   { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep' && g.gold === 0,
     text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
+  { id: 'r2-move', round: 2, mode: 'gate', spotlight: null, showWhen: (g) => g.phase === 'tactics',
+    focusSelectors: tutorialMovableCatSelectors,
+    text: 'This Tactics Window lets you reposition between attacks. Each cat can move once: most move up to 2 squares, while Clawdius moves 1. Drag a cat now, or Continue Fight to keep your formation.',
+    isDone: (g) => g.phase !== 'tactics' || g.cats.some((cat) => cat.tacticsMoved) },
 
   // Round 3 — production payoff (heal). A small wound persists from the advancing
   // pack (scripted in app.js), so one Whisker treat fully patches it.
@@ -248,10 +272,6 @@ export const CORE_STEPS = [
 // Note: the squad-full coaching (5/5 max → sell / combine / bench) fires
 // proactively from app.js the moment you hit the cap, not as a queued tip.
 export const TIPS = [
-  { id: 'tip-move', spotlight: null, focusSelectors: tutorialMovableCatSelectors,
-    completeOnActions: ['move', 'tactics-move'],
-    text: "You can reposition cats! Drag a placed cat up to 2 squares — during planning or in the pause between attacks. (Slower melee cats move just 1.)",
-    when: (g) => g.round >= 2 && g.phase === 'prep' && tutorialMovableCatSelectors(g).length > 0 },
   { id: 'tip-new-cats', spotlight: '#shop',
     completeOnActions: ['purchase-advanced-cat'], isDone: ownsAdvancedCat,
     text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",

@@ -5,7 +5,10 @@ export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
 export const SOUND_VOLUME_SETTING_KEY = 'cvd-sound-volume';
 export const MUSIC_VOLUME_SETTING_KEY = 'cvd-music-volume';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
-export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
+// Keep the lossless WAV as the editable master, but ship the compressed derivative.
+// The browser downloads this track on the first interaction, so serving PCM would
+// transfer nearly 8 MB before the music can begin.
+export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.mp3', import.meta.url).href;
 export const LEVEL_MUSIC_DURATION_SECONDS = 180;
 export const DEFAULT_VOLUME = 50;
 export const SOUND_OUTPUT_CAP = 0.8;

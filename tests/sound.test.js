@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  IMPACT_SOUNDS, LEVEL_MUSIC_DURATION_SECONDS, playImpact, playArmourBlock, SFX_GAIN,
+  IMPACT_SOUNDS, LEVEL_MUSIC_DURATION_SECONDS, LEVEL_MUSIC_URL, playImpact, playArmourBlock, SFX_GAIN,
   playMerge, playCatDeath, playDogDeath, playWaveStart,
   playRoundComplete, playVictory, playDefeat, playHeal, playHowl,
   playAppleCrunch, playItemUse,
@@ -168,4 +168,14 @@ test('level music is a three-minute arrangement with a balanced loop seam', () =
   const firstSample = music.wav.readInt16LE(music.dataOffset);
   const lastSample = music.wav.readInt16LE(music.dataOffset + music.dataSize - 2);
   assert.ok(Math.abs(firstSample - lastSample) < 2500, 'loop seam has an audible sample jump');
+});
+
+test('the browser ships a compressed level-music derivative instead of the PCM master', () => {
+  const mp3 = readFileSync(new URL('../src/assets/audio/backyard-bounce.mp3', import.meta.url));
+  const hasId3Header = mp3.toString('ascii', 0, 3) === 'ID3';
+  const hasMpegFrameSync = mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0;
+
+  assert.match(LEVEL_MUSIC_URL, /backyard-bounce\.mp3$/);
+  assert.ok(hasId3Header || hasMpegFrameSync, 'compressed music is not a valid MP3 stream');
+  assert.ok(mp3.length < 2_000_000, `compressed music is unexpectedly large (${mp3.length} bytes)`);
 });
