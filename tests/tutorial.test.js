@@ -11,6 +11,7 @@ import {
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole, ownsFighterCoat,
   tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, confirmTutorialSkip,
   tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors, tutorialOwnedCatSelector,
+  tutorialCatInfoSelectors,
   TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
@@ -137,6 +138,26 @@ test('tutorial purchase hints choose a lane the player has not used', () => {
     '#board .cell[data-row="13"][data-col="2"]');
 });
 
+test('round 1 teaches tap-for-info after the first cat is placed', () => {
+  const buyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-buy1');
+  const infoIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-cat-info');
+  const secondBuyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-buy2');
+  assert.equal(infoIndex, buyIndex + 1);
+  assert.equal(secondBuyIndex, infoIndex + 1);
+
+  const step = CORE_STEPS[infoIndex];
+  assert.deepEqual(step.completeOnActions, ['view-cat-info', 'open-glossary']);
+  assert.match(step.text, /Tap the cat you just placed/i);
+  assert.match(step.text, /yellow i beside Cat Cart/i);
+
+  const game = createGame();
+  game.cats.push({ ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 });
+  assert.deepEqual(tutorialCatInfoSelectors(game), [
+    '#board .cell[data-row="13"][data-col="2"]',
+    '#cart-info',
+  ]);
+});
+
 test('tutorial heal hint targets the wounded cat instead of the first board unit', () => {
   const game = createGame();
   const healthy = { ...createCat(1, CAT_COAT.GREY), row: 13, col: 2 };
@@ -224,7 +245,7 @@ test('the merge payoff explains stronger cats and freed squad space', () => {
   assert.doesNotMatch(step.text, /beats three/i);
 });
 
-test('round 2 teaches the Next Wave adoption gesture in text and action', () => {
+test('round 2 teaches the Adoption Box hover gesture in text and action', () => {
   const admireIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-admire');
   const buyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-adopt-buy');
   const adoptIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-adopt');
@@ -249,8 +270,8 @@ test('round 2 teaches the Next Wave adoption gesture in text and action', () => 
     '#board .cell[data-row="13"][data-col="4"]');
   assert.equal(adoptStep.dragTo, '#next-wave-zone');
   assert.deepEqual(adoptStep.completeOnActions, ['sell']);
-  assert.match(adoptStep.text, /hover over NEXT WAVE/i);
-  assert.match(adoptStep.text, /turns into the Adoption Box/i);
+  assert.match(adoptStep.text, /Adoption Box appears just above cat territory/i);
+  assert.match(adoptStep.text, /border glows/i);
   assert.match(adoptStep.text, /drop Hissiletoe there to sell/i);
 
   game.cats = [];

@@ -55,6 +55,7 @@ const tutorialCompletedActions = new Set();
 const dragHintAnimations = new Map();
 let tutorialStartNudged = false;
 let tutorialMoveFocusCleared = false;
+let pendingTappedCatInfo = null;
 let gameSessionId = 0;
 let nextWaveVisible = false;
 
@@ -103,6 +104,7 @@ const shopEl = $('#shop');
 const productionEl = $('#production-grid');
 const dogPreviewEl = $('#dog-preview-grid');
 const inventoryEl = $('#inventory');
+const planningInventoryEl = $('#planning-inventory');
 const workbenchEl = $('#workbench');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
@@ -189,6 +191,16 @@ function hideUnitTooltip() {
   tooltipEl.classList.remove('is-visible', 'is-grouped', 'kind-cat', 'kind-dog');
 }
 
+function hudValueElements(kind) {
+  return [...document.querySelectorAll(`[data-hud-value="${kind}"]`)];
+}
+
+function visibleHudChip(kind) {
+  const values = hudValueElements(kind);
+  const value = values.find((element) => element.getClientRects().length) ?? values[0];
+  return value?.closest('.hud-chip, .mobile-hud-stat') ?? null;
+}
+
 function tooltipCardMarkup(info, index) {
   const effects = info.effects ?? [];
   const effectsMarkup = effects.length
@@ -242,6 +254,9 @@ function showUnitTooltip(anchor, info, clientX, clientY) {
   top = Math.max(pad, Math.min(top, window.innerHeight - rect.height - pad));
   tooltipEl.style.left = `${left}px`;
   tooltipEl.style.top = `${top}px`;
+  if (tooltipInfos.some((tooltipInfo) => tooltipInfo.kind === 'cat')) {
+    completeTutorialTipForAction('view-cat-info');
+  }
 }
 
 function bindTooltip(anchor, infoFactory) {
@@ -286,6 +301,13 @@ function bindTooltip(anchor, infoFactory) {
     }, TOOLTIP_HOVER_DELAY_MS);
   });
   anchor.addEventListener('blur', hideUnitTooltip);
+  anchor.addEventListener('click', () => {
+    if (suppressNextPetClick || bombIsAiming()) return;
+    // Board and Workbench taps re-render selection first, then restore the
+    // tooltip against the new DOM via pendingTappedCatInfo.
+    if (anchor.matches('.cell, .bench-slot')) return;
+    showUnitTooltip(anchor, resolveInfo());
+  });
 }
 
 function unitCanvas(type, unit) {
@@ -314,7 +336,7 @@ function catLabel(cat) {
 }
 
 function showShopPurchaseDenied(button, reason) {
-  const goldChip = $('#gold')?.closest('.hud-chip');
+  const goldChip = visibleHudChip('gold');
   button.classList.remove('purchase-denied');
   goldChip?.classList.remove('gold-denied');
   void button.offsetWidth;
@@ -364,6 +386,7 @@ function renderShop() {
     button.dataset.shopIndex = String(index);
     button.disabled = !interactive;
     button.setAttribute('aria-disabled', canBuy ? 'false' : 'true');
+    button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Tap for details or drag to place.`);
     button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
     button.insertAdjacentHTML('beforeend', `
       <span class="shop-tier">${summary.badge}</span>
@@ -691,8 +714,8 @@ function dragSource(type, cat) {
 }
 
 function targetFromElement(element) {
-  const nextWaveZone = element?.closest?.('.next-wave-zone');
-  if (nextWaveZone) return { element: nextWaveZone, descriptor: { kind: 'sell' } };
+  const adoptionBox = element?.closest?.('.next-wave-adoption');
+  if (adoptionBox) return { element: adoptionBox, descriptor: { kind: 'sell' } };
   const workerSlot = element?.closest?.('.worker-slot');
   if (workerSlot) {
     const index = Number(workerSlot.dataset.workerIndex);
@@ -810,7 +833,7 @@ function positionDragVisual(x, y) {
 }
 
 function showValidDropTargets(source) {
-  document.querySelectorAll('.cell, .worker-slot, .bench-slot, .next-wave-zone').forEach((element) => {
+  document.querySelectorAll('.cell, .worker-slot, .bench-slot, .next-wave-adoption').forEach((element) => {
     const { descriptor } = targetFromElement(element);
     if (dropAction(source, descriptor).type !== 'invalid') element.classList.add('drag-valid');
   });
@@ -833,11 +856,10 @@ function startDragVisual(event) {
   document.body.classList.add('pet-dragging');
   if (game.phase === 'prep' && (dragState.source.type === 'cat' || dragState.source.type === 'bench')) {
     document.body.classList.add('cat-sell-dragging');
-    const nextWaveZone = $('#next-wave-zone');
     const adoptionPanel = $('#next-wave-adoption');
     if (adoptionPanel) adoptionPanel.hidden = false;
-    nextWaveZone?.classList.toggle('sale-blocked', !dragState.source.sellable);
-    nextWaveZone?.setAttribute('aria-label', dragState.source.sellable
+    adoptionPanel?.classList.toggle('sale-blocked', !dragState.source.sellable);
+    adoptionPanel?.setAttribute('aria-label', dragState.source.sellable
       ? `Adoption Box sell target, worth ${dragState.source.sellValue} gold`
       : dragState.source.sellReason);
     $('#adoption-box-value').textContent = `+${dragState.source.sellValue}`;
@@ -1047,9 +1069,8 @@ function showDropWeight(action, descriptor) {
 }
 
 function showAdoptionFeedback(cat, value) {
-  const zone = $('#next-wave-zone');
   const panel = $('#next-wave-adoption');
-  if (!zone || !panel) return;
+  if (!panel) return;
   panel.hidden = false;
   const pet = document.createElement('span');
   pet.className = 'adoption-pet';
@@ -1057,15 +1078,15 @@ function showAdoptionFeedback(cat, value) {
   const coin = document.createElement('b');
   coin.className = 'adoption-coin';
   coin.textContent = `● +${value}`;
-  zone.append(pet, coin);
-  zone.classList.add('adoption-success');
-  $('#gold')?.classList.add('gold-gained');
+  panel.append(pet, coin);
+  panel.classList.add('adoption-success');
+  hudValueElements('gold').forEach((element) => element.classList.add('gold-gained'));
   window.setTimeout(() => {
     pet.remove();
     coin.remove();
-    zone.classList.remove('adoption-success');
+    panel.classList.remove('adoption-success');
     if (!document.body.classList.contains('cat-sell-dragging')) panel.hidden = true;
-    $('#gold')?.classList.remove('gold-gained');
+    hudValueElements('gold').forEach((element) => element.classList.remove('gold-gained'));
   }, 760);
 }
 
@@ -1074,11 +1095,12 @@ function cleanupDragVisual(state) {
   state.shadow?.remove();
   document.body.classList.remove('pet-dragging');
   document.body.classList.remove('cat-sell-dragging');
-  const nextWaveZone = $('#next-wave-zone');
-  nextWaveZone?.classList.remove('sale-blocked');
-  nextWaveZone?.setAttribute('aria-label', 'Next dog wave preview');
   const adoptionPanel = $('#next-wave-adoption');
-  if (adoptionPanel) adoptionPanel.hidden = true;
+  adoptionPanel?.classList.remove('sale-blocked');
+  if (adoptionPanel) {
+    adoptionPanel.hidden = true;
+    adoptionPanel.setAttribute('aria-label', 'Adoption Box sell target');
+  }
   hideMoveLimitTooltip();
   clearDragHighlights();
 }
@@ -1166,7 +1188,7 @@ async function finishDrag(event, cancelled = false) {
 const COLLECTION_TIMING = Object.freeze({ sourceMs: 280, flightMs: 430, cueMs: 900 });
 
 function collectionTargetElement(destination) {
-  if (destination?.type === 'gold') return $('#gold')?.closest('.hud-chip') ?? null;
+  if (destination?.type === 'gold') return visibleHudChip('gold');
   return null;
 }
 
@@ -1320,7 +1342,7 @@ function productionWorkerSlot(index) {
 }
 
 function renderProduction() {
-  if (!productionEl || !inventoryEl) return;
+  if (!productionEl || !inventoryEl || !planningInventoryEl) return;
   productionEl.querySelectorAll(':scope > .production-cell').forEach((cell) => cell.remove());
   Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
     .forEach((index) => productionEl.append(productionWorkerSlot(index)));
@@ -1352,6 +1374,32 @@ function renderProduction() {
     }
     inventoryEl.append(slot);
   });
+
+  planningInventoryEl.innerHTML = '';
+  game.inventory.forEach((item, index) => {
+    const slot = document.createElement('div');
+    slot.className = `planning-inventory-item ${item ? 'filled' : 'empty'}`;
+    if (!item) {
+      slot.setAttribute('aria-label', `Empty production item slot ${index + 1}`);
+      slot.innerHTML = '<span><small>EMPTY</small></span>';
+      planningInventoryEl.append(slot);
+      return;
+    }
+    slot.setAttribute('aria-label', `${item.quantity} ${item.kind}${item.tier ? ` tier ${item.tier}` : ''}`);
+    slot.append(unitCanvas('item', item));
+    slot.insertAdjacentHTML('beforeend', `<span><strong>×${item.quantity}</strong><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small></span>`);
+    planningInventoryEl.append(slot);
+  });
+}
+
+function syncPlanningSuppliesVisibility() {
+  const planningPanel = $('#planning-panel');
+  const suppliesPanel = $('#planning-supplies');
+  if (!planningPanel || !suppliesPanel) return;
+  suppliesPanel.hidden = true;
+  if (planningPanel.hidden || planningPanel.scrollHeight > planningPanel.clientHeight + 1) return;
+  suppliesPanel.hidden = false;
+  if (planningPanel.scrollHeight > planningPanel.clientHeight + 1) suppliesPanel.hidden = true;
 }
 
 function renderWorkbench() {
@@ -1396,7 +1444,10 @@ function renderWorkbench() {
         if (selectedMatches('bench', cat.id)) {
           selected = null;
           game.message = 'Cat deselected.';
-        } else selectCat('bench', cat);
+        } else {
+          selectCat('bench', cat);
+          pendingTappedCatInfo = { type: 'bench', id: cat.id };
+        }
         render();
       });
     }
@@ -1785,7 +1836,10 @@ function renderBoard() {
         if (tryActiveTarget(row, col, cat, dog)) return;
         if ((game.phase !== 'prep' && game.phase !== 'tactics') || playing) return;
         if (cat) {
-          if (game.phase === 'tactics' || !tryMerge('cat', cat.id)) selectCat('cat', cat);
+          if (game.phase === 'tactics' || !tryMerge('cat', cat.id)) {
+            selectCat('cat', cat);
+            pendingTappedCatInfo = { type: 'cat', id: cat.id };
+          }
         } else if (selected && row < CAT_ZONE_START && !catCanCrossTerritoryBoundary(ownedCat(selected.type, selected.id))) {
           // A silent no-op reads as a broken game — shake and say why instead.
           game.message = 'Only melee cats that have already battled can cross beyond the four glowing rows.';
@@ -1839,9 +1893,9 @@ function renderBoard() {
 }
 
 function renderHud() {
-  $('#gold').textContent = game.gold;
-  $('#lives').textContent = game.lives;
-  $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
+  hudValueElements('gold').forEach((element) => { element.textContent = game.gold; });
+  hudValueElements('lives').forEach((element) => { element.textContent = game.lives; });
+  hudValueElements('round').forEach((element) => { element.textContent = `${game.round}/${MAX_ROUNDS}`; });
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const canContinueTactics = game.phase === 'tactics';
@@ -2995,6 +3049,7 @@ function closeGlossary() {
   syncPauseState();
   (glossaryReturnFocus?.isConnected ? glossaryReturnFocus : $('#cart-info'))?.focus();
   glossaryReturnFocus = null;
+  if (tutorialActive) syncTutorial();
 }
 
 // --- Tutorial overlay: spotlight a target element + show a coach bubble. ---
@@ -3361,7 +3416,7 @@ function syncTutorial() {
     tutorialCurrentTip = { id: 'squad-full', spotlight: '#next-wave-zone',
       completeOnActions: ['made-squad-room'],
       isDone: (state) => state.cats.length < MAX_FIELD_CATS,
-      text: "Squad's full at 5! To sell your weakest cat, pick it up and hover over NEXT WAVE. When it becomes the Adoption Box, drop the cat there for gold and a free slot." };
+      text: "Squad's full at 5! Pick up your weakest cat and the Adoption Box appears just above cat territory. Hover until its border glows, then drop the cat there for gold and a free slot." };
   }
   while (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
@@ -3445,10 +3500,22 @@ function render() {
   renderBoard();
   renderHud();
   renderTacticsPanel();
+  syncPlanningSuppliesVisibility();
   renderProductionLegend();
   renderLegend();
   playPendingUpgrade();
   if (tutorialActive) syncTutorial();
+  if (pendingTappedCatInfo) {
+    const pending = pendingTappedCatInfo;
+    pendingTappedCatInfo = null;
+    const cat = pending.type === 'bench'
+      ? game.bench.find((entry) => entry.id === pending.id)
+      : game.cats.find((entry) => entry.id === pending.id);
+    const anchor = pending.type === 'bench'
+      ? document.querySelector(`.bench-slot[data-unit-id="${pending.id}"]`)
+      : findUnitElement(pending.id)?.closest('.cell');
+    if (cat && anchor) showUnitTooltip(anchor, catTooltipInfo(cat));
+  }
   saveGameProgress();
 }
 
@@ -3595,7 +3662,10 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
-window.addEventListener('resize', () => { if (tutorialActive) { hideDragHint(); hideTutorialFocus(); syncTutorial(); } });
+window.addEventListener('resize', () => {
+  syncPlanningSuppliesVisibility();
+  if (tutorialActive) { hideDragHint(); hideTutorialFocus(); syncTutorial(); }
+});
 window.addEventListener('click', (event) => {
   const control = event.target?.closest?.('button, input[type="checkbox"], [role="button"]');
   if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
@@ -3630,6 +3700,7 @@ $('#next-wave-toggle')?.addEventListener('click', () => {
   renderBoard();
 });
 $('#tutorial')?.addEventListener('click', startTutorial);
+$('#mobile-tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
 $('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
 
@@ -3661,12 +3732,16 @@ restartButton?.addEventListener('click', () => {
   resetGame();
 });
 $('#play-again').addEventListener('click', resetGame);
-$('#cart-info')?.addEventListener('click', () => openGlossary($('#cart-info')));
+$('#cart-info')?.addEventListener('click', () => {
+  completeTutorialTipForAction('open-glossary');
+  openGlossary($('#cart-info'));
+});
 $('#glossary-close')?.addEventListener('click', closeGlossary);
 glossaryModalEl?.addEventListener('click', (event) => {
   if (event.target === glossaryModalEl) closeGlossary();
 });
 $('#settings')?.addEventListener('click', () => { unlockAudio(); openSettings(); });
+$('#mobile-settings')?.addEventListener('click', () => { unlockAudio(); openSettings(); });
 $('#settings-glossary')?.addEventListener('click', () => {
   closeSettings();
   openGlossary($('#settings'));

@@ -140,6 +140,11 @@ export function tutorialOwnedCatSelector(game, coat) {
   return benchCat ? `#workbench .bench-slot[data-unit-id="${benchCat.id}"]` : null;
 }
 
+export function tutorialCatInfoSelectors(game) {
+  const fieldCat = game.cats[0];
+  return [fieldCat ? boardCatSelector(fieldCat) : null, '#cart-info'].filter(Boolean);
+}
+
 export function tutorialMovableCatSelectors(game) {
   if (game.phase !== 'prep' && game.phase !== 'tactics') return [];
   return game.cats
@@ -203,6 +208,11 @@ export const CORE_STEPS = [
     mutedRegion: '.dog-lawn-preview',
     text: "You have 10 gold and cats cost 3. Drag Purrcy Pew-Pew from the shop onto the battlefield.",
     isDone: (g) => catOnBoard(g, CAT_COAT.ORANGE) },
+  { id: 'r1-cat-info', round: 1, mode: 'gate', spotlight: null,
+    focusSelectors: tutorialCatInfoSelectors,
+    completeOnActions: ['view-cat-info', 'open-glossary'],
+    text: 'Want to know what a cat does? Tap the cat you just placed for quick stats and ability details. Or tap the yellow i beside Cat Cart for the full cat and dog guide. Try either one now.',
+    isDone: () => false },
   { id: 'r1-buy2', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,
@@ -244,7 +254,7 @@ export const CORE_STEPS = [
     completeOnActions: ['sell'],
     dragFrom: (g) => tutorialOwnedCatSelector(g, CAT_COAT.WHITE),
     dragTo: '#next-wave-zone',
-    text: 'Pick Hissiletoe up, then hover over NEXT WAVE. It turns into the Adoption Box while you hold a cat — drop Hissiletoe there to sell the cat for gold and free the squad slot.',
+    text: 'Pick Hissiletoe up and the Adoption Box appears just above cat territory. Hover over the box until its border glows, then drop Hissiletoe there to sell the cat for gold and free the squad slot.',
     isDone: () => false },
   { id: 'r2-spend', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     text: (g) => `You still have ${g.gold} gold. Buy cats or refresh the Cat Cart until it's gone — every unspent coin is lost when battle begins.`,

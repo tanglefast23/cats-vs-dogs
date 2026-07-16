@@ -379,6 +379,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .bench-slot .copy-pips { z-index: 5; }
 
 .battle-column { display: flex; justify-content: center; min-width: 0; }
+.mobile-status-plank { display: none; }
 /* Eleven equal columns: a five-column command wing gives the larger type room,
    while the battlefield keeps its original six-column physical scale. */
 .field-house-layout {
@@ -528,6 +529,50 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   scrollbar-color: #557348 #d7e9b9;
 }
 .planning-panel[hidden] { display: none; }
+.planning-supplies-panel {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, rgba(255,248,220,.98), rgba(226,238,198,.98));
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.planning-supplies-panel[hidden] { display: none; }
+.planning-inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.planning-inventory-item {
+  display: grid;
+  min-width: 0;
+  min-height: 62px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  background: #fff1c4;
+}
+.planning-inventory-item.empty {
+  grid-template-columns: 1fr;
+  border-style: dashed;
+  border-color: #7b8b72;
+  background: rgba(255,248,220,.52);
+  color: #71806b;
+  text-align: center;
+}
+.planning-inventory-item canvas { width: 58px; height: 58px; image-rendering: pixelated; }
+.planning-inventory-item > span { display: grid; min-width: 0; gap: 3px; padding: 4px; }
+.planning-inventory-item strong { font-family: var(--px); font-size: 13px; line-height: 1; }
+.planning-inventory-item small {
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 .dog-lawn-preview {
   position: absolute;
   z-index: 8;
@@ -543,7 +588,6 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   background: linear-gradient(180deg, rgba(15,42,34,.05), rgba(18,51,37,.12)), #6ea24c;
   pointer-events: auto;
 }
-body.cat-sell-dragging .next-wave-zone { pointer-events: auto; }
 .board.showing-next-wave .grid .dog-unit { visibility: hidden; }
 .dog-lawn-preview::after {
   content: '';
@@ -726,14 +770,13 @@ h1 span { color: var(--orange); font-size: .75em; }
 .sell-button { background: #f0b56d; }
 .sell-button:not(:disabled):hover { background: #ffd07b; transform: translateY(-1px); }
 
-.next-wave-zone { transition: filter .16s ease, transform .16s ease, box-shadow .16s ease; }
 .next-wave-adoption {
   position: absolute;
   z-index: 10;
-  top: 25%;
-  left: 12%;
-  right: 12%;
-  min-height: 158px;
+  right: 8%;
+  bottom: 10px;
+  left: 8%;
+  min-height: 132px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -747,10 +790,11 @@ h1 span { color: var(--orange); font-size: .75em; }
   color: #fff4d2;
   text-align: center;
   box-shadow: 3px 3px 0 #08171e;
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transform: scale(.94);
-  transition: opacity .16s ease, transform .16s ease, background .16s ease;
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
 .next-wave-adoption[hidden] { display: none; }
 .adoption-box-icon {
@@ -770,26 +814,20 @@ h1 span { color: var(--orange); font-size: .75em; }
 .adoption-box-copy strong { font-family: var(--px); font-size: 11px; }
 .adoption-box-copy em { margin-top: 5px; color: #f8e4be; font-size: 10px; font-style: normal; line-height: 1.35; }
 .next-wave-adoption > b { padding: 6px 8px; border: 2px solid var(--ink); background: #f1b82e; color: var(--ink); font-family: var(--px); font-size: 12px; box-shadow: 2px 2px 0 var(--ink); }
-body.cat-sell-dragging .next-wave-zone.drag-valid {
-  box-shadow: 0 0 0 2px #77939a, inset 0 0 0 4px #ffe39a;
-  animation: adoption-ready .7s steps(4) infinite;
+body.cat-sell-dragging .next-wave-adoption { pointer-events: auto; }
+body.cat-sell-dragging .next-wave-adoption.drag-over {
+  z-index: 30;
+  border-color: #fff3a4;
+  box-shadow: 0 0 0 5px #ffe06d, 0 0 24px 10px rgba(255,196,64,.72), 4px 4px 0 #08171e;
+  transform: scale(1.04);
 }
-body.cat-sell-dragging .next-wave-zone .next-wave-adoption { opacity: .34; transform: scale(.97); }
-body.cat-sell-dragging .next-wave-zone.drag-over { z-index: 30; box-shadow: 0 0 20px 7px rgba(255,196,64,.65), inset 0 0 0 5px #ffe06d; transform: scale(1.025); }
-body.cat-sell-dragging .next-wave-zone.drag-over .next-wave-adoption { opacity: 1; transform: scale(1); }
-body.cat-sell-dragging .next-wave-zone.drag-over .preview-sign,
-body.cat-sell-dragging .next-wave-zone.drag-over .dog-preview-grid,
-.next-wave-zone.adoption-success .preview-sign,
-.next-wave-zone.adoption-success .dog-preview-grid { opacity: .08; }
-body.cat-sell-dragging .next-wave-zone.sale-blocked .next-wave-adoption { background-color: #8d4b48; }
-body.cat-sell-dragging .next-wave-zone.sale-blocked .next-wave-adoption > b { background: #d77a72; }
-body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
-.next-wave-zone.adoption-success .next-wave-adoption { background-color: #58a760; opacity: 1; transform: scale(1); }
+body.cat-sell-dragging .next-wave-adoption.sale-blocked { background-color: #8d4b48; }
+body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a72; }
+.next-wave-adoption.adoption-success { background-color: #58a760; opacity: 1; transform: scale(1); }
 .adoption-pet { position: absolute; z-index: 12; left: 15px; bottom: -8px; animation: cat-into-box .72s steps(6) forwards; }
 .adoption-pet canvas { width: 54px; height: 54px; image-rendering: pixelated; }
 .adoption-coin { position: absolute; z-index: 13; right: 14px; top: 50%; color: #ffe15e; font-family: var(--px); font-size: 12px; text-shadow: 2px 2px 0 var(--ink); animation: adoption-coin-pop .72s steps(5) forwards; }
 .gold-gained { animation: gold-gain .6s steps(4); }
-@keyframes adoption-ready { 50% { filter: brightness(1.1); } }
 @keyframes cat-into-box { 0% { transform: translateY(-45px) scale(1); opacity: 1; } 65% { transform: translateY(0) scale(.82); opacity: 1; } 100% { transform: translateY(24px) scale(.45); opacity: 0; } }
 @keyframes adoption-coin-pop { 0% { transform: translateY(16px) scale(.5); opacity: 0; } 35% { transform: translateY(-8px) scale(1.25); opacity: 1; } 100% { transform: translateY(-34px) scale(.8); opacity: 0; } }
 @keyframes gold-gain { 50% { color: #fff36b; transform: scale(1.35); } }
@@ -2699,6 +2737,7 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 }
 .phase-control-wing.is-battle .phase-action {
   margin-top: 7px;
+  margin-bottom: 6px;
   padding-top: 7px;
   border-top: 2px dashed rgba(197,235,250,.34);
 }
@@ -2803,7 +2842,82 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 
 @media (max-width: 880px) {
   .game-shell { grid-template-columns: minmax(0, 1fr); width: calc(100% - 16px); padding: 12px 0 24px; gap: 16px; justify-items: center; }
-  .battle-column { justify-content: center; width: 100%; }
+  .battle-column { width: 100%; align-items: center; flex-direction: column; justify-content: flex-start; }
+  .mobile-status-plank {
+    position: relative;
+    z-index: 4;
+    width: min(100%, 820px, calc((100vh - 200px) * 11 / 14));
+    min-height: 70px;
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) 88px;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 7px 8px;
+    border: 3px solid #392a22;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 2px, transparent 2px 13px),
+      linear-gradient(90deg, #aa6d43, #d7a06a 48%, #a46640);
+    box-shadow: 4px 5px 0 #071820, inset 0 0 0 2px #efc28c;
+  }
+  .mobile-status-plank::before,
+  .mobile-status-plank::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    width: 7px;
+    height: 10px;
+    border: 2px solid var(--ink);
+    background: #e8d19f;
+  }
+  .mobile-status-plank::before { left: 20px; }
+  .mobile-status-plank::after { right: 20px; }
+  .mobile-status-plank h1 {
+    margin: 0;
+    padding-left: 2px;
+    color: #fff1cc;
+    font-size: 8px;
+    line-height: 1.65;
+    white-space: normal;
+    text-shadow: 2px 2px 0 #71462f;
+  }
+  .mobile-status-plank h1 span { color: #ffe45f; }
+  .mobile-phase-hud {
+    min-width: 0;
+    height: 47px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 2px solid #5d3b29;
+    background: rgba(255, 244, 207, .94);
+  }
+  .mobile-hud-stat {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    color: var(--ink);
+  }
+  .mobile-hud-stat + .mobile-hud-stat { border-left: 2px dashed #9f7654; }
+  .mobile-hud-stat strong { font-size: 13px; line-height: 1; }
+  .mobile-hud-stat small { margin-top: 5px; font-family: var(--px); font-size: 5px; line-height: 1; }
+  .mobile-hud-stat.gold strong::before { content: '●'; margin-right: 2px; color: #c48808; }
+  .mobile-hud-stat.lives strong::before { content: '♥'; margin-right: 2px; color: #d84a45; }
+  .mobile-plank-actions { height: 47px; display: grid; grid-template-columns: minmax(0, 1fr) 31px; gap: 4px; }
+  .mobile-plank-button {
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 2px solid #4d3427;
+    background: #f8db91;
+    box-shadow: 2px 2px 0 #63402c;
+    color: #3f2e25;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .mobile-tutorial-button { align-content: center; gap: 4px; }
+  .mobile-tutorial-button b { font-size: 15px; line-height: 1; }
+  .mobile-tutorial-button small { font-family: var(--px); font-size: 5px; line-height: 1; }
+  .phase-control-wing > .phase-status-panel { display: none; }
   .field-house-layout { width: min(100%, 820px, calc((100vh - 200px) * 11 / 14)); }
   .control-panel { position: static; max-height: none; width: min(100%, 470px); order: 3; }
   .glossary-modal { padding: 8px; }
@@ -3299,7 +3413,9 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   .phase-hud-chip.hud-chip strong { font-size: 15px; }
   .phase-control-wing .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phase-control-wing .panel-heading h2 { font-size: 11px; }
-  .phase-control-wing .shop-card strong { min-height: 30px; font-size: 11px; }
+  .phase-control-wing .shop-card > strong,
+  .phase-control-wing .worker-slot > small,
+  .phase-control-wing .bench-slot > small { display: none; }
   .glossary-header h2 { font-size: 20px; }
   .glossary-tabs button { font-size: 10px; }
 }

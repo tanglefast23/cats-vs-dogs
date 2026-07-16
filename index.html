@@ -12,6 +12,18 @@
   <main class="game-shell">
 
     <section class="battle-column" aria-label="Backyard battlefield">
+      <section class="mobile-status-plank" aria-label="Game information">
+        <h1>CATS <span>VS</span> DOGS</h1>
+        <section class="mobile-phase-hud" aria-label="Game status">
+          <div class="mobile-hud-stat gold"><strong data-hud-value="gold">10</strong><small>GOLD</small></div>
+          <div class="mobile-hud-stat lives"><strong data-hud-value="lives">3</strong><small>LIVES</small></div>
+          <div class="mobile-hud-stat round"><strong data-hud-value="round">1/10</strong><small>ROUND</small></div>
+        </section>
+        <div class="mobile-plank-actions">
+          <button id="mobile-tutorial" class="mobile-plank-button mobile-tutorial-button" type="button" aria-label="Start a new tutorial" title="Start a new tutorial"><b>?</b><small>TUTORIAL</small></button>
+          <button id="mobile-settings" class="mobile-plank-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+        </div>
+      </section>
       <div class="field-house-layout">
         <aside id="phase-control-wing" class="phase-control-wing is-planning" aria-label="Planning controls">
           <section class="phase-status-panel" aria-label="Game information">
@@ -23,9 +35,9 @@
               </div>
             </header>
             <section class="phase-hud" aria-label="Game status">
-              <div class="hud-chip phase-hud-chip"><span class="hud-icon coin" aria-hidden="true">●</span><strong id="gold">10</strong><small>GOLD</small></div>
-              <div class="hud-chip phase-hud-chip"><span class="hud-icon heart" aria-hidden="true">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
-              <div class="hud-chip phase-hud-chip"><strong id="round">1/10</strong><small>ROUND</small></div>
+              <div class="hud-chip phase-hud-chip"><span class="hud-icon coin" aria-hidden="true">●</span><strong id="gold" data-hud-value="gold">10</strong><small>GOLD</small></div>
+              <div class="hud-chip phase-hud-chip"><span class="hud-icon heart" aria-hidden="true">♥</span><strong id="lives" data-hud-value="lives">3</strong><small>LIVES</small></div>
+              <div class="hud-chip phase-hud-chip"><strong id="round" data-hud-value="round">1/10</strong><small>ROUND</small></div>
             </section>
           </section>
 
@@ -46,6 +58,13 @@
                 <div><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
               </div>
               <div id="workbench" class="workbench-grid"></div>
+            </section>
+
+            <section id="planning-supplies" class="planning-supplies-panel" aria-label="Production items" hidden>
+              <div class="panel-heading compact">
+                <div><h2>Production Items</h2></div>
+              </div>
+              <div id="planning-inventory" class="planning-inventory-grid" aria-live="polite"></div>
             </section>
           </section>
 

@@ -19,6 +19,17 @@ test('unit information stays above the tutorial overlay', () => {
   assert.ok(zIndexFor('.unit-tooltip') > zIndexFor('.tutorial-overlay'));
 });
 
+test('mobile uses one wooden status plank above the fence and hides duplicate cat names', () => {
+  assert.match(html, /class="battle-column"[\s\S]*class="mobile-status-plank"[\s\S]*data-hud-value="gold"[\s\S]*id="mobile-tutorial"[\s\S]*id="mobile-settings"[\s\S]*class="field-house-layout"/);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.mobile-status-plank\s*{[^}]*display:\s*grid;[^}]*repeating-linear-gradient/s);
+  assert.match(css, /\.phase-control-wing > \.phase-status-panel\s*{\s*display:\s*none;\s*}/);
+  assert.match(css, /\.phase-control-wing \.shop-card > strong,[\s\S]*\.phase-control-wing \.bench-slot > small\s*{\s*display:\s*none;\s*}/);
+  assert.match(app, /hudValueElements\('gold'\)\.forEach/);
+  assert.match(app, /button\.setAttribute\('aria-label', `Level \$\{slot\.level \?\? 1\} \$\{info\.name\}\. Tap for details or drag to place\.`\);/);
+  assert.match(app, /\$\('#mobile-tutorial'\)\?\.addEventListener\('click', startTutorial\)/);
+  assert.match(app, /\$\('#mobile-settings'\)\?\.addEventListener\('click'/);
+});
+
 test('worker cat offers use a pastel violet background', () => {
   assert.match(css, /\.shop-slot\.worker-offer \.shop-card\s*{[^}]*background:\s*#e6d7f5/);
 });
@@ -79,13 +90,15 @@ test('starting any cat drag dismisses the visible tutorial overlay', () => {
   assert.match(app, /dragState\.started = true;\s*if \(dragState\.source\.type !== 'item'\) hideTutorialOverlay\(\);/);
 });
 
-test('the Next Wave panel replaces the standalone Adoption Box while a cat is dragged', () => {
+test('the Adoption Box appears fully above cat territory and reacts only to a direct hover', () => {
   assert.doesNotMatch(html, /<section id="adoption-box"/);
   assert.match(html, /<div id="board"[\s\S]*<aside id="next-wave-zone"[\s\S]*<section id="next-wave-adoption"/);
-  assert.match(app, /closest\?\.\('\.next-wave-zone'\)/);
-  assert.match(app, /querySelectorAll\('\.cell, \.worker-slot, \.bench-slot, \.next-wave-zone'\)/);
+  assert.match(app, /closest\?\.\('\.next-wave-adoption'\)/);
+  assert.match(app, /querySelectorAll\('\.cell, \.worker-slot, \.bench-slot, \.next-wave-adoption'\)/);
   assert.doesNotMatch(css, /^\.adoption-box\s*\{/m);
-  assert.match(css, /body\.cat-sell-dragging \.next-wave-zone\.drag-over \.next-wave-adoption\s*{[^}]*opacity:\s*1;/s);
+  assert.match(css, /\.next-wave-adoption\s*{[^}]*bottom:\s*10px;[^}]*opacity:\s*1;/s);
+  assert.doesNotMatch(css, /body\.cat-sell-dragging \.next-wave-zone \.next-wave-adoption\s*{[^}]*opacity:\s*\.34/s);
+  assert.match(css, /body\.cat-sell-dragging \.next-wave-adoption\.drag-over\s*{[^}]*box-shadow:[^}]*0 0 24px 10px[^}]*transform:\s*scale\(1\.04\);/s);
 });
 
 test('the Next Wave button toggles the incoming dogs over the current battlefield dogs', () => {
@@ -114,6 +127,14 @@ test('planning actions sit directly below the Cat Workbench', () => {
   assert.doesNotMatch(html, /PICK YOUR DEFENDERS/);
   assert.doesNotMatch(html, /RESERVE · MERGE · DEPLOY/);
   assert.match(css, /\.planning-panel\s*{[^}]*flex:\s*0 1 auto;/s);
+});
+
+test('the green planning wing shows two production item counts only when it remains scrollbar-free', () => {
+  assert.match(html, /id="planning-panel"[\s\S]*id="planning-supplies"[\s\S]*id="planning-inventory"/);
+  assert.match(css, /\.planning-inventory-grid\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
+  assert.match(app, /planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1/);
+  assert.match(app, /suppliesPanel\.hidden = false;\s*if \(planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1\) suppliesPanel\.hidden = true;/);
+  assert.match(app, /<strong>×\$\{item\.quantity\}<\/strong>/);
 });
 
 test('empty Cat Workbench slots stay visually blank', () => {
@@ -166,6 +187,7 @@ test('the Cat Cart wing and fence align with the left wood rail', () => {
 test('wood paneling encloses only the Production House', () => {
   assert.match(css, /\.field-house-layout::after\s*{[^}]*right:\s*calc\(100% \* 6 \/ 11\);[^}]*bottom:\s*0;/s);
   assert.match(css, /\.house-wing\s*{[^}]*transform:\s*translateY\(-16px\);/s);
+  assert.match(css, /\.phase-control-wing\.is-battle \.phase-action\s*{[^}]*margin-bottom:\s*6px;/s);
   assert.match(css, /\.house-wing::after\s*{[^}]*left:\s*-16px;[^}]*top:\s*0;/s);
   assert.match(css, /\.house-wing \.production-grid::after\s*{[^}]*right:\s*0;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*16px;/s);
   assert.doesNotMatch(css, /\.board-frame::after/);
@@ -176,7 +198,7 @@ test('wood paneling encloses only the Production House', () => {
 test('the glossary opens from Cat Cart and Settings', () => {
   assert.match(html, /class="cart-actions"[\s\S]*id="cart-info"[\s\S]*id="refresh"/);
   assert.match(html, /id="settings-glossary"[\s\S]*Cat &amp; Dog Glossary/);
-  assert.match(app, /\$\('#cart-info'\)\?\.addEventListener\('click', \(\) => openGlossary\(\$\('#cart-info'\)\)\)/);
+  assert.match(app, /\$\('#cart-info'\)\?\.addEventListener\('click',[\s\S]*completeTutorialTipForAction\('open-glossary'\);[\s\S]*openGlossary\(\$\('#cart-info'\)\);/);
   assert.match(app, /\$\('#settings-glossary'\)\?\.addEventListener\('click'/);
 });
 
@@ -184,7 +206,8 @@ test('stable game progress is restored and saved locally', () => {
   assert.match(app, /const GAME_SAVE_KEY = 'cvd-game-save-v1';/);
   assert.match(app, /return restoreGame\(saved\.game, Math\.random\);/);
   assert.match(app, /if \(playing \|\| !\['prep', 'tactics'\]\.includes\(game\.phase\)\) return;/);
-  assert.match(app, /if \(tutorialActive\) syncTutorial\(\);\s*saveGameProgress\(\);/);
+  assert.match(app, /if \(tutorialActive\) syncTutorial\(\);/);
+  assert.match(app, /saveGameProgress\(\);\s*}/);
 });
 
 test('tutorial text bubble keeps ten clear pixels beyond the spotlight ring', () => {
