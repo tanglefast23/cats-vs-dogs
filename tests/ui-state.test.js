@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -22,6 +22,16 @@ test('cat pickup advice explains free placement before its first battle', () => 
     ),
     'Level 1 Purrcy Pew-Pew selected. Before its first battle, you can freely place or reposition this cat anywhere in cat territory.',
   );
+});
+
+test('the Adoption Box grows from 75% to 100% as the cat crosses the dog yard and approaches it', () => {
+  const zone = { bottom: 1000 };
+  const box = { left: 100, right: 200, top: 600, bottom: 700 };
+  assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 1050 }, zone, box), 0.75);
+  assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 1000 }, zone, box), 0.75);
+  assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 850 }, zone, box), 0.875);
+  assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 700 }, zone, box), 1);
+  assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 650 }, zone, box), 1);
 });
 
 test('veteran melee cat advice explains movement beyond cat territory', () => {

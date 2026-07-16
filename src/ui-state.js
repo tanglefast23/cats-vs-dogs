@@ -5,6 +5,19 @@ export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
 }
 
+/** Scale the Adoption Box from 75% at the dog-yard edge to 100% on contact. */
+export function adoptionBoxScaleForPointer(pointer, zoneRect, boxRect) {
+  const minimumScale = 0.75;
+  if (!pointer || !zoneRect || !boxRect || pointer.y > zoneRect.bottom) return minimumScale;
+
+  const nearestX = Math.max(boxRect.left, Math.min(pointer.x, boxRect.right));
+  const nearestY = Math.max(boxRect.top, Math.min(pointer.y, boxRect.bottom));
+  const distanceToBox = Math.hypot(pointer.x - nearestX, pointer.y - nearestY);
+  const distanceFromEntrance = Math.max(1, zoneRect.bottom - boxRect.bottom);
+  const progress = Math.max(0, Math.min(1, 1 - distanceToBox / distanceFromEntrance));
+  return minimumScale + progress * 0.25;
+}
+
 export function catSelectionAdvice(cat, info, phase) {
   if (phase === 'tactics') {
     if (catCanCrossTerritoryBoundary(cat)) {

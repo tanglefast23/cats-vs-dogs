@@ -148,7 +148,7 @@ test('round 1 teaches tap-for-info after the first cat is placed', () => {
   const step = CORE_STEPS[infoIndex];
   assert.deepEqual(step.completeOnActions, ['view-cat-info', 'open-glossary']);
   assert.match(step.text, /Tap the cat you just placed/i);
-  assert.match(step.text, /yellow i beside Cat Cart/i);
+  assert.match(step.text, /yellow “i” in the Cat Cart/i);
 
   const game = createGame();
   game.cats.push({ ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 });
@@ -330,7 +330,7 @@ test('core lessons only complete from actions that prove the taught behavior', (
 
 test('tap lessons can declare the successful action that replaces Continue', () => {
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r1-scout').completeOnActions,
-    ['purchase-place', 'purchase-bench', 'purchase-merge']);
+    ['view-next-wave', 'purchase-place', 'purchase-bench', 'purchase-merge']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
 });
@@ -357,7 +357,9 @@ test('the first placement lesson mutes the unrelated dog preview lane', () => {
 });
 
 test('tutorial targets follow the relocated planning, scout, adoption, and tactics UI', () => {
-  assert.equal(CORE_STEPS.find((step) => step.id === 'r1-scout').spotlight, '#next-wave-toggle');
+  const scoutStep = CORE_STEPS.find((step) => step.id === 'r1-scout');
+  assert.equal(scoutStep.spotlight, '#next-wave-toggle');
+  assert.ok(scoutStep.completeOnActions.includes('view-next-wave'));
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').spotlight, '#shop');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-start').spotlight, '#done');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').spotlight, '#next-wave-zone');

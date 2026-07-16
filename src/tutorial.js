@@ -200,7 +200,7 @@ export const CORE_STEPS = [
   { id: 'r1-stakes', round: 1, mode: 'tap', spotlight: '#board',
     text: "Dogs charge down these 6 lanes. If one reaches your house you lose a life — lose all 3 and it's game over." },
   { id: 'r1-scout', round: 1, mode: 'tap', spotlight: '#next-wave-toggle',
-    completeOnActions: ['purchase-place', 'purchase-bench', 'purchase-merge'],
+    completeOnActions: ['view-next-wave', 'purchase-place', 'purchase-bench', 'purchase-merge'],
     text: "Tap NEXT WAVE to see which dogs are coming. Tap Hide next wave to return to the dogs already on the battlefield." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
@@ -211,7 +211,7 @@ export const CORE_STEPS = [
   { id: 'r1-cat-info', round: 1, mode: 'gate', spotlight: null,
     focusSelectors: tutorialCatInfoSelectors,
     completeOnActions: ['view-cat-info', 'open-glossary'],
-    text: 'Want to know what a cat does? Tap the cat you just placed for quick stats and ability details. Or tap the yellow i beside Cat Cart for the full cat and dog guide. Try either one now.',
+    text: 'Want to know what a cat does? Tap the cat you just placed for quick stats and ability details. Or tap the yellow “i” in the Cat Cart for the full cat and dog guide. Try either one now.',
     isDone: () => false },
   { id: 'r1-buy2', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
@@ -236,7 +236,7 @@ export const CORE_STEPS = [
   // Round 2 — collect + first merge
   { id: 'r2-collect', round: 2, mode: 'gate', spotlight: '#production-grid', showWhen: (g) => g.phase === 'prep',
     completeOnActions: ['collect-food'],
-    text: "Whisker baked a treat overnight. Tap it to collect it — supplies show up in the Tactics Window during battle.",
+    text: "Whisker baked a treat overnight. Tap it to collect it — supplies stay below the Cat Field.",
     isDone: (g) => inventoryHasKind(g, 'food') },
   { id: 'r2-merge', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     dragHints: tutorialMergeHints,
@@ -270,11 +270,11 @@ export const CORE_STEPS = [
   // pack (scripted in app.js), so one Whisker treat fully patches it.
   { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
     completeOnActions: ['use-food'],
-    text: "One of your cats is still hurt — wounds carry over between rounds. Start the round; you can feed it in the Tactics Window." },
+    text: "One of your cats is still hurt — wounds carry over between rounds. Start the round; then feed it from Supplies when Tactics opens." },
   { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'tactics',
     completeOnActions: ['use-food'],
     dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
-    text: "Drag Whisker's treat from House Supplies onto the hurt cat — heal +2. That's the payoff of production.",
+    text: "Drag Whisker's treat from Supplies below the Cat Field onto the hurt cat — heal +2. That's the payoff of production.",
     isDone: () => false },
 ];
 

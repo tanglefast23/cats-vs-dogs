@@ -102,15 +102,17 @@ test('starting any cat drag dismisses the visible tutorial overlay', () => {
   assert.match(app, /dragState\.started = true;\s*if \(dragState\.source\.type !== 'item'\) hideTutorialOverlay\(\);/);
 });
 
-test('the Adoption Box appears fully above cat territory and reacts only to a direct hover', () => {
+test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and scales up as the cat approaches', () => {
   assert.doesNotMatch(html, /<section id="adoption-box"/);
   assert.match(html, /<div id="board"[\s\S]*<aside id="next-wave-zone"[\s\S]*<section id="next-wave-adoption"/);
   assert.match(app, /closest\?\.\('\.next-wave-adoption'\)/);
   assert.match(app, /querySelectorAll\('\.cell, \.worker-slot, \.bench-slot, \.next-wave-adoption'\)/);
   assert.doesNotMatch(css, /^\.adoption-box\s*\{/m);
-  assert.match(css, /\.next-wave-adoption\s*{[^}]*bottom:\s*10px;[^}]*opacity:\s*1;/s);
+  assert.match(css, /\.next-wave-adoption\s*{[^}]*bottom:\s*calc\(10px \+ 15%\);[^}]*opacity:\s*\.75;[^}]*transform:\s*scale\(var\(--adoption-scale, \.75\)\);/s);
+  assert.match(app, /function updateAdoptionBoxProximity\(clientX, clientY\)[\s\S]*adoptionBoxScaleForPointer\([\s\S]*panel\.style\.setProperty\('--adoption-scale', scale\.toFixed\(3\)\);/s);
+  assert.match(app, /positionDragVisual\(event\.clientX, event\.clientY\);\s*updateAdoptionBoxProximity\(event\.clientX, event\.clientY\);\s*updateDragHover/);
   assert.doesNotMatch(css, /body\.cat-sell-dragging \.next-wave-zone \.next-wave-adoption\s*{[^}]*opacity:\s*\.34/s);
-  assert.match(css, /body\.cat-sell-dragging \.next-wave-adoption\.drag-over\s*{[^}]*box-shadow:[^}]*0 0 24px 10px[^}]*transform:\s*scale\(1\.04\);/s);
+  assert.match(css, /body\.cat-sell-dragging \.next-wave-adoption\.drag-over\s*{[^}]*box-shadow:[^}]*0 0 24px 10px[^}]*transform:\s*scale\(1\);/s);
 });
 
 test('the Next Wave button toggles the incoming dogs over the current battlefield dogs', () => {
@@ -120,7 +122,7 @@ test('the Next Wave button toggles the incoming dogs over the current battlefiel
   assert.match(app, /let nextWaveVisible = false;/);
   assert.match(app, /dogPreviewEl\.hidden = !nextWaveVisible;/);
   assert.match(app, /board\?\.classList\.toggle\('showing-next-wave', nextWaveVisible\);/);
-  assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*renderDogPreview\(\);\s*renderBoard\(\);/);
+  assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*if \(nextWaveVisible\) completeTutorialTipForAction\('view-next-wave'\);\s*renderDogPreview\(\);\s*renderBoard\(\);/);
   assert.match(app, /toggle\?\.setAttribute\('aria-pressed', String\(nextWaveVisible\)\);/);
   assert.match(app, /label\.textContent = nextWaveVisible \? 'HIDE NEXT WAVE' : 'NEXT WAVE';/);
   assert.match(css, /\.board\.showing-next-wave \.grid \.dog-unit\s*{\s*visibility:\s*hidden;\s*}/);
@@ -141,19 +143,36 @@ test('planning actions sit directly below the Cat Workbench', () => {
   assert.match(css, /\.planning-panel\s*{[^}]*flex:\s*0 1 auto;/s);
 });
 
-test('the green planning wing shows two production item counts only when it remains scrollbar-free', () => {
-  assert.match(html, /id="planning-panel"[\s\S]*id="planning-supplies"[\s\S]*id="planning-inventory"/);
+test('the Cat Field has one permanent two-slot interactive Supplies tray', () => {
+  assert.match(html, /class="board-frame"[\s\S]*id="board"[\s\S]*id="supplies"[^>]*aria-label="Supplies"[\s\S]*id="inventory"[\s\S]*<\/section>\s*<\/div>/);
   assert.match(css, /\.planning-inventory-grid\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
-  assert.match(app, /planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1/);
-  assert.match(app, /suppliesPanel\.hidden = false;\s*if \(planningPanel\.scrollHeight > planningPanel\.clientHeight \+ 1\) suppliesPanel\.hidden = true;/);
+  assert.match(css, /\.board-frame\s*{[^}]*z-index:\s*2;[^}]*align-self:\s*start;[^}]*aspect-ratio:\s*6 \/ 14;/s);
+  assert.match(css, /\.field-supplies-panel\s*{[^}]*z-index:\s*1;[^}]*top:\s*100%;[^}]*left:\s*0;[^}]*width:\s*100%;/s);
+  assert.match(css, /\.house-wing\s*{[^}]*z-index:\s*5;/s);
+  assert.match(app, /function syncFieldSuppliesLayout\(\)[\s\S]*supplies\.parentElement !== boardFrame\) boardFrame\.append\(supplies\);/);
+  assert.match(app, /const visiblePlanningCats = game\.shop\.filter\(Boolean\)\.length \+ game\.workers\.filter\(Boolean\)\.length;\s*fieldLayout\.classList\.toggle\('is-crowded-mobile', visiblePlanningCats >= 7\);/);
+  assert.match(app, /hideUnitTooltip\(\);\s*syncFieldSuppliesLayout\(\);\s*renderShop\(\);/);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\.is-crowded-mobile\s*{\s*margin-top:\s*0;\s*}[\s\S]*\.field-house-layout\.is-crowded-mobile::before\s*{\s*display:\s*none;\s*}/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\.is-crowded-mobile \.house-wing\s*{\s*transform:\s*translateY\(16px\);\s*}/s);
+  assert.match(app, /slot\.className = `planning-inventory-item \$\{item \? 'filled' : 'empty'\}`;/);
+  assert.match(app, /bindPetDrag\(slot, 'item', \{ \.\.\.item, inventoryIndex: index \}\);/);
   assert.match(app, /<strong>×\$\{item\.quantity\}<\/strong>/);
+  assert.doesNotMatch(html, /id="planning-(?:supplies|inventory)"|tactics-supplies|HOUSE SUPPLIES/);
+  assert.doesNotMatch(app, /syncPlanningSupplies/);
 });
 
-test('mobile calls supplies Items and places them below the battlefield', () => {
-  assert.match(html, /id="planning-supplies"[^>]*aria-label="Items"[\s\S]*<h2>Items<\/h2>/);
-  assert.match(html, /id="planning-supplies-anchor"/);
-  assert.match(app, /function syncPlanningSuppliesPlacement\(\)[\s\S]*matchMedia\('\(max-width: 880px\)'\)[\s\S]*fieldLayout\.append\(suppliesPanel\)/);
-  assert.match(css, /\.field-house-layout > \.planning-supplies-panel\s*{[^}]*top:\s*calc\(100% \+ 36px\);[^}]*left:\s*calc\(100% \* 5 \/ 11\);[^}]*width:\s*calc\(100% \* 6 \/ 11\);/s);
+test('collected Production House items float into their exact Supplies slot', () => {
+  assert.match(app, /destination\?\.type === 'storage'[\s\S]*inventoryEl\?\.querySelector\(`\[data-inventory-index="\$\{destination\.index\}"\]`\)/);
+  assert.match(app, /const sourceRect = outputHost\.getBoundingClientRect\(\);\s*const targetRect = collectionTargetRect\(destination\);\s*window\.setTimeout\(\(\) => flyCollectedOutput\(output, sourceRect, targetRect\)/);
+  assert.match(app, /render\(\);\s*showCollectionArrival\(destination, output\.quantity\);/);
+  assert.match(css, /\.planning-inventory-item\.collection-arrival,[\s\S]*animation:\s*collection-arrival/);
+  assert.doesNotMatch(app, /destination\.type === 'gold'\)\s*{[\s\S]*flyCollectedOutput/);
+});
+
+test('mobile coin collection ends on the rendered gold number without spilling into lives', () => {
+  assert.match(app, /function visibleHudValueRect\(kind\)[\s\S]*range\.selectNodeContents\(textNode\);[\s\S]*return rect\.width && rect\.height \? rect : value\.getBoundingClientRect\(\);/);
+  assert.match(app, /function collectionTargetRect\(destination\)\s*{\s*if \(destination\?\.type === 'gold'\) return visibleHudValueRect\('gold'\);/);
+  assert.match(app, /scale\(\.28\) rotate\(360deg\)`, filter: 'none', opacity: \.12, offset: 1/);
 });
 
 test('mobile scoreboard centers each icon and value together', () => {
@@ -167,6 +186,10 @@ test('mobile scoreboard omits labels and Tutorial omits the question mark', () =
   assert.match(html, /id="mobile-tutorial"[^>]*>TUTORIAL<\/button>/);
   assert.doesNotMatch(html, /id="mobile-tutorial"[^>]*>[\s\S]*?\?[\s\S]*?<\/button>/);
   assert.match(css, /\.mobile-tutorial-button\s*{[^}]*font-family:\s*var\(--px\);[^}]*font-size:\s*6px;/s);
+});
+
+test('mobile wave announcements scale and wrap inside the battlefield width', () => {
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.wave-banner\s*{[^}]*width:\s*max-content;[^}]*max-width:\s*calc\(100% - 20px\);[^}]*font-size:\s*clamp\(8px, 2\.75vw, 12px\);[^}]*text-align:\s*center;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s);
 });
 
 test('successful shop spending animates the coin number and plays its spend sound', () => {
@@ -188,11 +211,26 @@ test('empty Cat Workbench slots stay visually blank', () => {
   assert.match(app, /slot\.setAttribute\('aria-label', `Empty Cat Workbench slot \$\{index \+ 1\}`\);/);
 });
 
+test('Workbench and Production sprites keep square integer pixel scales', () => {
+  assert.match(css, /\.worker-slot\s*{[^}]*--slot-sprite-size:\s*64px;[^}]*--slot-sprite-half:\s*32px;/s);
+  assert.match(css, /\.worker-slot > canvas\.slot-cat,\s*\.worker-slot > canvas\.slot-station\s*{[^}]*width:\s*var\(--slot-sprite-size\);[^}]*height:\s*var\(--slot-sprite-size\);/s);
+  assert.match(css, /\.bench-slot > canvas\s*{[^}]*width:\s*64px;[^}]*height:\s*64px;/s);
+  assert.match(css, /\.bench-slot \.unit > canvas\s*{\s*width:\s*64px;\s*height:\s*64px;/);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.worker-slot\s*{[^}]*--slot-sprite-size:\s*32px;[^}]*--slot-sprite-half:\s*16px;[\s\S]*\.bench-slot > canvas\s*{[^}]*width:\s*32px;[^}]*height:\s*32px;/s);
+});
+
 test('tutorial selectors follow the relocated planning, scout, adoption, and tactics UI', () => {
   assert.match(html, /id="planning-panel"[\s\S]*id="shop"[\s\S]*id="workbench"/);
   assert.match(html, /id="board"[\s\S]*id="dog-preview-grid"/);
   assert.match(html, /id="tactics-panel"/);
   assert.doesNotMatch(html, /class="dog-preview-wing/);
+});
+
+test('the Tactics panel only presents its title and live ability state', () => {
+  assert.match(html, /id="tactics-panel"[^>]*aria-label="Tactics"[\s\S]*<h2>Tactics<\/h2>[\s\S]*id="active-abilities"/);
+  assert.doesNotMatch(html, /Tactics Window|tactics-kicker|tactics-help|between combat exchanges/i);
+  assert.doesNotMatch(app, /BETWEEN COMBAT EXCHANGES|Move each cat once, drag supplies|Watch the fight\. Movement/);
+  assert.match(app, /No active-ability cats deployed\./);
 });
 
 test('the permanent Cat Cart information panel keeps the title and a single row of status chips', () => {
@@ -213,7 +251,7 @@ test('the command wing and supporting UI use the large readable type scale', () 
   assert.match(css, /\.phase-hud-chip\.hud-chip strong\s*{\s*font-size:\s*18px;/);
   assert.match(css, /\.phase-control-wing \.shop-grid\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.phase-control-wing \.shop-card strong\s*{[^}]*white-space:\s*normal;[^}]*text-overflow:\s*clip;/s);
-  assert.match(css, /\.phase-control-wing \.tactics-panel > p\s*{[^}]*font-size:\s*13px;/);
+  assert.match(css, /\.phase-control-wing \.tactics-heading h2\s*{[^}]*font-size:\s*17px;/);
   assert.doesNotMatch(html, /id="message"|class="message"/);
   assert.doesNotMatch(css, /\.message\s*{/);
   assert.match(css, /\.tutorial-bubble p\s*{[^}]*font-size:\s*18px;/);

@@ -82,11 +82,25 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 }
 .production-grid { display: grid; width: 100%; height: 100%; grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; gap: 0; }
 .production-cell { position: relative; min-width: 0; border: 3px solid var(--ink); background: #e8d7ad; box-shadow: 2px 2px 0 #765238; overflow: hidden; }
-.worker-slot { padding: 0; cursor: pointer; background: #c9dfaa; }
+.worker-slot {
+  --slot-sprite-size: 64px;
+  --slot-sprite-half: 32px;
+  padding: 0;
+  cursor: pointer;
+  background: #c9dfaa;
+}
 .worker-slot.empty { border-style: dashed; background: rgba(255,248,220,.55); }
 /* Cat works on the left half of its square; the appliance sits beside it on the right. */
-.worker-slot > canvas.slot-cat { position: absolute; left: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
-.worker-slot > canvas.slot-station { position: absolute; right: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
+.worker-slot > canvas.slot-cat,
+.worker-slot > canvas.slot-station {
+  position: absolute;
+  top: calc(50% - var(--slot-sprite-half));
+  width: var(--slot-sprite-size);
+  height: var(--slot-sprite-size);
+  image-rendering: pixelated;
+}
+.worker-slot > canvas.slot-cat { left: calc(25% - var(--slot-sprite-half)); }
+.worker-slot > canvas.slot-station { left: calc(75% - var(--slot-sprite-half)); }
 /* Above the house roofline brick (z 6) so a mid-walk cat is never clipped behind it. */
 .worker-slot.is-working { z-index: 7; overflow: visible; }
 .worker-slot.is-working > canvas.slot-cat { z-index: 3; will-change: transform; }
@@ -331,9 +345,9 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .collection-flyer { position: fixed; z-index: 1000; width: 68px; height: 68px; pointer-events: none; filter: drop-shadow(0 0 8px #fff2a1); }
 .collection-flyer canvas { width: 100%; height: 100%; image-rendering: pixelated; }
 .collection-flyer.coin-flyer canvas { filter: saturate(1.45) brightness(1.2); }
-.worker-slot.collection-arrival,
+.planning-inventory-item.collection-arrival,
 .hud-chip.collection-arrival { position: relative; z-index: 8; animation: collection-arrival .62s cubic-bezier(.2,.85,.25,1.35); }
-.worker-slot.collection-arrival { overflow: visible; }
+.planning-inventory-item.collection-arrival { overflow: visible; }
 .collection-gain { position: absolute; z-index: 20; left: 50%; top: 12%; color: #fff45f; font-family: var(--px); font-size: 17px; text-shadow: 2px 2px 0 var(--ink), 0 0 8px #fff; pointer-events: none; animation: collection-gain-float .9s ease-out forwards; }
 @keyframes output-ready { 50% { filter: brightness(1.18); transform: scale(1.045); box-shadow: 0 0 0 4px #fff7a8, 0 0 26px 10px rgba(255,231,91,.82); } }
 @keyframes output-sparkle { 0%,100% { opacity: .2; transform: scale(.45) rotate(0); } 45% { opacity: 1; transform: scale(1.28) rotate(90deg); } }
@@ -343,11 +357,6 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 @keyframes collection-arrival { 0% { transform: scale(.72); box-shadow: 0 0 0 0 #fff45f; } 45% { transform: scale(1.13); box-shadow: 0 0 0 6px #fff45f, 0 0 25px #ffe158; } 100% { transform: scale(1); } }
 @keyframes collection-gain-float { 0% { opacity: 0; transform: translate(-50%, 14px) scale(.55); } 30% { opacity: 1; transform: translate(-50%, -8px) scale(1.22); } 100% { opacity: 0; transform: translate(-50%, -58px) scale(.88); } }
 .inventory-panel { margin-top: 0; padding: 8px; border: 3px solid var(--ink); background: rgba(255,248,220,.92); box-shadow: 3px 3px 0 #765238; }
-.inventory-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.inventory-slot { position: relative; aspect-ratio: 1; padding: 0; border: 2px dashed #8b7756; background: #d8cba6; }
-.inventory-slot.filled { border-style: solid; border-color: var(--ink); background: #fff1c4; cursor: grab; }
-.inventory-slot canvas { width: 100%; height: 100%; image-rendering: pixelated; }
-.inventory-slot b { position: absolute; right: 1px; bottom: 1px; min-width: 19px; border: 1px solid var(--ink); background: #ffe56e; font-size: 10px; }
 .production-help { margin: 9px 2px 0; font-size: 10px; line-height: 1.4; color: #3e3028; }
 .workbench-panel {
   margin: 0 0 10px;
@@ -371,9 +380,16 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .bench-slot.fighter-reserve { background: #eff4cf; }
 .bench-slot.worker-reserve { background: #d2e2c0; }
 .bench-slot.selected { box-shadow: inset 0 0 0 4px #ffe56e, 0 0 0 2px var(--ink); }
-.bench-slot > canvas { position: absolute; inset: 5%; width: 90%; height: 90%; image-rendering: pixelated; }
+.bench-slot > canvas {
+  position: absolute;
+  left: calc(50% - 32px);
+  top: calc(50% - 32px);
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+}
 .bench-slot .unit { inset: 2%; }
-.bench-slot .unit canvas { width: 88%; height: 88%; }
+.bench-slot .unit > canvas { width: 64px; height: 64px; }
 .bench-slot > small { position: absolute; z-index: 4; left: 2px; right: 2px; bottom: 1px; font-size: 7px; font-weight: 900; line-height: 1; text-align: center; text-shadow: 1px 1px 0 #f4f0cf; }
 .bench-slot .reserve-level { position: absolute; z-index: 4; top: 1px; left: 1px; min-width: 18px; padding: 2px; border: 2px solid var(--ink); background: #ffe56e; font-size: 8px; }
 .bench-slot .copy-pips { z-index: 5; }
@@ -384,7 +400,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
    while the battlefield keeps its original six-column physical scale. */
 .field-house-layout {
   position: relative;
-  margin-top: 32px;
+  margin: 32px 0 84px;
   display: grid;
   grid-template-columns: 5fr 6fr;
   grid-template-rows: minmax(0, 13fr) minmax(0, 1fr);
@@ -392,7 +408,15 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   width: min(100%, 820px);
   aspect-ratio: 11 / 14;
 }
-.board-frame { position: relative; grid-column: 2; grid-row: 1 / 3; width: 100%; }
+.board-frame {
+  position: relative;
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: start;
+  width: 100%;
+  aspect-ratio: 6 / 14;
+}
 /* Timber encloses only the Production House. The right rail sits inside the
    house edge so the battlefield grid remains fully visible. */
 .field-house-layout::after,
@@ -530,14 +554,19 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 }
 .planning-panel[hidden] { display: none; }
 .planning-supplies-panel {
-  flex: 0 0 auto;
   margin: 0;
-  padding: 10px;
+  padding: 7px;
   border: 3px solid var(--ink);
   background: linear-gradient(180deg, rgba(255,248,220,.98), rgba(226,238,198,.98));
   box-shadow: 2px 2px 0 var(--ink);
 }
-.planning-supplies-panel[hidden] { display: none; }
+.field-supplies-panel {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  left: 0;
+  width: 100%;
+}
 .planning-inventory-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -553,6 +582,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   border: 2px solid var(--ink);
   background: #fff1c4;
 }
+.planning-inventory-item.filled { padding: 0; cursor: grab; text-align: left; }
 .planning-inventory-item.empty {
   grid-template-columns: 1fr;
   border-style: dashed;
@@ -652,6 +682,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .preview-sign small { float: right; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 8px; color: #52635d; }
 .house-wing {
   position: relative;
+  z-index: 5;
   grid-column: 1;
   grid-row: 2;
   width: 100%;
@@ -773,7 +804,8 @@ h1 span { color: var(--orange); font-size: .75em; }
   position: absolute;
   z-index: 10;
   right: 8%;
-  bottom: 10px;
+  /* The preview spans 10 battlefield rows, so 15% lifts this by 1.5 cells. */
+  bottom: calc(10px + 15%);
   left: 8%;
   min-height: 132px;
   display: grid;
@@ -789,9 +821,9 @@ h1 span { color: var(--orange); font-size: .75em; }
   color: #fff4d2;
   text-align: center;
   box-shadow: 3px 3px 0 #08171e;
-  opacity: 1;
+  opacity: .75;
   pointer-events: none;
-  transform: scale(1);
+  transform: scale(var(--adoption-scale, .75));
   transform-origin: center;
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
@@ -818,7 +850,7 @@ body.cat-sell-dragging .next-wave-adoption.drag-over {
   z-index: 30;
   border-color: #fff3a4;
   box-shadow: 0 0 0 5px #ffe06d, 0 0 24px 10px rgba(255,196,64,.72), 4px 4px 0 #08171e;
-  transform: scale(1.04);
+  transform: scale(1);
 }
 body.cat-sell-dragging .next-wave-adoption.sale-blocked { background-color: #8d4b48; }
 body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a72; }
@@ -894,11 +926,7 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
 .active-ability.targeting { background: #8ee7ff; outline: 3px solid #fff; }
 .active-ability.used { opacity: .45; box-shadow: none; }
 .no-active-cats { grid-column: 1 / -1; color: #52646c; }
-/* Collected production items surface here between combat exchanges. */
-.tactics-supplies { margin-top: 8px; padding-top: 8px; border-top: 2px solid rgba(49,85,140,.3); }
-.tactics-supplies .tiny-label { display: block; margin-bottom: 5px; color: #31558c; }
-.tactics-supplies-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.tactics-supplies-grid .inventory-slot { max-width: 72px; }
+/* Ability controls stay in Tactics; Supplies remain in the tray below the Cat Field. */
 .cell.ability-target { z-index: 3; cursor: crosshair; animation: ability-target-pulse .65s steps(2) infinite; }
 .cell.bomb-aim { cursor: crosshair; }
 .cell.bomb-aim.bomb-footprint,
@@ -2724,26 +2752,17 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   flex-direction: column;
 }
 .phase-control-wing .tactics-heading h2 {
-  margin-top: 8px;
+  margin-top: 0;
   font-family: var(--px);
   font-size: 12px;
   line-height: 1.4;
 }
-.phase-control-wing .tactics-panel > p { margin: 10px 0 13px; font-size: 9px; line-height: 1.55; }
 .phase-control-wing .active-abilities,
 .phase-control-wing .active-abilities.compact { grid-template-columns: 1fr; gap: 7px; }
 .phase-control-wing .active-ability { padding: 9px 6px; }
 .phase-control-wing .active-ability b { font-size: 8px; }
 .phase-control-wing .active-ability span { font-size: 8px; line-height: 1.4; }
 .phase-control-wing.is-combat .tactics-panel { filter: saturate(.78) brightness(.88); }
-.phase-control-wing.is-combat .tactics-heading .tiny-label::before {
-  content: '●';
-  display: inline-block;
-  margin-right: 5px;
-  color: #ff775f;
-  text-shadow: 0 0 7px #ff775f;
-  animation: battle-live-pulse 1s steps(2) infinite;
-}
 .phase-control-wing.is-battle .phase-action {
   margin-top: 7px;
   margin-bottom: 6px;
@@ -2939,20 +2958,15 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   .phase-control-wing > .phase-status-panel { display: none; }
   .field-house-layout {
     width: min(100%, 820px, calc((100vh - 200px) * 11 / 14));
-    margin-bottom: 145px;
+    margin-bottom: 84px;
   }
-  .field-house-layout > .planning-supplies-panel {
-    position: absolute;
-    z-index: 4;
-    top: calc(100% + 36px);
-    left: calc(100% * 5 / 11);
-    width: calc(100% * 6 / 11);
-    min-height: 92px;
-  }
-  .field-house-layout > .planning-supplies-panel .panel-heading { margin-bottom: 7px; }
-  .field-house-layout > .planning-supplies-panel .panel-heading h2 { font-size: 11px; }
-  .field-house-layout > .planning-supplies-panel .planning-inventory-item { min-height: 54px; }
-  .field-house-layout > .planning-supplies-panel .planning-inventory-item canvas { width: 50px; height: 50px; }
+  .field-house-layout.is-crowded-mobile { margin-top: 0; }
+  .field-house-layout.is-crowded-mobile::before { display: none; }
+  /* The house normally rises 16px and its roof rail reaches another 16px upward.
+     In the seven-cat layout, lower both below READY instead of covering the button. */
+  .field-house-layout.is-crowded-mobile .house-wing { transform: translateY(16px); }
+  .field-supplies-panel .planning-inventory-item { min-height: 54px; }
+  .field-supplies-panel .planning-inventory-item canvas { width: 50px; height: 50px; }
   .control-panel { position: static; max-height: none; width: min(100%, 470px); order: 3; }
   .glossary-modal { padding: 8px; }
   .glossary-card { width: calc(100vw - 16px); height: calc(100vh - 16px); padding: 11px; }
@@ -3352,8 +3366,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .phase-control-wing .done-button small { margin-top: 6px; font-size: 10px; line-height: 1.45; }
 .phase-control-wing .tactics-panel { padding: 15px 13px; }
 .phase-control-wing .tactics-heading { gap: 4px; }
-.phase-control-wing .tactics-heading h2 { margin-top: 10px; font-size: 17px; line-height: 1.5; }
-.phase-control-wing .tactics-panel > p { margin: 12px 0 16px; font-size: 13px; line-height: 1.55; }
+.phase-control-wing .tactics-heading h2 { margin-top: 0; font-size: 17px; line-height: 1.5; }
 .phase-control-wing .active-ability { padding: 11px 9px; }
 .phase-control-wing .active-ability b { font-size: 10px; line-height: 1.4; }
 .phase-control-wing .active-ability span { font-size: 12px; line-height: 1.5; }
@@ -3364,7 +3377,6 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .preview-sign small { font-size: 11px; }
 .dog-preview-cell b { padding: 2px 4px; font-size: 10px; }
 .worker-slot .worker-badge { padding: 2px 4px; font-size: 10px; }
-.inventory-slot b { min-width: 22px; padding: 1px 3px; font-size: 11px; }
 .station-output b { min-width: 25px; padding: 3px; font-size: 13px; }
 .station-output em { padding: 3px 5px; font-size: 8px; }
 .adoption-box-copy small { font-size: 9px; }
@@ -3440,6 +3452,27 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .tutorial-skip { padding: 10px 14px; font-size: 14px; }
 
 @media (max-width: 880px) {
+  .worker-slot {
+    --slot-sprite-size: 32px;
+    --slot-sprite-half: 16px;
+  }
+  .bench-slot > canvas {
+    left: calc(50% - 16px);
+    top: calc(50% - 16px);
+    width: 32px;
+    height: 32px;
+  }
+  .bench-slot .unit > canvas { width: 32px; height: 32px; }
+  .wave-banner {
+    width: max-content;
+    max-width: calc(100% - 20px);
+    padding: 9px 10px;
+    font-size: clamp(8px, 2.75vw, 12px);
+    line-height: 1.45;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .phase-titlebar h1 { font-size: 11px; }
   .phase-settings-button.icon-button { flex-basis: 34px; width: 34px; height: 34px; }
   .phase-tutorial-button.tutorial-button { height: 34px; padding-inline: 8px; font-size: 8px; }

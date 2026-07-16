@@ -60,26 +60,13 @@
               <div id="workbench" class="workbench-grid"></div>
             </section>
 
-            <section id="planning-supplies" class="planning-supplies-panel" aria-label="Items" hidden>
-              <div class="panel-heading compact">
-                <div><h2>Items</h2></div>
-              </div>
-              <div id="planning-inventory" class="planning-inventory-grid" aria-live="polite"></div>
-            </section>
-            <span id="planning-supplies-anchor" hidden></span>
           </section>
 
-          <section id="tactics-panel" class="tactics-panel" aria-label="Tactics Window" hidden>
+          <section id="tactics-panel" class="tactics-panel" aria-label="Tactics" hidden>
             <div class="tactics-heading">
-              <span id="tactics-kicker" class="tiny-label">BATTLE IN PROGRESS</span>
-              <h2>Tactics Window</h2>
+              <h2>Tactics</h2>
             </div>
-            <p id="tactics-help">Tactics unlock between combat exchanges.</p>
             <div id="active-abilities" class="active-abilities"></div>
-            <section id="tactics-supplies" class="tactics-supplies" aria-label="House supplies" hidden>
-              <span class="tiny-label">HOUSE SUPPLIES</span>
-              <div id="inventory" class="inventory-grid tactics-supplies-grid"></div>
-            </section>
           </section>
 
           <section class="round-controls phase-action">
@@ -113,6 +100,9 @@
           </div>
           <div id="wave-banner" class="wave-banner" role="status" hidden></div>
           <div id="turn-tag" class="turn-tag" aria-hidden="true" hidden></div>
+          <section id="supplies" class="planning-supplies-panel field-supplies-panel" aria-label="Supplies">
+            <div id="inventory" class="planning-inventory-grid" aria-live="polite"></div>
+          </section>
         </div>
       </div>
     </section>

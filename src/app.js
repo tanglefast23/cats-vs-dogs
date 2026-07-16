@@ -13,7 +13,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
 import { unlockAudio, playUiClick, playRefreshClick, playCoinSpend, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
@@ -104,7 +104,6 @@ const shopEl = $('#shop');
 const productionEl = $('#production-grid');
 const dogPreviewEl = $('#dog-preview-grid');
 const inventoryEl = $('#inventory');
-const planningInventoryEl = $('#planning-inventory');
 const workbenchEl = $('#workbench');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
@@ -199,6 +198,19 @@ function visibleHudChip(kind) {
   const values = hudValueElements(kind);
   const value = values.find((element) => element.getClientRects().length) ?? values[0];
   return value?.closest('.hud-chip, .mobile-hud-stat') ?? null;
+}
+
+function visibleHudValueRect(kind) {
+  const values = hudValueElements(kind);
+  const value = values.find((element) => element.getClientRects().length) ?? values[0];
+  if (!value) return null;
+  const textNode = [...value.childNodes]
+    .find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  if (!textNode) return value.getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNodeContents(textNode);
+  const rect = range.getBoundingClientRect();
+  return rect.width && rect.height ? rect : value.getBoundingClientRect();
 }
 
 const coinSpendTimers = new WeakMap();
@@ -848,6 +860,18 @@ function positionDragVisual(x, y) {
   dragState.shadow.style.top = `${y + 32}px`;
 }
 
+function updateAdoptionBoxProximity(clientX, clientY) {
+  const panel = $('#next-wave-adoption');
+  const zone = $('#next-wave-zone');
+  if (!panel || !zone || panel.hidden || !document.body.classList.contains('cat-sell-dragging')) return;
+  const scale = adoptionBoxScaleForPointer(
+    { x: clientX, y: clientY },
+    zone.getBoundingClientRect(),
+    panel.getBoundingClientRect(),
+  );
+  panel.style.setProperty('--adoption-scale', scale.toFixed(3));
+}
+
 function showValidDropTargets(source) {
   document.querySelectorAll('.cell, .worker-slot, .bench-slot, .next-wave-adoption').forEach((element) => {
     const { descriptor } = targetFromElement(element);
@@ -884,6 +908,7 @@ function startDragVisual(event) {
       : dragState.source.sellReason;
   }
   positionDragVisual(event.clientX, event.clientY);
+  updateAdoptionBoxProximity(event.clientX, event.clientY);
   showValidDropTargets(dragState.source);
   if (dragState.source.type === 'shop-fighter') showShopMatchTargets(dragState.cat);
   requestAnimationFrame(() => dragState?.ghost?.classList.add('is-lifted'));
@@ -939,6 +964,7 @@ function onDragMove(event) {
   if (!dragState.started) return;
   event.preventDefault();
   positionDragVisual(event.clientX, event.clientY);
+  updateAdoptionBoxProximity(event.clientX, event.clientY);
   updateDragHover(event.clientX, event.clientY);
 }
 
@@ -1114,6 +1140,7 @@ function cleanupDragVisual(state) {
   const adoptionPanel = $('#next-wave-adoption');
   adoptionPanel?.classList.remove('sale-blocked');
   if (adoptionPanel) {
+    adoptionPanel.style.removeProperty('--adoption-scale');
     adoptionPanel.hidden = true;
     adoptionPanel.setAttribute('aria-label', 'Adoption Box sell target');
   }
@@ -1207,7 +1234,15 @@ const COLLECTION_TIMING = Object.freeze({ sourceMs: 280, flightMs: 430, cueMs: 9
 
 function collectionTargetElement(destination) {
   if (destination?.type === 'gold') return visibleHudChip('gold');
+  if (destination?.type === 'storage') {
+    return inventoryEl?.querySelector(`[data-inventory-index="${destination.index}"]`) ?? null;
+  }
   return null;
+}
+
+function collectionTargetRect(destination) {
+  if (destination?.type === 'gold') return visibleHudValueRect('gold');
+  return collectionTargetElement(destination)?.getBoundingClientRect() ?? null;
 }
 
 function flyCollectedOutput(output, sourceRect, targetRect) {
@@ -1225,15 +1260,13 @@ function flyCollectedOutput(output, sourceRect, targetRect) {
   const animation = flyer.animate([
     { transform: 'translate(-50%, -50%) scale(1) rotate(0deg)', opacity: 1, offset: 0 },
     { transform: `translate(calc(-50% + ${(endX - startX) * .48}px), calc(-50% + ${(endY - startY) * .35 - 38}px)) scale(1.28) rotate(180deg)`, opacity: 1, offset: .48 },
-    { transform: `translate(calc(-50% + ${endX - startX}px), calc(-50% + ${endY - startY}px)) scale(.58) rotate(360deg)`, opacity: .25, offset: 1 },
+    { transform: `translate(calc(-50% + ${endX - startX}px), calc(-50% + ${endY - startY}px)) scale(.28) rotate(360deg)`, filter: 'none', opacity: .12, offset: 1 },
   ], { duration: COLLECTION_TIMING.flightMs, easing: 'cubic-bezier(.2,.75,.25,1)', fill: 'forwards' });
   void animation.finished.catch(() => {}).then(() => flyer.remove());
 }
 
-function showCollectionArrival(destination, quantity, index) {
-  const target = destination?.type === 'storage'
-    ? productionEl?.querySelector(`.worker-slot[data-worker-index="${index}"]`)
-    : collectionTargetElement(destination);
+function showCollectionArrival(destination, quantity) {
+  const target = collectionTargetElement(destination);
   if (!target) return;
   target.classList.remove('collection-arrival');
   void target.offsetWidth;
@@ -1269,17 +1302,13 @@ function collectProductionOutput(index, slot, outputHost) {
   playCollection(output.kind);
   outputHost.disabled = true;
   slot.classList.add('is-collecting');
-  // Coins fly to the Gold chip; items just pop a +N on the square — their new
-  // home (the Tactics Window supplies) is not on screen during prep.
-  if (destination.type === 'gold') {
-    const sourceRect = outputHost.getBoundingClientRect();
-    const targetRect = collectionTargetElement(destination)?.getBoundingClientRect() ?? null;
-    window.setTimeout(() => flyCollectedOutput(output, sourceRect, targetRect), COLLECTION_TIMING.sourceMs - 70);
-  }
+  const sourceRect = outputHost.getBoundingClientRect();
+  const targetRect = collectionTargetRect(destination);
+  window.setTimeout(() => flyCollectedOutput(output, sourceRect, targetRect), COLLECTION_TIMING.sourceMs - 70);
   window.setTimeout(() => {
     collectingStations.delete(index);
     render();
-    showCollectionArrival(destination, output.quantity, index);
+    showCollectionArrival(destination, output.quantity);
   }, COLLECTION_TIMING.sourceMs + COLLECTION_TIMING.flightMs);
 }
 
@@ -1360,22 +1389,26 @@ function productionWorkerSlot(index) {
 }
 
 function renderProduction() {
-  if (!productionEl || !inventoryEl || !planningInventoryEl) return;
+  if (!productionEl || !inventoryEl) return;
   productionEl.querySelectorAll(':scope > .production-cell').forEach((cell) => cell.remove());
   Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
     .forEach((index) => productionEl.append(productionWorkerSlot(index)));
 
-  const suppliesSection = $('#tactics-supplies');
-  if (suppliesSection) suppliesSection.hidden = !game.inventory.some(Boolean);
   inventoryEl.innerHTML = '';
   game.inventory.forEach((item, index) => {
-    if (!item) return;
-    const slot = document.createElement('button');
-    slot.type = 'button';
-    slot.className = 'inventory-slot filled';
+    const slot = document.createElement(item ? 'button' : 'div');
+    slot.className = `planning-inventory-item ${item ? 'filled' : 'empty'}`;
     slot.dataset.inventoryIndex = String(index);
+    if (!item) {
+      slot.setAttribute('aria-label', `Empty item slot ${index + 1}`);
+      slot.innerHTML = '<span><small>EMPTY</small></span>';
+      inventoryEl.append(slot);
+      return;
+    }
+    slot.type = 'button';
+    slot.setAttribute('aria-label', `${item.quantity} ${item.kind}${item.tier ? ` tier ${item.tier}` : ''}`);
     slot.append(unitCanvas('item', item));
-    slot.insertAdjacentHTML('beforeend', `<b>×${item.quantity}</b><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small>`);
+    slot.insertAdjacentHTML('beforeend', `<span><strong>×${item.quantity}</strong><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small></span>`);
     bindPetDrag(slot, 'item', { ...item, inventoryIndex: index });
     if ((item.kind === 'weapon' || item.kind === 'armour') && item.tier < 3 && item.quantity >= 3) {
       slot.classList.add('can-merge');
@@ -1392,44 +1425,16 @@ function renderProduction() {
     }
     inventoryEl.append(slot);
   });
-
-  planningInventoryEl.innerHTML = '';
-  game.inventory.forEach((item, index) => {
-    const slot = document.createElement('div');
-    slot.className = `planning-inventory-item ${item ? 'filled' : 'empty'}`;
-    if (!item) {
-      slot.setAttribute('aria-label', `Empty item slot ${index + 1}`);
-      slot.innerHTML = '<span><small>EMPTY</small></span>';
-      planningInventoryEl.append(slot);
-      return;
-    }
-    slot.setAttribute('aria-label', `${item.quantity} ${item.kind}${item.tier ? ` tier ${item.tier}` : ''}`);
-    slot.append(unitCanvas('item', item));
-    slot.insertAdjacentHTML('beforeend', `<span><strong>×${item.quantity}</strong><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small></span>`);
-    planningInventoryEl.append(slot);
-  });
 }
 
-function syncPlanningSuppliesVisibility() {
-  const planningPanel = $('#planning-panel');
-  const suppliesPanel = $('#planning-supplies');
-  if (!planningPanel || !suppliesPanel) return;
-  suppliesPanel.hidden = true;
-  if (planningPanel.hidden || planningPanel.scrollHeight > planningPanel.clientHeight + 1) return;
-  suppliesPanel.hidden = false;
-  if (planningPanel.scrollHeight > planningPanel.clientHeight + 1) suppliesPanel.hidden = true;
-}
-
-function syncPlanningSuppliesPlacement() {
-  const suppliesPanel = $('#planning-supplies');
-  const desktopAnchor = $('#planning-supplies-anchor');
+function syncFieldSuppliesLayout() {
   const fieldLayout = document.querySelector('.field-house-layout');
-  if (!suppliesPanel || !desktopAnchor || !fieldLayout) return;
-  if (window.matchMedia('(max-width: 880px)').matches) {
-    if (suppliesPanel.parentElement !== fieldLayout) fieldLayout.append(suppliesPanel);
-  } else if (suppliesPanel.nextElementSibling !== desktopAnchor) {
-    desktopAnchor.before(suppliesPanel);
-  }
+  const boardFrame = document.querySelector('.board-frame');
+  const supplies = $('#supplies');
+  if (!fieldLayout || !boardFrame || !supplies) return;
+  if (supplies.parentElement !== boardFrame) boardFrame.append(supplies);
+  const visiblePlanningCats = game.shop.filter(Boolean).length + game.workers.filter(Boolean).length;
+  fieldLayout.classList.toggle('is-crowded-mobile', visiblePlanningCats >= 7);
 }
 
 function renderWorkbench() {
@@ -1615,12 +1620,6 @@ function renderTacticsPanel() {
     host.append(button);
   });
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
-  $('#tactics-kicker').textContent = tacticsOpen ? 'BETWEEN COMBAT EXCHANGES' : 'BATTLE IN PROGRESS';
-  $('#tactics-help').textContent = !tacticsOpen
-    ? 'Watch the fight. Movement, supplies, and abilities unlock after this exchange.'
-    : activeTargeting
-      ? activeTargetingInstruction(activeTargeting)
-      : 'Move each cat once, drag supplies onto a cat, or cast one available ability.';
 }
 
 function tryActiveTarget(row, col, cat, dog) {
@@ -3522,6 +3521,7 @@ function advanceTutorialByTap() {
 
 function render() {
   hideUnitTooltip();
+  syncFieldSuppliesLayout();
   renderShop();
   renderProduction();
   renderWorkbench();
@@ -3529,7 +3529,6 @@ function render() {
   renderBoard();
   renderHud();
   renderTacticsPanel();
-  syncPlanningSuppliesVisibility();
   renderProductionLegend();
   renderLegend();
   playPendingUpgrade();
@@ -3692,8 +3691,6 @@ window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
 window.addEventListener('resize', () => {
-  syncPlanningSuppliesPlacement();
-  syncPlanningSuppliesVisibility();
   if (tutorialActive) { hideDragHint(); hideTutorialFocus(); syncTutorial(); }
 });
 window.addEventListener('click', (event) => {
@@ -3727,6 +3724,7 @@ $('#done').addEventListener('click', onDoneClick);
 $('#next-wave-toggle')?.addEventListener('click', () => {
   if (game.phase !== 'prep' || document.body.classList.contains('cat-sell-dragging')) return;
   nextWaveVisible = !nextWaveVisible;
+  if (nextWaveVisible) completeTutorialTipForAction('view-next-wave');
   renderDogPreview();
   renderBoard();
 });
@@ -3811,7 +3809,6 @@ game = loadGameProgress() ?? game;
 loadVolumeSettings();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
-syncPlanningSuppliesPlacement();
 render();
 
 // Dev-only QA hook. Vite strips this from production builds. Combat effects are hard to
