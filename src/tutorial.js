@@ -90,6 +90,14 @@ export const anyWoundedCat = (game) => game.cats.some((cat) => cat.hp < cat.maxH
 export const ownsAbilityCat = (game) => game.cats.some((cat) => Boolean(cat.activeAbility));
 export const inventoryHasItem = (game) => game.inventory.some(Boolean);
 export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.role === role);
+export const ownsAdvancedCat = (game) => [...game.cats, ...game.bench]
+  .some((cat) => cat.kind !== 'production-cat' && CAT_COAT_INFO[cat.coat]?.unlockRound >= 4);
+
+const purrcyLaneCount = (game) => new Set(game.cats
+  .filter((cat) => cat.coat === CAT_COAT.ORANGE)
+  .map((cat) => cat.col)).size;
+const inventoryHasKind = (game, kind) => game.inventory.some((item) => item?.kind === kind);
+const houseIsFull = (game) => game.workers.every(Boolean);
 
 const TUTORIAL_LANE_ORDER = [2, 3, 1, 4, 0, 5].filter((col) => col < COLS);
 
@@ -178,6 +186,7 @@ export const CORE_STEPS = [
   { id: 'r1-stakes', round: 1, mode: 'tap', spotlight: '#board',
     text: "Dogs charge down these 6 lanes. If one reaches your house you lose a life — lose all 3 and it's game over." },
   { id: 'r1-scout', round: 1, mode: 'tap', spotlight: '#dog-preview-grid',
+    completeOnActions: ['purchase-place', 'purchase-bench', 'purchase-merge'],
     text: "This Scout Report shows which dogs are coming. Check it each round so you buy the right defenders." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
@@ -189,14 +198,15 @@ export const CORE_STEPS = [
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,
     text: "Purrcy only shoots straight up his own lane. Grab a second Purrcy and cover another lane.",
-    isDone: (g) => boardCatCount(g) >= 2 },
+    isDone: (g) => purrcyLaneCount(g) >= 2 },
   { id: 'r1-refresh', round: 1, mode: 'gate', spotlight: '#refresh',
+    completeOnActions: ['refresh'],
     text: "Want different cats? Refresh rerolls the shop for 1 gold. Give it a try.",
     isDone: (g) => producerInShop(g) },
   { id: 'r1-produce', round: 1, mode: 'gate', spotlight: '#production-grid',
     dragFrom: '#shop .pet-draggable', dragTo: '#production-grid .worker-slot',
     text: "Not every cat fights. Whisker Biscuit bakes healing treats — drop her into the House.",
-    isDone: (g) => producerInHouse(g) },
+    isDone: (g) => ownsWorkerRole(g, WORKER_ROLE.COOK) },
   { id: 'r1-start', round: 1, mode: 'gate', spotlight: '#done',
     text: "That's your setup — unspent gold is lost, so you spent it well. Start the round!",
     isDone: (g) => g.phase !== 'prep' },
@@ -206,8 +216,9 @@ export const CORE_STEPS = [
 
   // Round 2 — collect + first merge
   { id: 'r2-collect', round: 2, mode: 'gate', spotlight: '#production-grid', showWhen: (g) => g.phase === 'prep',
+    completeOnActions: ['collect-food'],
     text: "Whisker baked a treat overnight. Tap her station to collect it — it waits in storage until a cat needs it.",
-    isDone: (g) => inventoryHasItem(g) },
+    isDone: (g) => inventoryHasKind(g, 'food') },
   { id: 'r2-merge', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     dragHints: tutorialMergeHints,
     text: (_g, completedTasks) => tutorialMergeText(completedTasks),
@@ -224,11 +235,13 @@ export const CORE_STEPS = [
   // Round 3 — production payoff (heal). A small wound persists from the advancing
   // pack (scripted in app.js), so one Whisker treat fully patches it.
   { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
+    completeOnActions: ['use-food'],
     text: "One of your cats is still hurt — wounds carry over between rounds. Let's patch it up." },
   { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep',
+    completeOnActions: ['use-food'],
     dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
     text: "Drag Whisker's treat from House Storage onto the hurt cat — heal +2. That's the payoff of production.",
-    isDone: (g) => !anyWoundedCat(g) },
+    isDone: () => false },
 ];
 
 // --- just-in-time tips: shown once each, one at a time, when `when` first holds ---
@@ -240,15 +253,19 @@ export const TIPS = [
     text: "You can reposition cats! Drag a placed cat up to 2 squares — during planning or in the pause between attacks. (Slower melee cats move just 1.)",
     when: (g) => g.round >= 2 && g.phase === 'prep' && tutorialMovableCatSelectors(g).length > 0 },
   { id: 'tip-new-cats', spotlight: '#shop',
+    completeOnActions: ['purchase-advanced-cat'], isDone: ownsAdvancedCat,
     text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",
     when: (g) => g.round >= 4 },
   { id: 'tip-coins', spotlight: '#production-grid',
+    completeOnActions: ['collect-coins'],
     text: "Cashmere Cat's coins go straight to your gold — more coins, more cats.",
     when: (g) => ownsWorkerRole(g, WORKER_ROLE.TRADER) },
   { id: 'tip-ability', spotlight: '#tactics-panel',
+    completeOnActions: ['use-ability'], isDone: (g) => g.cats.some((cat) => cat.activeUsed),
     text: "This new cat has a special move — it only fires here in the Tactics Window. Use it now.",
     when: (g) => g.phase === 'tactics' && ownsAbilityCat(g) },
   { id: 'tip-fill-house', spotlight: '#production-grid',
+    completeOnActions: ['fill-house'], isDone: houseIsFull,
     text: "You've still got a free House slot — a second producer means more healing, coins, weapons, or armour. Grab one when it shows in the shop.",
     when: (g) => g.round >= 7 && g.workers.some((w) => !w) },
 ];

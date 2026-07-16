@@ -4,6 +4,7 @@ import { DROP_IMPACT } from './drag-drop.js';
 export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
+export const LEVEL_MUSIC_DURATION_SECONDS = 180;
 export const LEVEL_MUSIC_VOLUME = 0.4;
 export const UI_CLICK_VOLUME = 0.024;
 
@@ -172,7 +173,7 @@ function musicPlayer() {
   return levelMusic;
 }
 
-/** Start the original Level 1 loop after a user gesture permits playback. */
+/** Start the three-minute Level 1 arrangement after a user gesture permits playback. */
 export function startLevelMusic() {
   levelMusicRequested = true;
   if (!claimMusicOwnership()) return false;

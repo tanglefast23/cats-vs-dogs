@@ -31,6 +31,11 @@ export const COMBAT_TIMING = Object.freeze({
   pierceStaggerMs: 90,
 });
 
+export const TANGLE_BIND_TIMING = Object.freeze({
+  holdExtensionMs: 5000,
+  fadeMs: 2000,
+});
+
 /** Scaled copy of COMBAT_TIMING for the speed toggle; the tuned table itself never changes. */
 export function combatTiming(speed = 1) {
   const factor = speed > 0 ? speed : 1;

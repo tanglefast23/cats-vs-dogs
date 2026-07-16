@@ -1437,11 +1437,13 @@ h1 span { color: var(--orange); font-size: .75em; }
    a fitted wrap so stacked dogs and different silhouettes still read as individually tied. */
 .tangle-bind {
   --bind-rotate: 0deg;
+  --tangle-fade-ms: 2000ms;
   position: absolute; left: 50%; top: 52%; width: 80%; height: 62%; z-index: 9;
   pointer-events: none; transform: translate(-50%, -50%) rotate(var(--bind-rotate));
   filter: drop-shadow(1px 2px 0 #6f2859);
   animation: tangle-bind-in .64s steps(6) both;
 }
+.tangle-bind.is-fading { animation: tangle-bind-out var(--tangle-fade-ms) linear forwards; }
 .tangle-bind i {
   position: absolute; left: 3%; width: 94%; height: 0; border-top: 2px solid #ef8fbe;
   box-shadow: 0 1px 0 #6f2859; opacity: .92; transform-origin: 50% 50%;
@@ -1467,7 +1469,11 @@ h1 span { color: var(--orange); font-size: .75em; }
   34% { opacity: 1; transform: translate(-50%, -50%) rotate(calc(var(--bind-rotate) + 18deg)) scale(.9); }
   58% { transform: translate(-50%, -50%) rotate(calc(var(--bind-rotate) - 7deg)) scale(1.06); }
   78% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(.96); }
+  100% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(1); }
+}
+@keyframes tangle-bind-out {
+  from { opacity: 1; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(.96); }
 }
 
 /* Meowstro conducting a dog duel. */
@@ -2505,6 +2511,7 @@ h1 span { color: var(--orange); font-size: .75em; }
   .unit.hurt.shake-soft, .unit.hurt.shake-hard, .unit.hurt.shake-rattle,
   .cell.bomb-footprint, .unit.decoy-blocking::before, .tangle-bind,
   .projectile-yarn::after, .projectile-yarn.has-tether::before { animation: none; }
+  .tangle-bind.is-fading { opacity: 0; }
   .unit.hurt[class*="dog-reaction-"] canvas { animation: hurt-flash .34s steps(4); }
   .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
   .wave-banner.is-exiting { animation: none; }

@@ -44,7 +44,7 @@ export const CAT_COAT_INFO = {
     strength: 'Highest reliable single-target damage',
     weakness: 'Fragile and cannot attack outside its column',
     blurb: 'High damage · one column',
-    attackDetail: 'Each action, fires 3 rapid shots that split its high attack damage. Shots retarget the nearest dog ahead, but never leave Purrcy\'s column.',
+    attackDetail: 'Fires 3 rapid shots that split its high attack damage. Shots retarget the nearest dog ahead, but never leave Purrcy\'s column.',
     shopTier: 1,
     unlockRound: 1,
   },
@@ -68,7 +68,7 @@ export const CAT_COAT_INFO = {
     strength: 'Reliable medium damage that can reach any column',
     weakness: 'Deals half or less of Purrcy\'s damage',
     blurb: 'Medium stats · homing',
-    attackDetail: 'Each action, fires one medium-strength sine-wave shot at the lowest dog row first, then the nearest column. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
+    attackDetail: 'Fires one medium-strength sine-wave shot at the lowest dog row first, then the nearest column. It can reach any column, but deals half or less of Purrcy\'s straight-shot damage.',
     shopTier: 1,
     unlockRound: 1,
   },
@@ -379,11 +379,14 @@ export function catTooltipInfo(cat) {
   const hp = cat.hp ?? stats.hp;
   const maxHp = cat.maxHp ?? stats.hp;
   const attack = cat.attack ?? stats.attack;
+  const attackDisplay = coat === CAT_COAT.ORANGE
+    ? splitDamage(attack, 3).filter((amount) => amount > 0).join('+')
+    : attack;
   return {
     kind: 'cat',
     category: `T${info.shopTier}`,
     title: `L${level} ${info.name}`,
-    stats: `Health ${hp}/${maxHp} · Attack ${attack}/action · ${attack * ACTIONS_PER_ROUND}/round`,
+    stats: `Health ${hp}/${maxHp} · Attack ${attackDisplay}`,
     attack: info.attackDetail,
     note: `${info.role} · Strength: ${info.strength} · Weakness: ${info.weakness}`,
     effects: catTooltipEffects(cat, info),

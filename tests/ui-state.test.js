@@ -7,7 +7,7 @@ import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
+import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from '../src/upgrade-animation.js';
@@ -247,6 +247,13 @@ test('combat timing leaves enough time to read travel, impact, and HP loss', () 
   assert.ok(COMBAT_TIMING.projectileMs >= 700);
   assert.ok(COMBAT_TIMING.impactMs >= 300);
   assert.ok(COMBAT_TIMING.hpPauseMs >= 250);
+});
+
+test('Knotty yarn holds five extra seconds before fading for two seconds', () => {
+  assert.deepEqual(TANGLE_BIND_TIMING, {
+    holdExtensionMs: 5000,
+    fadeMs: 2000,
+  });
 });
 
 test('Thunderpaws charges, flashes, and spans exactly one selected board column', () => {

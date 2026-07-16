@@ -237,6 +237,40 @@ test('round 2 teaches spending every coin before showing the start-round lesson'
   assert.equal(startStep.showWhen(game), true);
 });
 
+test('core lessons only complete from actions that prove the taught behavior', () => {
+  const game = createGame();
+  const buySecond = CORE_STEPS.find((entry) => entry.id === 'r1-buy2');
+  const placeProducer = CORE_STEPS.find((entry) => entry.id === 'r1-produce');
+  const collectFood = CORE_STEPS.find((entry) => entry.id === 'r2-collect');
+
+  game.cats = [
+    { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 },
+    { ...createCat(1, CAT_COAT.GREY), row: 13, col: 3 },
+  ];
+  assert.equal(buySecond.isDone(game), false, 'a non-Purrcy defender does not prove the second-lane lesson');
+  game.cats[1] = { ...createCat(1, CAT_COAT.ORANGE), row: 12, col: 2 };
+  assert.equal(buySecond.isDone(game), false, 'two Purrcys in one column do not cover another lane');
+  game.cats[1].col = 3;
+  assert.equal(buySecond.isDone(game), true);
+
+  game.workers[0] = { role: WORKER_ROLE.TRADER };
+  assert.equal(placeProducer.isDone(game), false, 'the heal lesson requires Whisker Biscuit');
+  game.workers[0] = { role: WORKER_ROLE.COOK };
+  assert.equal(placeProducer.isDone(game), true);
+
+  game.inventory[0] = { kind: 'weapon', tier: 1, quantity: 1 };
+  assert.equal(collectFood.isDone(game), false, 'an unrelated stored item does not prove treat collection');
+  game.inventory[0] = { kind: 'food', tier: 1, quantity: 1 };
+  assert.equal(collectFood.isDone(game), true);
+});
+
+test('tap lessons can declare the successful action that replaces Continue', () => {
+  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r1-scout').completeOnActions,
+    ['purchase-place', 'purchase-bench', 'purchase-merge']);
+  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
+  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
+});
+
 test('every core step is well-formed', () => {
   assert.ok(CORE_STEPS.length > 0);
   for (const step of CORE_STEPS) {
@@ -293,4 +327,25 @@ test('the ability tip waits until the Tactics Window opens', () => {
   assert.equal(tip.when(game), true);
   assert.equal(tip.spotlight, '#tactics-panel');
   assert.doesNotMatch(tip.text, /open the tactics window/i);
+});
+
+test('each actionable just-in-time tip recognizes proof of completion', () => {
+  const game = createGame();
+  const newCats = TIPS.find((entry) => entry.id === 'tip-new-cats');
+  const coins = TIPS.find((entry) => entry.id === 'tip-coins');
+  const ability = TIPS.find((entry) => entry.id === 'tip-ability');
+  const fillHouse = TIPS.find((entry) => entry.id === 'tip-fill-house');
+
+  assert.deepEqual(newCats.completeOnActions, ['purchase-advanced-cat']);
+  assert.equal(newCats.isDone(game), false);
+  game.cats.push({ ...createCat(1, CAT_COAT.BLACK), row: 13, col: 3 });
+  assert.equal(newCats.isDone(game), true, 'owning Bombay proves a tier-3 cat was grabbed');
+
+  assert.deepEqual(coins.completeOnActions, ['collect-coins']);
+  assert.deepEqual(ability.completeOnActions, ['use-ability']);
+
+  assert.deepEqual(fillHouse.completeOnActions, ['fill-house']);
+  assert.equal(fillHouse.isDone(game), false);
+  game.workers = [{ role: WORKER_ROLE.COOK }, { role: WORKER_ROLE.TRADER }];
+  assert.equal(fillHouse.isDone(game), true);
 });
