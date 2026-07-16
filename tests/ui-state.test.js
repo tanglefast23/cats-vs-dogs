@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { selectionAfterPurchase, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
-  CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
-  WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawDog,
+  CAT_EQUIPMENT, CAT_LEVEL_STYLES, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_TIER_STYLES, DOG_ROLE_MARKERS,
+  WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawCat, drawDog,
 } from '../src/pixel-art.js';
 import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
@@ -747,6 +747,29 @@ test('level two and three cats have progressively stronger visible equipment set
   assert.ok(CAT_EQUIPMENT[3].includes('energy-wings'));
 });
 
+function spriteSnapshot(draw) {
+  const operations = [];
+  const ctx = {
+    clearRect() {},
+    fillRect(x, y, width, height) { operations.push([this.color, x, y, width, height]); },
+    set fillStyle(value) { this.color = value; },
+    get fillStyle() { return this.color; },
+  };
+  const canvas = { width: 0, height: 0, getContext: () => ctx };
+  draw(canvas);
+  return JSON.stringify(operations);
+}
+
+test('all eleven battle cats have a distinct sprite at every level', () => {
+  assert.equal(Object.keys(CAT_LEVEL_STYLES).length, 3);
+  assert.equal(new Set(Object.values(CAT_LEVEL_STYLES).map(({ colors }) => colors.join('|'))).size, 3);
+
+  for (const coat of Object.keys(CAT_BODY_BUILDS).map(Number)) {
+    const levels = [1, 2, 3].map((level) => spriteSnapshot((canvas) => drawCat(canvas, level, coat)));
+    assert.equal(new Set(levels).size, 3, `cat coat ${coat} must look different at all three levels`);
+  }
+});
+
 test('production legend lists every worker with a concise economy role', () => {
   assert.deepEqual(productionLegendRows(WORKER_INFO), [
     { role: 'cook', name: 'BISCUIT', description: 'cooks healing food' },
@@ -794,7 +817,10 @@ test('unlockable fighters have distinct accessories and dog tier gear', () => {
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[8], ['mirage-mask', 'phantom-double']);
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[9], ['storm-coat', 'lightning-rod']);
   assert.deepEqual(CAT_ARCHETYPE_MARKERS[10], ['maestro-coat', 'conductor-baton']);
-  assert.deepEqual(DOG_TIER_MARKERS[4], ['alpha-armor', 'crown']);
+  assert.ok(DOG_TIER_MARKERS[1].includes('amber-leather-collar'));
+  assert.ok(DOG_TIER_MARKERS[2].includes('blue-steel-helmet'));
+  assert.ok(DOG_TIER_MARKERS[3].includes('spiked-bruiser-plates'));
+  assert.ok(DOG_TIER_MARKERS[4].includes('gold-crown'));
   assert.deepEqual(DOG_ROLE_MARKERS.frisbee, ['blue-frisbee', 'flight-goggles']);
   assert.deepEqual(DOG_ROLE_MARKERS.tennis, ['visor', 'tennis-ball']);
   assert.deepEqual(DOG_ROLE_MARKERS.howler, ['sound-cone', 'purple-bandana']);
@@ -833,6 +859,16 @@ test('every dog role renders at every tier without missing sprite geometry', () 
     for (const tier of [1, 2, 3, 4]) {
       assert.doesNotThrow(() => drawDog(canvas, tier, role), `${role} tier ${tier} should render`);
     }
+  }
+});
+
+test('all nine dog roles have a distinct sprite at every tier', () => {
+  assert.equal(Object.keys(DOG_TIER_STYLES).length, 4);
+  assert.equal(new Set(Object.values(DOG_TIER_STYLES).map(({ colors }) => colors.join('|'))).size, 4);
+
+  for (const role of Object.keys(DOG_BODY_BUILDS)) {
+    const tiers = [1, 2, 3, 4].map((tier) => spriteSnapshot((canvas) => drawDog(canvas, tier, role)));
+    assert.equal(new Set(tiers).size, 4, `${role} must look different at all four tiers`);
   }
 });
 

@@ -3452,6 +3452,9 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .tutorial-skip { padding: 10px 14px; font-size: 14px; }
 
 @media (max-width: 880px) {
+  /* Battlefield pets must read from their silhouette, clothing and armor. The
+     large yellow level tiles obscure most of a 32px sprite on phone layouts. */
+  .board .unit-badge { display: none; }
   .worker-slot {
     --slot-sprite-size: 32px;
     --slot-sprite-half: 16px;

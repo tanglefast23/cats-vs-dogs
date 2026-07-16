@@ -192,6 +192,11 @@ test('mobile wave announcements scale and wrap inside the battlefield width', ()
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.wave-banner\s*{[^}]*width:\s*max-content;[^}]*max-width:\s*calc\(100% - 20px\);[^}]*font-size:\s*clamp\(8px, 2\.75vw, 12px\);[^}]*text-align:\s*center;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s);
 });
 
+test('mobile battlefield hides level badges so pet artwork stays visible', () => {
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.board \.unit-badge\s*{\s*display:\s*none;\s*}/s);
+  assert.doesNotMatch(css, /\n\s*\.unit-badge\s*{\s*display:\s*none;\s*}/);
+});
+
 test('successful shop spending animates the coin number and plays its spend sound', () => {
   assert.match(app, /function showCoinSpendFeedback\(\)[\s\S]*playCoinSpend\(\)[\s\S]*classList\.add\('coin-spent'\)/);
   assert.match(app, /const goldBefore = game\.gold;[\s\S]*if \(changed && game\.gold < goldBefore\) showCoinSpendFeedback\(\);/);

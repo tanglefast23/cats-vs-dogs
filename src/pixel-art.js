@@ -18,8 +18,16 @@ const OUTLINE = '#172b36';
 
 export const CAT_EQUIPMENT = {
   1: [],
-  2: ['steel-helmet', 'chest-armor', 'shoulder-pads'],
-  3: ['steel-helmet', 'chest-armor', 'shoulder-pads', 'battle-cape', 'plasma-core', 'power-cannon', 'energy-wings'],
+  2: ['skyguard-helmet', 'cobalt-chest-armor', 'cyan-shoulder-pads'],
+  3: ['royal-helmet', 'magenta-chest-armor', 'crown-pads', 'battle-cape', 'plasma-core', 'power-cannon', 'energy-wings'],
+};
+
+// A cat keeps its role silhouette and coat at every level, while the equipment
+// color and outline change enough to identify its level without a text badge.
+export const CAT_LEVEL_STYLES = {
+  1: Object.freeze({ name: 'house colors', colors: ['natural-coat', 'signature-prop'], markers: ['open-head', 'unarmored-body'] }),
+  2: Object.freeze({ name: 'skyguard armor', colors: ['cobalt', 'cyan', 'ivory'], markers: ['cyan-crested-helmet', 'cobalt-vest', 'shoulder-pads'] }),
+  3: Object.freeze({ name: 'royal power armor', colors: ['magenta', 'gold', 'energy-cyan'], markers: ['crown-fins', 'battle-cape', 'plasma-core', 'power-cannon', 'energy-wings'] }),
 };
 
 export const CAT_ARCHETYPE_MARKERS = {
@@ -50,10 +58,17 @@ export const CAT_BODY_BUILDS = {
 };
 
 export const DOG_TIER_MARKERS = {
-  1: ['plain-collar'],
-  2: ['steel-helmet'],
-  3: ['bruiser-plates'],
-  4: ['alpha-armor', 'crown'],
+  1: ['amber-leather-collar', 'round-tag'],
+  2: ['blue-steel-helmet', 'cyan-crest', 'blue-collar'],
+  3: ['bronze-helmet', 'gold-crest', 'crimson-collar', 'spiked-bruiser-plates'],
+  4: ['obsidian-helmet', 'magenta-collar', 'alpha-armor', 'gold-crown'],
+};
+
+export const DOG_TIER_STYLES = {
+  1: Object.freeze({ name: 'yard punk', colors: ['warm-brown', 'amber-leather', 'gold-tag'] }),
+  2: Object.freeze({ name: 'ironhide', colors: ['slate-fur', 'blue-steel', 'ice-cyan'] }),
+  3: Object.freeze({ name: 'bonecrusher', colors: ['umber-fur', 'burnished-bronze', 'crimson', 'gold'] }),
+  4: Object.freeze({ name: 'top dog', colors: ['wine-fur', 'obsidian', 'royal-magenta', 'crown-gold'] }),
 };
 
 export const DOG_ROLE_MARKERS = {
@@ -423,11 +438,11 @@ function drawCatBackGear(ctx, geom) {
 // geometry table keeps each piece anchored to the wearer's own head and torso.
 function drawCatEquipment(ctx, level, geom) {
   if (level < 2) return;
-  const armor = level >= 3 ? '#493f87' : '#557f96';
-  const armorLight = level >= 3 ? '#9b86e8' : '#8eb8c6';
-  const trim = level >= 3 ? '#ffd94f' : '#d7e5df';
+  const armor = level >= 3 ? '#6d285e' : '#176b9e';
+  const armorLight = level >= 3 ? '#d95c9f' : '#55d6e8';
+  const trim = level >= 3 ? '#ffd94f' : '#f4f0ce';
   const [hx, hy, hw] = geom.helm;
-  // Steel helmet with open face.
+  // Level helmet with open face.
   px(ctx, OUTLINE, hx - 1, hy, hw + 2, 5); px(ctx, armor, hx, hy, hw, 4);
   px(ctx, armorLight, hx + 2, hy, Math.max(3, hw - 6), 2);
   px(ctx, trim, hx + (hw >> 1) - 1, hy + 1, 3, 3);
@@ -452,7 +467,7 @@ function drawCatEquipment(ctx, level, geom) {
   for (const pod of [geom.podL, geom.podR]) {
     if (!pod) continue;
     px(ctx, OUTLINE, pod[0], pod[1], 6, 9);
-    px(ctx, '#493f87', pod[0] + 1, pod[1] + 1, 4, 7);
+    px(ctx, '#6d285e', pod[0] + 1, pod[1] + 1, 4, 7);
     px(ctx, '#55e6ef', pod[0] + 2, pod[1] + 2, 2, 4);
   }
   const finY = Math.max(0, hy - 2);
@@ -461,7 +476,7 @@ function drawCatEquipment(ctx, level, geom) {
   const [cx, cy] = geom.core;
   px(ctx, OUTLINE, cx, cy, 6, 6); px(ctx, '#55e6ef', cx + 1, cy + 1, 4, 4); px(ctx, '#e2ffff', cx + 2, cy + 1, 2, 2);
   const [gx, gy] = geom.cannon;
-  px(ctx, OUTLINE, gx, gy, 10, 4); px(ctx, '#493f87', gx + 1, gy, 8, 3); px(ctx, '#55e6ef', gx + 3, gy, 4, 2);
+  px(ctx, OUTLINE, gx, gy, 10, 4); px(ctx, '#6d285e', gx + 1, gy, 8, 3); px(ctx, '#55e6ef', gx + 3, gy, 4, 2);
 }
 
 export function drawCat(canvas, level = 1, coat = 0, superCat = false) {
@@ -766,23 +781,33 @@ function drawDogGear(ctx, tier, geom) {
   const [cx, cy, cw] = geom.collar;
   if (tier === 1) {
     // Plain leather collar with a little tag.
-    px(ctx, '#8a4b2e', cx, cy + 1, cw, 2); px(ctx, '#f0c948', cx + (cw >> 1) - 1, cy + 1, 2, 3);
+    px(ctx, '#9b572d', cx, cy + 1, cw, 2); px(ctx, '#f0c948', cx + (cw >> 1) - 1, cy + 1, 2, 3);
   }
   if (tier >= 2) {
+    const tierArmor = tier >= 4
+      ? ['#29263f', '#6f5b8d', '#d95c9f']
+      : tier >= 3
+        ? ['#9b4e2f', '#e39b42', '#ffd15a']
+        : ['#276d91', '#62c9dc', '#e8fbff'];
+    const collar = tier >= 4 ? '#a62f67' : tier >= 3 ? '#b63e3a' : '#285e9b';
     const [hx, hy, hw] = geom.helm;
-    px(ctx, OUTLINE, hx - 1, hy, hw + 2, 6); px(ctx, '#758893', hx, hy, hw, 5);
-    px(ctx, '#b8cbd0', hx + 3, hy, Math.max(3, hw - 7), 2);
-    px(ctx, '#d84a45', cx, cy, cw, 3); px(ctx, '#f0c948', cx + (cw >> 1) - 1, cy, 3, 4);
+    px(ctx, OUTLINE, hx - 1, hy, hw + 2, 6); px(ctx, tierArmor[0], hx, hy, hw, 5);
+    px(ctx, tierArmor[1], hx + 3, hy, Math.max(3, hw - 7), 2);
+    px(ctx, tierArmor[2], hx + (hw >> 1) - 1, Math.max(0, hy - 1), 3, 4);
+    px(ctx, collar, cx, cy, cw, 3); px(ctx, tierArmor[2], cx + (cw >> 1) - 1, cy, 3, 4);
   }
   if (tier >= 3) {
     for (const plate of geom.plates) {
-      px(ctx, OUTLINE, plate[0], plate[1], 8, 8); px(ctx, '#8e604f', plate[0] + 1, plate[1] + 1, 6, 6);
+      px(ctx, OUTLINE, plate[0], plate[1], 8, 8); px(ctx, tier >= 4 ? '#372d50' : '#a95735', plate[0] + 1, plate[1] + 1, 6, 6);
+      px(ctx, tier >= 4 ? '#cf5793' : '#ef9d42', plate[0] + 2, plate[1] + 1, 4, 2);
+      px(ctx, '#f7e7be', plate[0] + 3, Math.max(0, plate[1] - 1), 2, 3);
     }
   }
   if (tier >= 4) {
     const [ax, ay, aw, ah] = geom.armor;
-    px(ctx, OUTLINE, ax, ay, aw, ah); px(ctx, '#623f78', ax + 1, ay + 1, aw - 2, ah - 2);
-    px(ctx, '#d85c75', ax + 3, ay + 2, aw - 6, 3);
+    px(ctx, OUTLINE, ax, ay, aw, ah); px(ctx, '#29263f', ax + 1, ay + 1, aw - 2, ah - 2);
+    px(ctx, '#d95c9f', ax + 3, ay + 2, aw - 6, 3);
+    px(ctx, '#f4bbdf', ax + (aw >> 1) - 1, ay + 3, 3, Math.max(3, ah - 6));
     const [rx, ry] = geom.crown;
     px(ctx, '#f2cf4a', rx, ry + 1, 4, 5); px(ctx, '#f2cf4a', rx + 6, ry, 4, 6); px(ctx, '#f2cf4a', rx + 12, ry + 1, 4, 5);
     px(ctx, '#fff0a1', rx + 7, ry + 1, 2, 2);
@@ -792,9 +817,10 @@ function drawDogGear(ctx, tier, geom) {
 export function drawDog(canvas, tier = 1, role = 'scruffy') {
   const ctx = prepare(canvas);
   const safeRole = DOG_BODIES[role] ? role : 'scruffy';
-  const [fur, light, dark] = DOG_PALETTES[tier] ?? DOG_PALETTES[1];
+  const safeTier = DOG_PALETTES[tier] ? tier : 1;
+  const [fur, light, dark] = DOG_PALETTES[safeTier];
   DOG_BODIES[safeRole](ctx, fur, light, dark);
-  drawDogGear(ctx, tier, DOG_GEOM[safeRole]);
+  drawDogGear(ctx, safeTier, DOG_GEOM[safeRole]);
 }
 
 /**
