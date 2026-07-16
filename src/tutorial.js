@@ -3,7 +3,7 @@
 // a scripted opening. Consumed by the glue layer in app.js.
 import {
   CAT_COAT, CAT_COAT_INFO, CAT_ZONE_START, COLS, ROWS, catStatsFor, createDog, DOG_ROLE,
-  MAX_FIELD_CATS, refreshShop, WORKER_ROLE, WORKER_INFO,
+  generateWave, MAX_FIELD_CATS, refreshShop, WORKER_ROLE, WORKER_INFO,
 } from './game-engine.js';
 
 let seq = 0;
@@ -66,7 +66,7 @@ export function refreshTutorialShop(game) {
 }
 
 // --- scripted waves ---
-export function tutorialWave(round, catColumns = []) {
+export function tutorialWave(round, catColumns = [], random = Math.random) {
   if (round === 1) {
     const cols = catColumns.length ? catColumns.slice(0, 2) : [2, 3];
     return cols.map((col) => createDog(1, 0, col, DOG_ROLE.SCRUFFY));
@@ -75,6 +75,7 @@ export function tutorialWave(round, catColumns = []) {
   // applyTutorialRound), not a biter — the strong merged cat would one-shot any
   // gentle dog before it could land a bite, and a survivor only bites after the
   // pause. So R3 uses the normal wave.
+  if (round >= 8 && round <= 10) return generateWave(round, random, 1);
   return null;
 }
 
@@ -120,6 +121,16 @@ export function tutorialMergeTaskForDrop(action, source) {
 }
 
 const boardCatSelector = (cat) => `#board .cell[data-row="${cat.row}"][data-col="${cat.col}"]`;
+const boardCatCanvasSelector = (cat) => `${boardCatSelector(cat)} .unit:not(.dog-unit):not(.decoy-unit) > canvas`;
+
+export function tutorialMovableCatSelectors(game) {
+  if (game.phase !== 'prep' && game.phase !== 'tactics') return [];
+  return game.cats
+    .filter((cat) => game.phase === 'tactics'
+      ? !cat.tacticsMoved
+      : !cat.hasEnteredBattle || !cat.prepMoved)
+    .map(boardCatCanvasSelector);
+}
 
 export function tutorialWoundedCatSelector(game) {
   const wounded = game.cats.find((cat) => cat.hp < cat.maxHp);
@@ -204,7 +215,10 @@ export const CORE_STEPS = [
       && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
     text: "Power spike! One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
-  { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep',
+  { id: 'r2-spend', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
+    text: (g) => `You still have ${g.gold} gold. Buy cats or refresh the Cat Cart until it's gone — every unspent coin is lost when battle begins.`,
+    isDone: (g) => g.gold === 0 },
+  { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep' && g.gold === 0,
     text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
 
   // Round 3 — production payoff (heal). A small wound persists from the advancing
@@ -221,9 +235,10 @@ export const CORE_STEPS = [
 // Note: the squad-full coaching (5/5 max → sell / combine / bench) fires
 // proactively from app.js the moment you hit the cap, not as a queued tip.
 export const TIPS = [
-  { id: 'tip-move', spotlight: '#board',
+  { id: 'tip-move', spotlight: null, focusSelectors: tutorialMovableCatSelectors,
+    completeOnActions: ['move', 'tactics-move'],
     text: "You can reposition cats! Drag a placed cat up to 2 squares — during planning or in the pause between attacks. (Slower melee cats move just 1.)",
-    when: (g) => g.round >= 2 && g.phase === 'prep' && g.cats.length > 0 },
+    when: (g) => g.round >= 2 && g.phase === 'prep' && tutorialMovableCatSelectors(g).length > 0 },
   { id: 'tip-new-cats', spotlight: '#shop',
     text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",
     when: (g) => g.round >= 4 },

@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CAT_COAT, WORKER_ROLE, createGame, createCat } from '../src/game-engine.js';
+import {
+  CAT_COAT, DOG_CELL_CAPACITY, WORKER_ROLE, createGame, createCat, waveCountForRound,
+} from '../src/game-engine.js';
 import {
   fighterSlot, workerSlot, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
   refreshTutorialShop,
   catOnBoard, boardCatCount, producerInHouse, producerInShop, catAtLevel,
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole,
   tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, confirmTutorialSkip,
-  tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText,
+  tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors,
   TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
@@ -69,6 +71,18 @@ test('tutorialWave scripts R1 in the covered lanes; other rounds use the normal 
   // R3's heal is staged via a scripted persisted wound (app.js), not a wave dog.
   assert.equal(tutorialWave(3, [3]), null);
   assert.equal(tutorialWave(2, [1]), null);
+});
+
+test('tutorial rounds 8 through 10 add one dog to the normal wave', () => {
+  for (const round of [8, 9, 10]) {
+    const wave = tutorialWave(round, [], () => 0);
+    assert.equal(wave.length, waveCountForRound(round) + 1, `round ${round}`);
+
+    const countsBySquare = Object.groupBy(wave, (dog) => `${dog.row}:${dog.col}`);
+    assert.ok(Object.values(countsBySquare)
+      .every((dogs) => dogs.length <= DOG_CELL_CAPACITY), `round ${round} respects dog stack capacity`);
+  }
+  assert.equal(tutorialWave(7, [], () => 0), null);
 });
 
 test('predicates read the game state they claim to', () => {
@@ -136,6 +150,22 @@ test('tutorial heal hint targets the wounded cat instead of the first board unit
   assert.equal(tutorialWoundedCatSelector(game), null);
 });
 
+test('the reposition tip targets only cats that can still move', () => {
+  const game = createGame();
+  const moved = { ...createCat(1, CAT_COAT.ORANGE), row: 12, col: 2, hasEnteredBattle: true, prepMoved: true };
+  const ready = { ...createCat(1, CAT_COAT.GREY), row: 13, col: 4, hasEnteredBattle: true, prepMoved: false };
+  game.cats.push(moved, ready);
+
+  assert.deepEqual(tutorialMovableCatSelectors(game), [
+    '#board .cell[data-row="13"][data-col="4"] .unit:not(.dog-unit):not(.decoy-unit) > canvas',
+  ]);
+
+  moved.hasEnteredBattle = false;
+  assert.equal(tutorialMovableCatSelectors(game).length, 2, 'a rookie stays freely repositionable');
+  game.phase = 'battle';
+  assert.deepEqual(tutorialMovableCatSelectors(game), []);
+});
+
 test('the merge lesson classifies the battlefield and Cat Cart drops separately', () => {
   assert.equal(tutorialMergeTaskForDrop(
     { type: 'merge', targetType: 'cat' },
@@ -186,6 +216,27 @@ test('the merge lesson keeps only unfinished drag demonstrations visible', () =>
   assert.equal(step.isDone(game, bothDone), true);
 });
 
+test('round 2 teaches spending every coin before showing the start-round lesson', () => {
+  const spendStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-spend');
+  const startStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-start');
+  const spendStep = CORE_STEPS[spendStepIndex];
+  const startStep = CORE_STEPS[startStepIndex];
+  const game = createGame();
+  game.round = 2;
+  game.gold = 7;
+
+  assert.ok(spendStepIndex > 0);
+  assert.equal(startStepIndex, spendStepIndex + 1);
+  assert.equal(spendStep.isDone(game), false);
+  assert.match(spendStep.text(game), /7 gold/i);
+  assert.doesNotMatch(spendStep.text(game), /start (the )?round/i);
+  assert.equal(startStep.showWhen(game), false);
+
+  game.gold = 0;
+  assert.equal(spendStep.isDone(game), true);
+  assert.equal(startStep.showWhen(game), true);
+});
+
 test('every core step is well-formed', () => {
   assert.ok(CORE_STEPS.length > 0);
   for (const step of CORE_STEPS) {
@@ -214,6 +265,20 @@ test('every tip is well-formed with a trigger', () => {
     assert.equal(typeof tip.when, 'function');
   }
   assert.equal(new Set(TIPS.map((t) => t.id)).size, TIPS.length);
+});
+
+test('the reposition tip anchors and glows around movable cat sprites', () => {
+  const tip = TIPS.find((entry) => entry.id === 'tip-move');
+  const game = createGame();
+  game.cats.push(
+    { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 },
+    { ...createCat(1, CAT_COAT.GREY), row: 13, col: 4 },
+  );
+
+  assert.equal(tip.spotlight, null);
+  assert.deepEqual(tip.focusSelectors(game), tutorialMovableCatSelectors(game));
+  assert.equal(tip.focusSelectors(game).length, 2);
+  assert.deepEqual(tip.completeOnActions, ['move', 'tactics-move']);
 });
 
 test('the ability tip waits until the Tactics Window opens', () => {

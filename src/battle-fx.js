@@ -15,7 +15,7 @@ import { COLS, DOG_ROLE, plusCells } from './game-engine.js';
 export const ENGINE_ATTACK_STYLES = Object.freeze([
   // Cats
   'column', 'melee', 'homing', 'tangle', 'bomb', 'bomb-cross', 'bomb-cross-secondary',
-  'piercing', 'encore', 'lightning',
+  'piercing', 'lightning',
   // The five homing cats that split off their own skins
   'frost', 'rift', 'mirage', 'spark', 'note',
   // Dogs
@@ -25,7 +25,7 @@ export const ENGINE_ATTACK_STYLES = Object.freeze([
 /** Cat attacks that can land on a dog. Kept explicit so tests cover the full matrix. */
 export const CAT_ATTACK_SIGNATURES = Object.freeze([
   'column', 'melee', 'homing', 'frost', 'rift', 'mirage', 'spark', 'note', 'tangle',
-  'bomb', 'bomb-cross', 'bomb-cross-secondary', 'piercing', 'encore', 'lightning',
+  'bomb', 'bomb-cross', 'bomb-cross-secondary', 'piercing', 'lightning',
 ]);
 
 /**
@@ -107,10 +107,6 @@ export const ATTACK_FX = Object.freeze({
   // Laserpaw: one beam through up to three dogs, not three separate shots.
   piercing: {
     projectile: null, path: 'beam', muzzle: 'prism-charge', impact: 'burn', heavy: true,
-  },
-  // Meowstro's commanded attack.
-  encore: {
-    projectile: 'music-note', path: 'homing', muzzle: 'baton-flourish', impact: 'chime', heavy: false,
   },
   // Thunderpaws' storm keeps its existing bespoke choreography; this entry exists so the
   // victims still get a matching hurt reaction.

@@ -174,6 +174,7 @@ test('Cat Cart summaries contain only badge, name, and cost', () => {
 test('worker cats expose production hover details', () => {
   assert.deepEqual(workerTooltipInfo({ level: 1, role: 'armourer' }, WORKER_INFO.armourer), {
     kind: 'cat',
+    category: 'WORK',
     title: 'L1 Pawladin',
     stats: 'Produces 1 T1 armour every 2 battles',
     detailLabel: 'Production',

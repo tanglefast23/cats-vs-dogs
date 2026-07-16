@@ -113,9 +113,20 @@ test('cat unlock rounds are independent from the odd-round stat tier curve', () 
   assert.deepEqual(availableCatCoatsForRound(7), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
-test('Knotty Kitty is presented as a tier-one shop cat', () => {
-  assert.equal(CAT_COAT_INFO[CAT_COAT.CALICO].shopTier, 1);
+test('battle cats use the player-facing T1, T2, and T3 categories', () => {
+  assert.deepEqual(
+    [CAT_COAT.ORANGE, CAT_COAT.GREY, CAT_COAT.WHITE, CAT_COAT.CALICO]
+      .map((coat) => CAT_COAT_INFO[coat].shopTier),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    [CAT_COAT.BLACK, CAT_COAT.FROST, CAT_COAT.RIFT, CAT_COAT.MIRAGE, CAT_COAT.STORM, CAT_COAT.ENCORE]
+      .map((coat) => CAT_COAT_INFO[coat].shopTier),
+    [2, 2, 2, 2, 2, 2],
+  );
+  assert.equal(CAT_COAT_INFO[CAT_COAT.PRISM].shopTier, 3);
   assert.equal(CAT_COAT_INFO[CAT_COAT.CALICO].unlockRound, 1);
+  assert.equal(CAT_COAT_INFO[CAT_COAT.PRISM].unlockRound, 7);
 });
 
 test('every cat has one explicit strength and a real weakness at every level', () => {
@@ -1069,6 +1080,8 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(tabby.attack, /3 rapid|column/i);
   assert.match(brawler.attack, /melee|front/i);
   assert.match(ghost.attack, /homing|column|sine|random/i);
+  assert.equal(tabby.category, 'T1');
+  assert.equal(catTooltipInfo({ level: 1, coat: CAT_COAT.PRISM }).category, 'T3');
   assert.equal(brawler.stats, 'Health 12/12 · Attack 1/action · 2/round');
   assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7/action · 14/round');
 });

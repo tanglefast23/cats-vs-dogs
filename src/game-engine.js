@@ -94,7 +94,7 @@ export const CAT_COAT_INFO = {
     weakness: 'Fragile and cannot normally attack outside its lane',
     blurb: 'Medium lane bomb · plus spell',
     attackDetail: 'Unlocked on round 4. Lobs one medium-strength bomb at the nearest dog ahead in Bombay\'s lane. Once per battle, his Tactics bomb hits a five-square plus — full damage to the dog at the center, half to the four sides.',
-    shopTier: 3,
+    shopTier: 2,
     unlockRound: 4,
   },
   5: {
@@ -106,33 +106,33 @@ export const CAT_COAT_INFO = {
     weakness: 'Very fragile and completely useless outside its column',
     blurb: 'Pierces 3 · glass cannon',
     attackDetail: 'Unlocked on round 7. Fires a strong prism beam through up to three dogs ahead in its own column. It cannot touch other columns and has very low health.',
-    shopTier: 4,
+    shopTier: 3,
     unlockRound: 7,
   },
   6: {
     name: 'Frosty Paws', shortName: 'Frosty', ability: 'homing', activeAbility: 'freeze',
     role: 'Freeze-control specialist', strength: 'Freezes one chosen dog for two rounds', weakness: 'Very low normal damage',
-    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog for the rest of the current round and all of the next round.', shopTier: 3, unlockRound: 4,
+    blurb: 'Hard freeze · weak attack', attackDetail: 'Unlocked on round 4. Normal shots are very weak, but once per battle Frosty can freeze one chosen dog for the rest of the current round and all of the next round.', shopTier: 2, unlockRound: 4,
   },
   7: {
     name: 'Purrtal', shortName: 'Purrtal', ability: 'homing', activeAbility: 'teleport',
     role: 'Positioning specialist', strength: 'Teleports an ally anywhere or shifts one enemy up to two squares', weakness: 'Low normal damage',
-    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square, or move one enemy up to two squares onto a square holding at most one dog.', shopTier: 3, unlockRound: 4,
+    blurb: 'Best mobility · low attack', attackDetail: 'Unlocked on round 4. Normal shots are weak, but once per battle Purrtal can teleport one allied cat to any empty cat square, or move one enemy up to two squares onto a square holding at most one dog.', shopTier: 2, unlockRound: 4,
   },
   8: {
     name: 'Faux Paw', shortName: 'Faux Paw', ability: 'homing', activeAbility: 'decoy',
     role: 'Defensive-utility specialist', strength: 'Summons a blocker anywhere in cat territory', weakness: 'Fragile with low normal damage',
-    blurb: 'Persistent blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a persistent phantom that blocks one attack per Faux Paw level.', shopTier: 3, unlockRound: 4,
+    blurb: 'Decaying blocker · frail caster', attackDetail: 'Unlocked on round 4. Faux Paw is fragile and shoots weakly, but once per battle can summon a phantom with one more attack block than Faux Paw\'s level. It loses one remaining block each later round.', shopTier: 2, unlockRound: 4,
   },
   9: {
     name: 'Thunderpaws', shortName: 'Thunder', ability: 'homing', activeAbility: 'storm',
     role: 'Burst-ability specialist', strength: 'Strikes every dog in one chosen column', weakness: 'Very fragile with the weakest normal attack',
-    blurb: 'Huge spell · tiny attack', attackDetail: 'Unlocked on round 4. Normal shots barely hurt, but once per battle Thunderpaws can strike every dog in one selected column.', shopTier: 3, unlockRound: 4,
+    blurb: 'Huge spell · tiny attack', attackDetail: 'Unlocked on round 4. Normal shots barely hurt, but once per battle Thunderpaws can strike every dog in one selected column.', shopTier: 2, unlockRound: 4,
   },
   10: {
-    name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'encore',
-    role: 'Attack-support specialist', strength: 'Commands an ally to attack immediately', weakness: 'Very low personal damage',
-    blurb: 'Ally encore · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can command one ally to make an immediate reduced-strength attack.', shopTier: 3, unlockRound: 4,
+    name: 'Meowstro', shortName: 'Meowstro', ability: 'homing', activeAbility: 'duel',
+    role: 'Enemy-control specialist', strength: 'Forces two nearby dogs to attack each other', weakness: 'Very low personal damage',
+    blurb: 'Dog duel · tiny attack', attackDetail: 'Unlocked on round 4. Meowstro deals very little damage, but once per battle can select a dog square and make two dogs there or on adjacent squares deal their own attack damage to each other.', shopTier: 2, unlockRound: 4,
   },
 };
 
@@ -381,6 +381,7 @@ export function catTooltipInfo(cat) {
   const attack = cat.attack ?? stats.attack;
   return {
     kind: 'cat',
+    category: `T${info.shopTier}`,
     title: `L${level} ${info.name}`,
     stats: `Health ${hp}/${maxHp} · Attack ${attack}/action · ${attack * ACTIONS_PER_ROUND}/round`,
     attack: info.attackDetail,
@@ -1031,32 +1032,53 @@ export function useFood(game, inventoryIndex, catId) {
   return next;
 }
 
-function resolveEncore(next, caster, target, random) {
-  const multiplier = [0, 0.5, 0.75, 1][caster.level] ?? 0.5;
-  const damage = Math.max(1, Math.ceil(target.attack * multiplier));
-  const ability = target.ability ?? catStatsFor(target.level, target.coat).ability;
-  let targets = [];
-  if (ability === 'melee') {
-    const dog = dogInMeleeFront(target, next.dogs);
-    if (dog) targets = [dog];
-  } else if (ability === 'piercing') {
-    targets = livingDogs(next.dogs).filter((dog) => dog.col === target.col && dog.row < target.row)
-      .sort((a, b) => b.row - a.row).slice(0, 3);
-  } else if (ability === 'column-shot' || ability === 'bomb' || ability === 'splash') {
-    const dog = nearestDogInColumn(target, next.dogs);
-    if (dog) targets = [dog];
-  } else if (ability === 'homing') {
-    const dog = closestHomingDog(target, next.dogs, random);
-    if (dog) targets = [dog];
-  } else {
-    const dog = closestDogByColumnPriority(target, next.dogs, random);
-    if (dog) targets = [dog];
+function resolveDogDuel(next, caster, row, col, random) {
+  const selectedSquare = livingDogs(next.dogs)
+    .filter((dog) => dog.row === row && dog.col === col);
+  if (!selectedSquare.length) return false;
+
+  let fighters = selectedSquare.slice(0, 2);
+  if (fighters.length === 1) {
+    const adjacentSquares = plusCells(row, col)
+      .filter((cell) => cell.row !== row || cell.col !== col)
+      .map((cell) => ({
+        ...cell,
+        dogs: livingDogs(next.dogs).filter((dog) => dog.row === cell.row && dog.col === cell.col),
+      }))
+      .filter((cell) => cell.dogs.length);
+    if (!adjacentSquares.length) return false;
+    const roll = typeof random === 'function' ? random() : Math.random();
+    const squareIndex = Math.min(adjacentSquares.length - 1, Math.floor(roll * adjacentSquares.length));
+    fighters.push(adjacentSquares[squareIndex].dogs.at(-1));
   }
-  targets.forEach((dog) => pushDamageEvent(next, 'shot', target, dog, {
-    damage, style: 'encore', fromCol: target.col, col: dog.col,
-  }));
-  next.events.push({ type: 'encore', from: caster.id, to: target.id, damage, hitCount: targets.length });
+
+  const [first, second] = fighters;
+  const firstDamage = Math.max(1, first.attack + (first.attackBoost ?? 0));
+  const secondDamage = Math.max(1, second.attack + (second.attackBoost ?? 0));
+  const firstHpBefore = first.hp;
+  const secondHpBefore = second.hp;
+  first.hp = Math.max(0, first.hp - secondDamage);
+  second.hp = Math.max(0, second.hp - firstDamage);
+  first.attackBoost = 0;
+  second.attackBoost = 0;
+
+  next.events.push(
+    { type: 'dog-duel-cast', from: caster.id, targets: [first.id, second.id] },
+    {
+      type: 'dog-duel', style: 'bite', from: first.id, to: second.id,
+      fromRow: first.row, fromCol: first.col, toRow: second.row, col: second.col,
+      damage: firstDamage, hpBefore: secondHpBefore, hpAfter: second.hp, maxHp: second.maxHp,
+      miss: false, duelIndex: 0,
+    },
+    {
+      type: 'dog-duel', style: 'bite', from: second.id, to: first.id,
+      fromRow: second.row, fromCol: second.col, toRow: first.row, col: first.col,
+      damage: secondDamage, hpBefore: firstHpBefore, hpAfter: first.hp, maxHp: first.maxHp,
+      miss: false, duelIndex: 1,
+    },
+  );
   next.dogs = next.dogs.filter((dog) => dog.hp > 0);
+  return true;
 }
 
 export function canTeleportDogTo(game, dogId, row, col) {
@@ -1115,16 +1137,23 @@ export function useActiveAbility(game, casterId, target = {}) {
       used = true;
     }
   } else if (active === 'decoy') {
+    const existingDecoy = next.decoys.find((decoy) => decoy.row === target.row && decoy.col === target.col);
     const legal = Number.isInteger(target.row) && Number.isInteger(target.col)
       && target.row >= CAT_ZONE_START && target.row < ROWS && target.col >= 0 && target.col < COLS
-      && !next.cats.some((cat) => cat.row === target.row && cat.col === target.col)
-      && !next.decoys.some((decoy) => decoy.row === target.row && decoy.col === target.col);
+      && !next.cats.some((cat) => cat.row === target.row && cat.col === target.col);
     if (legal) {
-      const blocks = Math.max(1, Math.min(3, caster.level ?? 1));
-      next.decoys.push({
-        id: id('decoy'), kind: 'phantom-cat', row: target.row, col: target.col,
-        blocks, maxBlocks: blocks,
-      });
+      const blocks = Math.max(1, Math.min(3, caster.level ?? 1)) + 1;
+      if (existingDecoy) {
+        const previousBlocks = existingDecoy.blocks ?? 0;
+        const previousMaxBlocks = existingDecoy.maxBlocks ?? previousBlocks;
+        existingDecoy.blocks = previousBlocks + blocks;
+        existingDecoy.maxBlocks = previousMaxBlocks + blocks;
+      } else {
+        next.decoys.push({
+          id: id('decoy'), kind: 'phantom-cat', row: target.row, col: target.col,
+          blocks, maxBlocks: blocks,
+        });
+      }
       next.events.push({ type: 'decoy-cast', from: caster.id, row: target.row, col: target.col });
       used = true;
     }
@@ -1159,17 +1188,15 @@ export function useActiveAbility(game, casterId, target = {}) {
         used = true;
       }
     }
-  } else if (active === 'encore') {
-    const ally = next.cats.find((cat) => cat.id === target.targetCatId && cat.id !== caster.id);
-    if (ally) {
-      resolveEncore(next, caster, ally, game.random);
-      used = true;
+  } else if (active === 'duel') {
+    if (Number.isInteger(target.row) && Number.isInteger(target.col)) {
+      used = resolveDogDuel(next, caster, target.row, target.col, game.random);
     }
   }
 
   if (!used) return game;
   caster.activeUsed = true;
-  const castName = active === 'bomb-cross' ? 'PLUS BOMB' : active.toUpperCase();
+  const castName = active === 'bomb-cross' ? 'PLUS BOMB' : active === 'duel' ? 'DOG DUEL' : active.toUpperCase();
   next.message = `${CAT_COAT_INFO[normalizeCoat(caster.coat)].name} cast ${castName}!`;
   return next;
 }
@@ -1372,8 +1399,8 @@ export function featuredDogRolesForRound(round = 1) {
   return featured[Math.max(1, Math.floor(Number(round) || 1))] ?? [];
 }
 
-export function generateWave(round, random = Math.random) {
-  const count = waveCountForRound(round);
+export function generateWave(round, random = Math.random, extraDogs = 0) {
+  const count = waveCountForRound(round) + Math.max(0, Math.floor(Number(extraDogs) || 0));
   const minTier = minimumDogTierForRound(round);
   const maxTier = shopTierForRound(round);
   const availableRoles = availableDogRolesForRound(round);
@@ -2120,6 +2147,10 @@ export function finishRound(game) {
   next.round += 1;
   next.section = 0;
   next.phase = 'prep';
+  next.decoys.forEach((decoy) => {
+    decoy.blocks = Math.max(0, (decoy.blocks ?? 0) - 1);
+  });
+  next.decoys = next.decoys.filter(decoyIsActive);
   next.gold = 10;
   next.shop = makeShop(game.random, game.shop, next.round);
   next.nextWave = generateWave(next.round, game.random);

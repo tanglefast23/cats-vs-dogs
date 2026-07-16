@@ -694,7 +694,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 .shop-slot:nth-child(4) { grid-column: 2 / span 2; }
 .shop-slot:nth-child(5) { grid-column: 4 / span 2; }
 .shop-grid[data-count="4"] .shop-slot { grid-column: span 3; }
-.shop-slot.worker-offer .shop-card { background: #dceec1; box-shadow: 2px 2px 0 #718757, inset 0 0 0 2px #a8c77d; }
+.shop-slot.worker-offer .shop-card { background: #e6d7f5; box-shadow: 2px 2px 0 #79688e, inset 0 0 0 2px #bda7db; }
 .shop-slot.saved .shop-card { background: #dff3ff; box-shadow: 2px 2px 0 #4f7f9a, inset 0 0 0 2px #6eb6df; }
 .shop-card { position: relative; min-width: 0; padding: 6px 3px; border: 2px solid var(--ink); background: #f6e9bd; text-align: center; cursor: pointer; box-shadow: 2px 2px 0 #8b7756; }
 .shop-slot.has-owned-match .shop-card { border-color: #185b31; box-shadow: 3px 3px 0 #163f28, inset 0 0 0 3px #62c96d, 0 0 0 2px #baf2a2; }
@@ -734,6 +734,8 @@ h1 span { color: var(--orange); font-size: .75em; }
 .tactics-heading h2 { margin: 0; color: #31558c; font-size: 17px; }
 .tactics-panel p { margin: 6px 0; font-size: 10px; line-height: 1.35; }
 .active-abilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.active-abilities.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.active-abilities.compact .active-ability { padding-inline: 3px; }
 .active-ability { padding: 7px 5px; border: 2px solid var(--ink); background: #fff4bd; box-shadow: 2px 2px 0 #6c7290; cursor: pointer; }
 .active-ability b, .active-ability span { display: block; }
 .active-ability b { font-family: var(--px); font-size: 8px; color: #31558c; }
@@ -1468,9 +1470,10 @@ h1 span { color: var(--orange); font-size: .75em; }
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(.96); }
 }
 
-/* Meowstro conducting an encore. */
-.unit.encore-conducting canvas { filter: brightness(1.3) drop-shadow(0 0 8px #ffe56e); }
-.unit.encore-performing canvas { filter: brightness(1.25) drop-shadow(0 0 8px #f1c083); }
+/* Meowstro conducting a dog duel. */
+.unit.duel-conducting canvas { filter: brightness(1.3) drop-shadow(0 0 8px #ffe56e); }
+.unit.duel-performing canvas { filter: brightness(1.25) drop-shadow(0 0 8px #f1c083); }
+.unit.dog-dueling { animation: dog-duel-lunge .43s steps(4); z-index: 5; }
 .unit.melee-lunge { animation: melee-lunge .43s steps(4); z-index: 5; }
 .unit.melee-lunge-up { animation: melee-lunge-up .43s steps(4); z-index: 5; }
 .unit.dog-jumping { z-index: 18; filter: drop-shadow(0 10px 4px rgba(17, 38, 32, .42)); }
@@ -1605,6 +1608,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 @keyframes hurt-flash { 0%, 50% { filter: sepia(1) saturate(8) hue-rotate(315deg) brightness(1.3) drop-shadow(2px 3px 0 rgba(17,38,32,.4)); transform: translateX(-3px); } 25%, 75% { transform: translateX(3px); } 100% { filter: drop-shadow(2px 3px 0 rgba(17,38,32,.4)); transform: translateX(0); } }
 @keyframes melee-lunge { 0%, 100% { translate: 0 0; } 50% { translate: 0 35%; } }
 @keyframes melee-lunge-up { 0%, 100% { translate: 0 0; } 50% { translate: 0 -35%; } }
+@keyframes dog-duel-lunge { 0%, 100% { translate: 0 0; } 50% { translate: var(--duel-x) var(--duel-y); } }
 @keyframes dog-howl { 0%,100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.18) rotate(-8deg); } 60% { transform: scale(1.1) rotate(6deg); } }
 @keyframes howl-pulse { 0% { opacity: 0; transform: translate(-50%, -20%) scale(.65); } 25%,70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -180%) scale(1.35); } }
 @keyframes frightened-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px) rotate(-4deg); } 50% { transform: translateX(4px) rotate(4deg); } 75% { transform: translateX(-3px) rotate(-2deg); } }
@@ -1699,11 +1703,62 @@ h1 span { color: var(--orange); font-size: .75em; }
 .unit-tooltip[hidden] { display: none !important; }
 .unit-tooltip.kind-cat { background: linear-gradient(#fff8dc, #e7f3c8); }
 .unit-tooltip.kind-dog { background: linear-gradient(#fff1e4, #f0d2b4); }
+.unit-tooltip.is-grouped {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: min(636px, calc(100vw - 24px));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.unit-tooltip.is-grouped .unit-tooltip-card {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(#fff1e4, #f0d2b4);
+  box-shadow: 4px 4px 0 #08151a;
+}
+.tooltip-unit-art {
+  display: grid;
+  height: 70px;
+  margin: -4px 0 7px;
+  place-items: center;
+  border-bottom: 2px dashed rgba(23,43,54,.35);
+}
+.tooltip-unit-art canvas {
+  width: 66px;
+  height: 66px;
+  image-rendering: pixelated;
+  filter: drop-shadow(2px 3px 0 rgba(17,38,32,.32));
+}
+.unit-tooltip .tooltip-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
 .unit-tooltip strong {
   display: block;
   font-size: 13px;
   letter-spacing: -0.3px;
-  margin-bottom: 3px;
+}
+.unit-tooltip .tooltip-category,
+.glossary-entry .glossary-tier {
+  display: inline-block;
+  flex: none;
+  padding: 2px 4px;
+  border: 2px solid var(--ink);
+  background: #eaf6ff;
+  color: var(--ink);
+  font-family: var(--px);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .4px;
+  box-shadow: 1px 1px 0 rgba(23,43,54,.35);
 }
 .unit-tooltip .tooltip-stats {
   display: inline-block;
@@ -1844,7 +1899,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 }
 .glossary-entry canvas { align-self: center; width: 92px; height: 92px; image-rendering: pixelated; }
 .glossary-entry small { display: block; color: #557158; font-size: 9px; font-weight: 900; letter-spacing: .5px; }
-.glossary-entry h3 { margin: 5px 0 6px; font-family: var(--px); font-size: 12px; line-height: 1.35; }
+.glossary-entry h3 { display: flex; align-items: center; gap: 6px; margin: 5px 0 6px; font-family: var(--px); font-size: 12px; line-height: 1.35; }
 .glossary-entry b { display: block; color: #a54c2d; font-size: 12px; }
 .glossary-entry p { margin: 7px 0; font-size: 11px; line-height: 1.45; }
 .glossary-entry em { display: block; color: #5e6d62; font-size: 10px; line-height: 1.35; }
@@ -2458,16 +2513,40 @@ h1 span { color: var(--orange); font-size: .75em; }
 /* --- Tutorial overlay: spotlight ring + coach bubble --- */
 .tutorial-button { width: auto; padding: 0 12px; font-size: 11px; letter-spacing: 0.08em; font-weight: 700; }
 
-.tutorial-overlay { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+.tutorial-overlay {
+  --tutorial-accent: #63e6ff;
+  --tutorial-accent-rgb: 99, 230, 255;
+  position: fixed; inset: 0; z-index: 9000; pointer-events: none;
+}
 .tutorial-overlay[hidden] { display: none; }
 /* Dim everything except the spotlight, using a huge ring shadow as the mask. */
 .tutorial-spotlight {
   position: absolute; border-radius: 12px;
-  box-shadow: 0 0 0 4px #ffd24a, 0 0 0 9999px rgba(6, 10, 20, 0.72);
+  box-shadow: 0 0 0 5px var(--tutorial-accent), 0 0 14px rgba(var(--tutorial-accent-rgb), .34), 0 0 0 9999px rgba(6, 10, 20, 0.72);
   transition: all 180ms ease; pointer-events: none;
 }
 /* Interactive steps skip the dark mask so nothing you need is hidden. */
-.tutorial-spotlight.no-dim { box-shadow: 0 0 0 4px #ffd24a; }
+.tutorial-spotlight.no-dim {
+  box-shadow: 0 0 0 5px var(--tutorial-accent), 0 0 14px rgba(var(--tutorial-accent-rgb), .34);
+}
+/* Every cyan tutorial outline gets the same restrained breathing glow. */
+.tutorial-spotlight::after,
+.tutorial-source-highlight::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: 3px solid rgba(var(--tutorial-accent-rgb), .58);
+  border-radius: inherit;
+  box-shadow: 0 0 10px rgba(var(--tutorial-accent-rgb), .46);
+  pointer-events: none;
+  transform-origin: center;
+  will-change: box-shadow, opacity;
+  animation: tutorial-cyan-outline-glow 2.2s ease-in-out infinite alternate;
+}
+@keyframes tutorial-cyan-outline-glow {
+  from { opacity: .42; box-shadow: 0 0 8px rgba(var(--tutorial-accent-rgb), .38); }
+  to { opacity: .82; box-shadow: 0 0 20px rgba(var(--tutorial-accent-rgb), .72); }
+}
 .tutorial-muted-region {
   position: absolute;
   background: rgba(6, 10, 20, .68);
@@ -2475,6 +2554,19 @@ h1 span { color: var(--orange); font-size: .75em; }
   pointer-events: none;
 }
 .tutorial-muted-region[hidden] { display: none; }
+#tutorial-focus-highlights,
+.tutorial-focus-highlight { position: absolute; pointer-events: none; }
+#tutorial-focus-highlights { inset: 0; }
+.tutorial-focus-highlight {
+  border: 2px solid rgba(var(--tutorial-accent-rgb), .64);
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px rgba(var(--tutorial-accent-rgb), .12), 0 0 12px rgba(var(--tutorial-accent-rgb), .38);
+  animation: tutorial-focus-glow 1.6s ease-in-out infinite alternate;
+}
+@keyframes tutorial-focus-glow {
+  from { opacity: .58; box-shadow: 0 0 0 2px rgba(var(--tutorial-accent-rgb), .10), 0 0 10px rgba(var(--tutorial-accent-rgb), .26); }
+  to { opacity: .88; box-shadow: 0 0 0 4px rgba(var(--tutorial-accent-rgb), .18), 0 0 18px rgba(var(--tutorial-accent-rgb), .50); }
+}
 .tutorial-bubble {
   position: absolute; max-width: 300px; padding: 16px 20px; border-radius: 16px;
   background: #12203a; color: #eaf1ff; border: 1px solid #2c4066;
@@ -2485,6 +2577,9 @@ h1 span { color: var(--orange); font-size: .75em; }
 }
 .tutorial-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
 .tutorial-next, .tutorial-skip { font: inherit; cursor: pointer; border-radius: 8px; pointer-events: auto; }
+/* A nearby coach bubble must not steal a legal board drop from underneath its buttons. */
+body.pet-dragging .tutorial-next,
+body.pet-dragging .tutorial-skip { pointer-events: none; }
 .tutorial-next { padding: 8px 16px; background: #ffd24a; color: #12203a; border: 0; font-weight: 700; }
 .tutorial-skip {
   margin-left: 8px; padding: 8px 12px; background: transparent; color: #8fa6c9;
@@ -2494,11 +2589,12 @@ h1 span { color: var(--orange); font-size: .75em; }
   background: var(--red); color: #fff8dc; box-shadow: 0 0 0 2px rgba(216, 74, 69, .35);
 }
 
-/* Make the first Start Round prompt read as the next action, not another amber panel edge. */
+/* Make the first Start Round prompt read as the next action, not another generic panel edge. */
 .tutorial-spotlight.tutorial-start-cue {
   box-shadow: 0 0 0 5px #68e7ff, 0 0 18px rgba(104, 231, 255, .9);
   animation: tutorial-start-ring-pulse 1.05s ease-in-out infinite;
 }
+.tutorial-spotlight.tutorial-start-cue::after { display: none; }
 .done-button.tutorial-start-cue {
   box-shadow: 4px 4px 0 var(--ink), 0 0 0 4px rgba(104, 231, 255, .72), 0 0 18px rgba(104, 231, 255, .62);
   animation: tutorial-start-wiggle 2.4s ease-in-out infinite;
@@ -2526,17 +2622,12 @@ h1 span { color: var(--orange); font-size: .75em; }
   animation: tutorial-target-pulse 1.4s ease-in-out infinite;
 }
 .tutorial-drop-target[hidden] { display: none; }
-/* Source of the drag (shop card / storage item) — amber to read as "grab this". */
+/* Source of the drag (shop card / storage item) — cyan to read as "grab this". */
 .tutorial-source-highlight {
   position: absolute; border-radius: 10px;
-  border: 3px solid #ffd24a; pointer-events: none;
-  animation: tutorial-source-pulse 1.4s ease-in-out infinite;
+  border: 5px solid var(--tutorial-accent); pointer-events: none;
 }
 .tutorial-source-highlight[hidden] { display: none; }
-@keyframes tutorial-source-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 210, 74, 0.28), inset 0 0 12px rgba(255, 210, 74, 0.45); }
-  50%      { box-shadow: 0 0 0 6px rgba(255, 210, 74, 0.45), inset 0 0 20px rgba(255, 210, 74, 0.70); }
-}
 @keyframes tutorial-target-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(90, 209, 122, 0.30), inset 0 0 12px rgba(90, 209, 122, 0.50); }
   50%      { box-shadow: 0 0 0 7px rgba(90, 209, 122, 0.50), inset 0 0 22px rgba(90, 209, 122, 0.80); }
@@ -2577,7 +2668,12 @@ h1 span { color: var(--orange); font-size: .75em; }
 @media (prefers-reduced-motion: reduce) {
   .tutorial-spotlight { transition: none; }
   .tutorial-drop-target { animation: none; }
-  .tutorial-source-highlight { animation: none; }
+  .tutorial-spotlight::after, .tutorial-source-highlight::after {
+    animation: none;
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(var(--tutorial-accent-rgb), .72);
+  }
   .tutorial-spotlight.tutorial-start-cue { animation: none; }
   .done-button.tutorial-start-cue { animation: none; }
+  .tutorial-focus-highlight { animation: none; opacity: .82; }
 }
