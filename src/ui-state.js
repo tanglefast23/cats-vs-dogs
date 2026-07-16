@@ -249,7 +249,6 @@ export function shopCardSummary(slot, info) {
   return {
     badge: slot.category === 'worker' ? 'WORK' : `T${info.shopTier}`,
     name: slot.sold ? 'ADOPTED' : info.name,
-    cost: 3,
   };
 }
 

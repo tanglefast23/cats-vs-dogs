@@ -76,16 +76,6 @@ function loadCombatSpeed() {
   return prefersReducedMotion ? 2 : 1;
 }
 
-function setCombatSpeed(speed) {
-  combatSpeed = speed;
-  timing = combatTiming(speed);
-  try {
-    window.localStorage?.setItem(SPEED_SETTING_KEY, String(speed));
-  } catch {
-    // Keep in-memory only.
-  }
-}
-
 function loadGameProgress() {
   try {
     const raw = window.localStorage?.getItem(GAME_SAVE_KEY);
@@ -378,8 +368,7 @@ function renderShop() {
     button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
     button.insertAdjacentHTML('beforeend', `
       <span class="shop-tier">${summary.badge}</span>
-      <strong>${summary.name}</strong>
-      <span class="price">● ${summary.cost}</span>`);
+      <strong>${summary.name}</strong>`);
     if (hasOwnedMatch) {
       button.title = 'Matching cat owned — drag this shop cat onto it to stack.';
       button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Matching cat owned; drag onto it to stack.`);
@@ -1181,7 +1170,6 @@ const COLLECTION_TIMING = Object.freeze({ sourceMs: 280, flightMs: 430, cueMs: 9
 
 function collectionTargetElement(destination) {
   if (destination?.type === 'gold') return $('#gold')?.closest('.hud-chip') ?? null;
-  if (destination?.type === 'storage') return inventoryEl?.querySelector(`[data-inventory-index="${destination.index}"]`) ?? null;
   return null;
 }
 
@@ -1205,8 +1193,10 @@ function flyCollectedOutput(output, sourceRect, targetRect) {
   void animation.finished.catch(() => {}).then(() => flyer.remove());
 }
 
-function showCollectionArrival(destination, quantity) {
-  const target = collectionTargetElement(destination);
+function showCollectionArrival(destination, quantity, index) {
+  const target = destination?.type === 'storage'
+    ? productionEl?.querySelector(`.worker-slot[data-worker-index="${index}"]`)
+    : collectionTargetElement(destination);
   if (!target) return;
   target.classList.remove('collection-arrival');
   void target.offsetWidth;
@@ -1221,7 +1211,7 @@ function showCollectionArrival(destination, quantity) {
   }, COLLECTION_TIMING.cueMs);
 }
 
-function collectProductionOutput(index, station, outputHost) {
+function collectProductionOutput(index, slot, outputHost) {
   if (collectingStations.has(index)) return;
   const output = game.workers[index]?.pendingOutput;
   const destination = productionCollectionDestination(game.inventory, output);
@@ -1229,8 +1219,8 @@ function collectProductionOutput(index, station, outputHost) {
   game = collectWorkerOutput(game, index);
   if (game === before || !destination) {
     game.message = 'House Storage is full — use or merge an item first.';
-    station.classList.add('collection-blocked');
-    window.setTimeout(() => station.classList.remove('collection-blocked'), 380);
+    slot.classList.add('collection-blocked');
+    window.setTimeout(() => slot.classList.remove('collection-blocked'), 380);
     renderHud();
     return;
   }
@@ -1240,37 +1230,67 @@ function collectProductionOutput(index, station, outputHost) {
   collectingStations.add(index);
   unlockAudio();
   playCollection(output.kind);
-  station.disabled = true;
-  station.classList.add('is-collecting');
-  const sourceRect = outputHost.getBoundingClientRect();
-  const targetRect = collectionTargetElement(destination)?.getBoundingClientRect() ?? null;
-  window.setTimeout(() => flyCollectedOutput(output, sourceRect, targetRect), COLLECTION_TIMING.sourceMs - 70);
+  outputHost.disabled = true;
+  slot.classList.add('is-collecting');
+  // Coins fly to the Gold chip; items just pop a +N on the square — their new
+  // home (the Tactics Window supplies) is not on screen during prep.
+  if (destination.type === 'gold') {
+    const sourceRect = outputHost.getBoundingClientRect();
+    const targetRect = collectionTargetElement(destination)?.getBoundingClientRect() ?? null;
+    window.setTimeout(() => flyCollectedOutput(output, sourceRect, targetRect), COLLECTION_TIMING.sourceMs - 70);
+  }
   window.setTimeout(() => {
     collectingStations.delete(index);
     render();
-    showCollectionArrival(destination, output.quantity);
+    showCollectionArrival(destination, output.quantity, index);
   }, COLLECTION_TIMING.sourceMs + COLLECTION_TIMING.flightMs);
 }
 
-function productionStation(worker, index) {
-  const station = document.createElement('button');
-  station.type = 'button';
-  station.className = `production-cell station-cell ${worker ? 'active' : 'empty'}`;
-  station.dataset.stationIndex = String(index);
-  station.style.gridColumn = String(index + 2);
-  station.style.gridRow = '1';
+// One square per production cat: the cat works beside its appliance, and the
+// finished output pops up over the appliance as the tap-to-collect button.
+function productionWorkerSlot(index) {
+  const worker = game.workers[index];
+  const slot = document.createElement('div');
+  slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'}`;
+  slot.dataset.workerIndex = String(index);
+  slot.style.gridColumn = String(index + 1);
+  slot.style.gridRow = '1';
   if (!worker) {
-    station.innerHTML = '<span class="empty-plus">·</span><small>STATION</small>';
-    station.disabled = true;
-    return station;
+    slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
+    return slot;
   }
+  slot.dataset.unitId = worker.id;
   const info = WORKER_INFO[worker.role];
-  station.classList.add(`station-${worker.role}`);
-  station.append(unitCanvas('station', worker));
-  station.insertAdjacentHTML('beforeend', `<small>${info.station.toUpperCase()}</small>`);
+  const catArt = unitCanvas('worker', worker);
+  catArt.classList.add('slot-cat');
+  slot.append(catArt);
+  const stationArt = unitCanvas('station', worker);
+  stationArt.classList.add('slot-station');
+  slot.append(stationArt);
+  const workVisual = productionWorkVisual(worker.role);
+  if (workVisual && game.phase === 'prep' && !worker.pendingOutput && !playing) {
+    slot.classList.add('is-working', `worker-${workVisual}`, `work-${workVisual}`);
+    const workActionMarkup = {
+      coin: '<i class="trade-coin">●</i><i class="trade-spark trade-spark-one">✦</i><i class="trade-spark trade-spark-two">✦</i>',
+      hammer: '<i class="forge-hammer"></i><i class="forge-spark spark-one"></i><i class="forge-spark spark-two"></i><i class="forge-spark spark-three"></i>',
+      polish: '<i class="polish-cloth"></i><i class="armour-glint glint-one">✦</i><i class="armour-glint glint-two">✦</i>',
+    }[workVisual];
+    if (workActionMarkup) {
+      const workAction = document.createElement('span');
+      workAction.className = `work-action work-${workVisual}`;
+      workAction.setAttribute('aria-hidden', 'true');
+      workAction.innerHTML = workActionMarkup;
+      slot.append(workAction);
+    }
+  }
+  slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
+  bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
+  bindTooltip(slot, () => workerTooltipInfo(worker, info));
+
   if (worker.pendingOutput) {
-    station.classList.add('has-output');
-    const outputHost = document.createElement('span');
+    slot.classList.add('has-output');
+    const outputHost = document.createElement('button');
+    outputHost.type = 'button';
     outputHost.className = `station-output output-${worker.pendingOutput.kind}`;
     outputHost.append(unitCanvas('item', worker.pendingOutput));
     outputHost.insertAdjacentHTML('beforeend', '<i class="output-sparkle sparkle-a">✦</i><i class="output-sparkle sparkle-b">✦</i><i class="output-sparkle sparkle-c">✦</i><em>CLICK!</em>');
@@ -1278,68 +1298,27 @@ function productionStation(worker, index) {
     output.className = 'output-count';
     output.textContent = `×${worker.pendingOutput.quantity}`;
     outputHost.append(output);
-    station.append(outputHost);
-    station.title = `Collect ${worker.pendingOutput.quantity} ${worker.pendingOutput.kind}`;
-    station.disabled = game.phase !== 'prep' || playing;
-    station.addEventListener('click', () => collectProductionOutput(index, station, outputHost));
+    outputHost.title = `Collect ${worker.pendingOutput.quantity} ${worker.pendingOutput.kind}`;
+    outputHost.disabled = game.phase !== 'prep' || playing;
+    outputHost.addEventListener('pointerdown', (event) => event.stopPropagation());
+    outputHost.addEventListener('click', () => collectProductionOutput(index, slot, outputHost));
+    slot.append(outputHost);
   } else {
-    station.disabled = true;
     const productionRounds = info.productionRounds ?? 1;
     const remaining = Math.max(1, productionRounds - (worker.productionProgress ?? 0));
-    station.title = `${info.name} produces after ${remaining === 1 ? 'the next battle' : `${remaining} more battles`}`;
+    slot.title = `${info.name} produces after ${remaining === 1 ? 'the next battle' : `${remaining} more battles`}`;
     if (productionRounds > 1) {
       const progress = productionProgressStatus(worker, info);
-      station.setAttribute('aria-label', `${info.name} ${info.station}, ${progress.label.toLowerCase()} until completion`);
+      slot.setAttribute('aria-label', `${info.name} ${info.station}, ${progress.label.toLowerCase()} until completion`);
       const progressHost = document.createElement('span');
       progressHost.className = 'station-progress';
       progressHost.innerHTML = `
         <b>${progress.label}</b>
         <span class="station-progress-track"><i style="width:${progress.percent}%"></i></span>
       `;
-      station.append(progressHost);
-    }
-    const workVisual = productionWorkVisual(worker.role);
-    if (workVisual && game.phase === 'prep' && !playing) {
-      station.classList.add('is-working', `work-${workVisual}`);
-      const workActionMarkup = {
-        coin: '<i class="trade-coin">●</i><i class="trade-spark trade-spark-one">✦</i><i class="trade-spark trade-spark-two">✦</i>',
-        hammer: '<i class="forge-hammer"></i><i class="forge-spark spark-one"></i><i class="forge-spark spark-two"></i><i class="forge-spark spark-three"></i>',
-        polish: '<i class="polish-cloth"></i><i class="armour-glint glint-one">✦</i><i class="armour-glint glint-two">✦</i>',
-      }[workVisual];
-      if (workActionMarkup) {
-        const workAction = document.createElement('span');
-        workAction.className = `work-action work-${workVisual}`;
-        workAction.setAttribute('aria-hidden', 'true');
-        workAction.innerHTML = workActionMarkup;
-        station.append(workAction);
-      }
+      slot.append(progressHost);
     }
   }
-  return station;
-}
-
-function productionWorkerSlot(index) {
-  const worker = game.workers[index];
-  const slot = document.createElement('button');
-  slot.type = 'button';
-  slot.className = `production-cell worker-slot ${worker ? 'filled' : 'empty'}`;
-  slot.dataset.workerIndex = String(index);
-  slot.style.gridColumn = String(index + 2);
-  slot.style.gridRow = '2';
-  if (!worker) {
-    slot.innerHTML = '<span class="empty-plus">+</span><small>WORKER</small>';
-    return slot;
-  }
-  slot.dataset.unitId = worker.id;
-  const info = WORKER_INFO[worker.role];
-  slot.append(unitCanvas('worker', worker));
-  const workVisual = productionWorkVisual(worker.role);
-  if (workVisual && game.phase === 'prep' && !worker.pendingOutput && !playing) {
-    slot.classList.add('is-working', `worker-${workVisual}`);
-  }
-  slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
-  bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
-  bindTooltip(slot, () => workerTooltipInfo(worker, info));
   return slot;
 }
 
@@ -1347,36 +1326,32 @@ function renderProduction() {
   if (!productionEl || !inventoryEl) return;
   productionEl.querySelectorAll(':scope > .production-cell').forEach((cell) => cell.remove());
   Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
-    .forEach((index) => productionEl.append(productionStation(game.workers[index], index)));
-  Array.from({ length: PRODUCTION_CAPACITY }, (_, index) => index)
     .forEach((index) => productionEl.append(productionWorkerSlot(index)));
 
+  const suppliesSection = $('#tactics-supplies');
+  if (suppliesSection) suppliesSection.hidden = !game.inventory.some(Boolean);
   inventoryEl.innerHTML = '';
   game.inventory.forEach((item, index) => {
+    if (!item) return;
     const slot = document.createElement('button');
     slot.type = 'button';
-    slot.className = `inventory-slot ${item ? 'filled' : 'empty'}`;
+    slot.className = 'inventory-slot filled';
     slot.dataset.inventoryIndex = String(index);
-    if (!item) {
-      slot.innerHTML = '<span class="empty-plus">+</span>';
-      slot.disabled = true;
+    slot.append(unitCanvas('item', item));
+    slot.insertAdjacentHTML('beforeend', `<b>×${item.quantity}</b><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small>`);
+    bindPetDrag(slot, 'item', { ...item, inventoryIndex: index });
+    if ((item.kind === 'weapon' || item.kind === 'armour') && item.tier < 3 && item.quantity >= 3) {
+      slot.classList.add('can-merge');
+      slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
+      slot.addEventListener('click', () => {
+        if (suppressNextPetClick) return;
+        const before = game;
+        game = mergeInventoryItems(game, index);
+        if (game !== before) playMerge();
+        render();
+      });
     } else {
-      slot.append(unitCanvas('item', item));
-      slot.insertAdjacentHTML('beforeend', `<b>×${item.quantity}</b><small>${item.kind}${item.tier ? ` T${item.tier}` : ''}</small>`);
-      bindPetDrag(slot, 'item', { ...item, inventoryIndex: index });
-      if ((item.kind === 'weapon' || item.kind === 'armour') && item.tier < 3 && item.quantity >= 3) {
-        slot.classList.add('can-merge');
-        slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
-        slot.addEventListener('click', () => {
-          if (suppressNextPetClick) return;
-          const before = game;
-          game = mergeInventoryItems(game, index);
-          if (game !== before) playMerge();
-          render();
-        });
-      } else {
-        slot.title = item.kind === 'food' ? 'Drag onto a damaged battlefield cat' : 'Drag onto a battlefield cat to equip';
-      }
+      slot.title = item.kind === 'food' ? 'Drag onto a damaged battlefield cat' : 'Drag onto a battlefield cat to equip';
     }
     inventoryEl.append(slot);
   });
@@ -1871,15 +1846,8 @@ function renderHud() {
   $('#gold').textContent = game.gold;
   $('#lives').textContent = game.lives;
   $('#round').textContent = `${game.round}/${MAX_ROUNDS}`;
-  $('#squad-count').textContent = `${game.cats.length}/${MAX_FIELD_CATS}`;
   $('#bench-count').textContent = `${game.bench.length}/${BENCH_SIZE}`;
   $('#message').textContent = game.message;
-  const speedChip = $('#speed-toggle');
-  if (speedChip) {
-    speedChip.classList.toggle('is-fast', combatSpeed === 2);
-    speedChip.setAttribute('aria-pressed', combatSpeed === 2 ? 'true' : 'false');
-    $('#speed-label').textContent = `${combatSpeed}×`;
-  }
   $('#refresh').disabled = game.phase !== 'prep' || game.gold < 1 || playing;
   const canContinueTactics = game.phase === 'tactics';
   const doneButton = $('#done');
@@ -2916,10 +2884,6 @@ function isGamePaused() {
 
 function syncPauseState() {
   const paused = isGamePaused();
-  const pauseButton = $('#pause-toggle');
-  pauseButton?.classList.toggle('is-paused', paused);
-  pauseButton?.setAttribute('aria-pressed', String(paused));
-  if ($('#pause-label')) $('#pause-label').textContent = paused ? '▶' : 'Ⅱ';
   if (paused && pausedAnimations.length === 0) {
     pausedAnimations = document.getAnimations().filter((animation) => animation.playState === 'running');
     pausedAnimations.forEach((animation) => animation.pause());
@@ -3703,17 +3667,6 @@ restartButton?.addEventListener('click', () => {
   resetGame();
 });
 $('#play-again').addEventListener('click', resetGame);
-$('#speed-toggle')?.addEventListener('click', () => {
-  setCombatSpeed(combatSpeed === 1 ? 2 : 1);
-  game.message = combatSpeed === 2 ? 'Combat speed 2× — replays fly by.' : 'Combat speed 1×.';
-  renderHud();
-});
-$('#pause-toggle')?.addEventListener('click', () => {
-  manualPaused = !manualPaused;
-  syncPauseState();
-  game.message = manualPaused ? 'Game paused.' : 'Game resumed.';
-  renderHud();
-});
 $('#cart-info')?.addEventListener('click', () => openGlossary($('#cart-info')));
 $('#glossary-close')?.addEventListener('click', closeGlossary);
 glossaryModalEl?.addEventListener('click', (event) => {

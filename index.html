@@ -23,9 +23,6 @@
               <div class="hud-chip phase-hud-chip"><span class="hud-icon coin" aria-hidden="true">●</span><strong id="gold">10</strong><small>GOLD</small></div>
               <div class="hud-chip phase-hud-chip"><span class="hud-icon heart" aria-hidden="true">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
               <div class="hud-chip phase-hud-chip"><strong id="round">1/10</strong><small>ROUND</small></div>
-              <div class="hud-chip phase-hud-chip"><strong id="squad-count">0/5</strong><small>SQUAD</small></div>
-              <button id="speed-toggle" class="hud-chip phase-hud-chip speed-chip" type="button" aria-label="Toggle combat speed" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
-              <button id="pause-toggle" class="hud-chip phase-hud-chip pause-chip" type="button" aria-label="Pause combat" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
             </section>
           </section>
 
@@ -35,7 +32,7 @@
                 <div><h2>Cat Cart</h2></div>
                 <div class="cart-actions">
                   <button id="cart-info" class="cart-info-button" type="button" aria-label="Open Cat and Dog Glossary" title="Cat &amp; Dog Glossary">i</button>
-                  <button id="refresh" class="refresh-button">Refresh <b>1</b></button>
+                  <button id="refresh" class="refresh-button">Refresh</button>
                 </div>
               </div>
               <div id="shop" class="shop-grid"></div>
@@ -56,6 +53,10 @@
             </div>
             <p id="tactics-help">Tactics unlock between combat exchanges.</p>
             <div id="active-abilities" class="active-abilities"></div>
+            <section id="tactics-supplies" class="tactics-supplies" aria-label="House supplies" hidden>
+              <span class="tiny-label">HOUSE SUPPLIES</span>
+              <div id="inventory" class="inventory-grid tactics-supplies-grid"></div>
+            </section>
           </section>
 
           <section class="round-controls phase-action">
@@ -64,11 +65,7 @@
           </section>
         </aside>
         <aside class="house-wing" aria-label="Production House">
-          <div id="production-grid" class="production-grid" aria-label="Two production cats and House storage">
-            <section class="house-storage-bin" aria-label="House item storage">
-              <div id="inventory" class="inventory-grid house-storage-grid"></div>
-            </section>
-          </div>
+          <div id="production-grid" class="production-grid" aria-label="Two production cat stations"></div>
         </aside>
         <div class="board-frame">
           <div id="board" class="board">

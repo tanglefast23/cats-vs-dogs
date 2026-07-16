@@ -128,11 +128,12 @@ test('tutorial selectors follow the relocated planning, scout, adoption, and tac
   assert.doesNotMatch(html, /class="dog-preview-wing/);
 });
 
-test('the permanent Cat Cart information panel restores the title and six square status controls', () => {
-  assert.match(html, /id="phase-control-wing"[\s\S]*class="phase-status-panel"[\s\S]*<h1>CATS <span>VS<\/span> DOGS<\/h1>[\s\S]*id="settings"[\s\S]*class="phase-hud"[\s\S]*id="gold"[\s\S]*id="lives"[\s\S]*id="round"[\s\S]*id="squad-count"[\s\S]*id="speed-toggle"[\s\S]*id="pause-toggle"[\s\S]*id="planning-panel"/);
-  assert.equal((html.match(/phase-hud-chip/g) ?? []).length, 6);
+test('the permanent Cat Cart information panel keeps the title and a single row of status chips', () => {
+  assert.match(html, /id="phase-control-wing"[\s\S]*class="phase-status-panel"[\s\S]*<h1>CATS <span>VS<\/span> DOGS<\/h1>[\s\S]*id="settings"[\s\S]*class="phase-hud"[\s\S]*id="gold"[\s\S]*id="lives"[\s\S]*id="round"[\s\S]*id="planning-panel"/);
+  assert.equal((html.match(/phase-hud-chip/g) ?? []).length, 3);
+  assert.doesNotMatch(html, /id="squad-count"|id="speed-toggle"|id="pause-toggle"/);
   assert.match(css, /\.phase-hud\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s);
-  assert.match(css, /\.phase-hud-chip\.hud-chip\s*{[^}]*aspect-ratio:\s*1 \/ 1;[^}]*border-width:\s*2px;[^}]*box-shadow:\s*2px 2px 0 var\(--ink\);/s);
+  assert.match(css, /\.phase-hud-chip\.hud-chip\s*{[^}]*border-width:\s*2px;[^}]*box-shadow:\s*2px 2px 0 var\(--ink\);/s);
   assert.doesNotMatch(html, /id="tutorial"/);
   assert.doesNotMatch(html, /id="restart"/);
 });
@@ -141,7 +142,6 @@ test('the command wing and supporting UI use the large readable type scale', () 
   assert.match(css, /\.field-house-layout\s*{[^}]*grid-template-columns:\s*5fr 6fr;[^}]*aspect-ratio:\s*11 \/ 14;/s);
   assert.match(css, /\/\* Large-type interface scale\./);
   assert.match(css, /\.phase-titlebar h1\s*{\s*font-size:\s*14px;/);
-  assert.match(css, /\.phase-hud-chip\.hud-chip\s*{[^}]*aspect-ratio:\s*auto;/);
   assert.match(css, /\.phase-hud-chip\.hud-chip strong\s*{\s*font-size:\s*18px;/);
   assert.match(css, /\.phase-control-wing \.shop-grid\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.phase-control-wing \.shop-card strong\s*{[^}]*white-space:\s*normal;[^}]*text-overflow:\s*clip;/s);
@@ -159,7 +159,7 @@ test('the Cat Cart wing and fence align with the left wood rail', () => {
 });
 
 test('wood side rails begin at the house roofline', () => {
-  assert.match(css, /\.board-frame::after\s*{[^}]*height:\s*calc\(100% \/ 14 \* 2\);/s);
+  assert.match(css, /\.board-frame::after\s*{[^}]*height:\s*calc\(100% \/ 14 \* 1\);/s);
   const houseRoof = css.match(/\.house-wing::before\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
 });
