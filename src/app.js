@@ -1796,6 +1796,22 @@ function effectAtPercent(className, xPercent, yPercent, text = '') {
   return effect;
 }
 
+/**
+ * Which fan slot the next number on this square takes. Hits landing while an earlier
+ * number is still on screen count up (centre, left, right, further out); once the
+ * square has been quiet for a number's lifetime, the fan resets to centre.
+ */
+const recentHits = new Map();
+
+function fanSlotFor(row, col) {
+  const key = `${row}:${col}`;
+  const now = performance.now();
+  const prev = recentHits.get(key);
+  const slot = prev && now - prev.at < timing.damageNumberMs ? prev.slot + 1 : 0;
+  recentHits.set(key, { slot, at: now });
+  return slot;
+}
+
 function clearDogReaction(target) {
   if (!target) return;
   for (const className of [...target.classList]) {
@@ -1845,8 +1861,9 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   const mark = effectAtPercent(`hurt-mark mark-${hurt.mark}`, contactX, contactY);
   mark.style.setProperty('--mark-angle', `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
 
-  const numberFx = damageNumberFx(event);
+  const numberFx = damageNumberFx(event, Math.random, fanSlotFor(event.toRow, event.col));
   const damage = effectAt(`damage-number ${numberFx.classes}`, event.toRow, event.col, numberFx.text);
+  damage.style.setProperty('--dmg-fan', `${numberFx.fanX}px`);
   damage.style.setProperty('--dmg-drift', `${numberFx.driftX}px`);
   damage.style.setProperty('--dmg-tilt', `${numberFx.tiltDeg}deg`);
   damage.style.setProperty('--dmg-ms', `${timing.damageNumberMs}ms`);

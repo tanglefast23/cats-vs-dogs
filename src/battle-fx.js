@@ -278,22 +278,37 @@ export function damageTier(event) {
 }
 
 /**
- * The floating combat number for one damage event: what it says, how big it pops, and
- * the armour chip pinned beside it when protection soaked part of the blow.
- *
- * Every hit pops in with overshoot, drifts a little sideways so stacked hits stay
- * readable, and lands slightly tilted. Drift and tilt come from the injected random so
- * tests can pin them down. The engine already reports how much armour or a catnip guard
- * blocked (`blocked`) and whether the hit spent the armour's last use (`armourBroken`);
- * this just decides how that is worn on screen.
+ * Where the Nth quick hit on the same square sits: the first stays centred, later ones
+ * fan out left, right, further left, further right — so Purrcy's -1 -1 -1 pellet volley
+ * reads as three separate events side by side instead of one smudged stack.
  */
-export function damageNumberFx(event, random = Math.random) {
+export function fanOffset(slot) {
+  if (slot <= 0) return 0;
+  const side = slot % 2 === 1 ? -1 : 1;
+  return side * Math.ceil(slot / 2) * 32;
+}
+
+/**
+ * The floating combat number for one damage event: what it says, how big it pops, where
+ * it sits in the fan, and the armour chip pinned beside it when protection soaked part
+ * of the blow.
+ *
+ * Every hit pops in with overshoot, lands slightly tilted, and drifts as it floats.
+ * `slot` counts quick-succession hits on the same square; fanned numbers keep drifting
+ * outward on their own side so the fan opens wider as it rises. Drift and tilt come
+ * from the injected random so tests can pin them down. The engine already reports how
+ * much armour or a catnip guard blocked (`blocked`) and whether the hit spent the
+ * armour's last use (`armourBroken`); this just decides how that is worn on screen.
+ */
+export function damageNumberFx(event, random = Math.random, slot = 0) {
   const isBlock = Boolean(event.decoyBlock);
   // Dogs attack with `melee` bites and `dog-shot` throws; everything else is a cat attack.
   const hitsCat = event.type === 'melee' || event.type === 'dog-shot';
   const blocked = !isBlock && (event.blocked ?? 0) > 0
     ? { amount: event.blocked, broken: Boolean(event.armourBroken) }
     : null;
+  const fanX = fanOffset(slot);
+  const driftSide = fanX === 0 ? (random() < 0.5 ? -1 : 1) : Math.sign(fanX);
   return {
     text: isBlock ? 'BLOCK!' : `-${event.damage}`,
     classes: [
@@ -301,7 +316,8 @@ export function damageNumberFx(event, random = Math.random) {
       isBlock ? 'block-number' : '',
       `dmg-${damageTier(event)}`,
     ].filter(Boolean).join(' '),
-    driftX: Math.round((random() * 2 - 1) * 14),
+    fanX,
+    driftX: Math.round(driftSide * (4 + random() * 10)),
     tiltDeg: Math.round((random() * 2 - 1) * 9),
     blocked,
   };
