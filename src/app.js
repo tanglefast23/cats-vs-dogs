@@ -14,7 +14,7 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
-import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
@@ -385,7 +385,10 @@ function renderShop() {
     save.setAttribute('aria-pressed', slot.saved ? 'true' : 'false');
     save.disabled = slot.sold || game.phase !== 'prep' || playing;
     save.addEventListener('click', (event) => {
+      // stopPropagation keeps the buy-card click out, but also skips the global
+      // button click sound — play it here so Save isn't the one silent button.
       event.stopPropagation();
+      playUiClick();
       game = toggleSaveShopSlot(game, index);
       render();
     });
@@ -526,6 +529,7 @@ function playPendingUpgrade() {
   if (!pendingUpgrade) return;
   const reveal = pendingUpgrade;
   pendingUpgrade = null;
+  playMerge({ levelUp: reveal.kind === 'level-up' });
   const anchor = upgradeAnchor(reveal.targetType, reveal.targetId);
   if (!anchor) return;
 
@@ -1071,13 +1075,17 @@ async function finishDrag(event, cancelled = false) {
         ? 'Cat reserved on the Cat Workbench.'
         : 'Cat deployed!';
     if (isBattlefieldDropAction(action)) playCatDrop();
+    if (action.type === 'merge-worker' || action.type === 'merge-bench-worker') playMerge();
   }
   render();
   if (changed && (action.type === 'use-food' || action.type === 'equip')) {
     playItemUseEffect(action.type === 'use-food' ? 'food' : state.source.itemKind,
       action.targetId, state.source.tier ?? 1);
   }
-  if (changed && action.type === 'sell') showAdoptionFeedback(state.cat, action.value);
+  if (changed && action.type === 'sell') {
+    playCollection('coins');
+    showAdoptionFeedback(state.cat, action.value);
+  }
   else if (changed && action.type !== 'merge') showDropWeight(action, target.descriptor);
 }
 
@@ -1270,7 +1278,9 @@ function renderProduction() {
         slot.title = 'Click to merge 3 into the next tier, or drag onto a fighter';
         slot.addEventListener('click', () => {
           if (suppressNextPetClick) return;
+          const before = game;
           game = mergeInventoryItems(game, index);
+          if (game !== before) playMerge();
           render();
         });
       } else {
@@ -2179,6 +2189,9 @@ async function playDeath(victimId, killingBlow) {
   const unit = fxUnitFor(victimId);
   if (!element || !unit) return;
 
+  if (unit.kind === 'dog') playDogDeath();
+  else playCatDeath();
+
   const spec = deathSpecFor(unit.kind, unit.key);
   const beats = deathTiming(combatSpeed);
   const fromRow = killingBlow.fromRow ?? (killingBlow.toRow - 1);
@@ -2361,6 +2374,7 @@ async function animateDogJump(event) {
 }
 
 async function animateHowl(event) {
+  playHowl();
   const dog = findUnitElement(event.id);
   const pulse = effectAt('howl-effect', event.row, event.col, `HOWL! +${event.bonus}`);
   dog?.classList.add('dog-howling');
@@ -2398,6 +2412,7 @@ async function animateFreezeSkip(event) {
 }
 
 async function animateHeal(event) {
+  playHeal();
   const target = findUnitElement(event.to);
   const heal = effectAt('heal-number', event.row, event.col, `+${event.amount} ♥`);
   target?.classList.add('healed');
@@ -2579,6 +2594,8 @@ function showResult() {
   $('#result-copy').textContent = won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
   drawCat($('#result-cat'), won ? 3 : 1, won ? 0 : 1, won);
   stopLevelMusic();
+  if (won) playVictory();
+  else playDefeat();
   modalEl.hidden = false;
 }
 
@@ -3223,6 +3240,7 @@ async function announceWave(sessionId) {
   banner.innerHTML = `<b>WAVE ${game.round}</b> · ${parts.join(' + ') || 'INCOMING'}`;
   banner.classList.remove('is-exiting');
   banner.hidden = false;
+  playWaveStart();
   await wait(WAVE_BANNER_READ_MS);
   if (sessionId !== gameSessionId) return false;
   await waitForResume();
@@ -3266,6 +3284,8 @@ async function playRound() {
     const needsAnotherExchange = game.dogs.length > 0
       && (game.round >= MAX_ROUNDS || game.section < ACTIONS_PER_ROUND);
     game = needsAnotherExchange ? openTacticsWindow(game) : finishRound(game);
+    // Back to prep means the wave was cleared — victory/defeat get their own fanfare.
+    if (!needsAnotherExchange && game.phase === 'prep') playRoundComplete();
     if (tutorialActive && game.phase === 'prep') applyTutorialRound();
   }
   playing = false;

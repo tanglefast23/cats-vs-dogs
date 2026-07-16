@@ -6,6 +6,9 @@ export const MUSIC_OWNER_KEY = 'cvd-music-owner';
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce.wav', import.meta.url).href;
 export const LEVEL_MUSIC_VOLUME = 0.4;
 export const UI_CLICK_VOLUME = 0.024;
+/** Master gain applied to every synthesized SFX (music is untouched) — recipes keep
+ * their relative balance while the whole effects layer sits louder in the mix. */
+export const SFX_GAIN = 2;
 
 let audioCtx = null;
 let unlocked = false;
@@ -242,8 +245,9 @@ function tone({
     osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), now + duration);
   }
 
+  const peak = Math.min(1, volume * SFX_GAIN);
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + attack);
+  gain.gain.exponentialRampToValueAtTime(peak, now + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(attack + 0.01, duration - decay));
 
   osc.connect(gain);
@@ -272,7 +276,7 @@ function noiseBurst({ duration = 0.08, volume = 0.05, filterFreq = 1200 } = {}) 
   filter.frequency.value = filterFreq;
   const gain = ctx.createGain();
   const now = ctx.currentTime;
-  gain.gain.setValueAtTime(volume, now);
+  gain.gain.setValueAtTime(Math.min(1, volume * SFX_GAIN), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   source.connect(filter);
@@ -521,6 +525,128 @@ export function playCelebration() {
   later(440, () => {
     if (!soundEnabled) return;
     tone({ frequency: 1047, slideTo: 1319, duration: 0.24, type: 'sine', volume: 0.05 });
+  });
+}
+
+/** Two quick rising notes when matching cats stack; a run up the octave plus a sparkle when they evolve. */
+export function playMerge({ levelUp = false } = {}) {
+  if (!soundEnabled) return;
+  if (!levelUp) {
+    tone({ frequency: 520, slideTo: 760, duration: 0.09, type: 'triangle', volume: 0.05, attack: 0.002, decay: 0.05 });
+    later(70, () => {
+      if (!soundEnabled) return;
+      tone({ frequency: 780, slideTo: 1080, duration: 0.11, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.06 });
+    });
+    return;
+  }
+  const run = [392, 523, 659, 784, 1047]; // G–C–E–G–C sprint up the octave
+  run.forEach((freq, i) => later(i * 70, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.13, type: 'triangle', volume: 0.055, attack: 0.002, decay: 0.06 });
+  }));
+  later(run.length * 70 + 20, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1568, duration: 0.22, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.12 });
+    noiseBurst({ duration: 0.08, volume: 0.02, filterFreq: 6400 });
+  });
+}
+
+/** A small, wilting meow when a cat goes down. */
+export function playCatDeath() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(640), slideTo: 400, duration: 0.16, type: 'triangle', volume: 0.055, attack: 0.012, decay: 0.09 });
+  later(130, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(430), slideTo: 200, duration: 0.24, type: 'sine', volume: 0.05, attack: 0.01, decay: 0.15 });
+  });
+}
+
+/** A startled yelp — sharp up, whining down — when a dog is knocked out. */
+export function playDogDeath() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(500), slideTo: 980, duration: 0.07, type: 'sawtooth', volume: 0.04, attack: 0.004, decay: 0.03 });
+  later(65, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(920), slideTo: 250, duration: 0.2, type: 'triangle', volume: 0.055, attack: 0.004, decay: 0.12 });
+  });
+}
+
+/** Two low paw-thumps and a rising horn as the next wave walks in. */
+export function playWaveStart() {
+  if (!soundEnabled) return;
+  tone({ frequency: 130, slideTo: 70, duration: 0.11, type: 'square', volume: 0.05 });
+  noiseBurst({ duration: 0.07, volume: 0.035, filterFreq: 500 });
+  later(150, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 130, slideTo: 70, duration: 0.11, type: 'square', volume: 0.055 });
+    noiseBurst({ duration: 0.07, volume: 0.04, filterFreq: 500 });
+  });
+  later(330, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 220, slideTo: 330, duration: 0.24, type: 'square', volume: 0.035, attack: 0.01, decay: 0.14 });
+  });
+}
+
+/** Bright three-note flourish when a battle round is cleared and prep returns. */
+export function playRoundComplete() {
+  if (!soundEnabled) return;
+  const notes = [523, 659, 784];
+  notes.forEach((freq, i) => later(i * 90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.14, type: 'triangle', volume: 0.055, attack: 0.003, decay: 0.07 });
+  }));
+  later(300, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 1047, slideTo: 1319, duration: 0.18, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.1 });
+  });
+}
+
+/** The full victory fanfare when the level is won. */
+export function playVictory() {
+  if (!soundEnabled) return;
+  const call = [523, 659, 784, 1047, 784, 1047];
+  call.forEach((freq, i) => later(i * 110, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, duration: 0.18, type: 'triangle', volume: 0.06, attack: 0.003, decay: 0.09 });
+  }));
+  later(call.length * 110 + 40, () => {
+    if (!soundEnabled) return;
+    [1047, 1319, 1568].forEach((freq) => tone({ frequency: freq, duration: 0.42, type: 'sine', volume: 0.035, attack: 0.01, decay: 0.3 }));
+    noiseBurst({ duration: 0.1, volume: 0.022, filterFreq: 6000 });
+  });
+}
+
+/** Three sagging notes when the dogs win the yard. */
+export function playDefeat() {
+  if (!soundEnabled) return;
+  const slump = [392, 330, 262];
+  slump.forEach((freq, i) => later(i * 200, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: freq, slideTo: freq * 0.92, duration: 0.26, type: 'triangle', volume: 0.055, attack: 0.008, decay: 0.14 });
+  }));
+  later(640, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 196, slideTo: 130, duration: 0.5, type: 'square', volume: 0.04, attack: 0.01, decay: 0.3 });
+  });
+}
+
+/** A soft, glinting chime when healing lands. */
+export function playHeal() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(760), slideTo: 1140, duration: 0.12, type: 'sine', volume: 0.035, attack: 0.004, decay: 0.08 });
+  later(90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(1180), duration: 0.1, type: 'triangle', volume: 0.025, attack: 0.003, decay: 0.06 });
+  });
+}
+
+/** The pack leader's low rallying howl. */
+export function playHowl() {
+  if (!soundEnabled) return;
+  tone({ frequency: 180, slideTo: 300, duration: 0.28, type: 'square', volume: 0.03, attack: 0.03, decay: 0.16 });
+  later(220, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 290, slideTo: 170, duration: 0.34, type: 'square', volume: 0.028, attack: 0.02, decay: 0.2 });
   });
 }
 
