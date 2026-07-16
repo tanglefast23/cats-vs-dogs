@@ -88,12 +88,37 @@ test('the Next Wave panel replaces the standalone Adoption Box while a cat is dr
   assert.match(css, /body\.cat-sell-dragging \.next-wave-zone\.drag-over \.next-wave-adoption\s*{[^}]*opacity:\s*1;/s);
 });
 
+test('the Next Wave button toggles the incoming dogs over the current battlefield dogs', () => {
+  assert.match(html, /<button id="next-wave-toggle"[^>]*aria-pressed="false"[^>]*>[\s\S]*Tap here to see[\s\S]*NEXT WAVE[\s\S]*<\/button>/);
+  assert.match(html, /<div id="dog-preview-grid" class="dog-preview-grid" hidden><\/div>/);
+  assert.doesNotMatch(html, /id="preview-round"|NEXT WAVE\s*<small>ROUND/);
+  assert.match(app, /let nextWaveVisible = false;/);
+  assert.match(app, /dogPreviewEl\.hidden = !nextWaveVisible;/);
+  assert.match(app, /board\?\.classList\.toggle\('showing-next-wave', nextWaveVisible\);/);
+  assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*renderDogPreview\(\);\s*renderBoard\(\);/);
+  assert.match(app, /toggle\?\.setAttribute\('aria-pressed', String\(nextWaveVisible\)\);/);
+  assert.match(app, /label\.textContent = nextWaveVisible \? 'HIDE NEXT WAVE' : 'NEXT WAVE';/);
+  assert.match(css, /\.board\.showing-next-wave \.grid \.dog-unit\s*{\s*visibility:\s*hidden;\s*}/);
+  assert.match(css, /\.preview-sign\.is-active \.tiny-label\s*{\s*display:\s*none;\s*}/);
+});
+
 test('the left wing swaps planning controls for persistent battle tactics', () => {
   assert.match(html, /id="phase-control-wing"[\s\S]*id="planning-panel"[\s\S]*id="shop-panel"[\s\S]*class="workbench-panel"[\s\S]*id="tactics-panel"[\s\S]*class="round-controls phase-action"/);
   assert.match(app, /const isBattle = game\.phase === 'combat' \|\| game\.phase === 'tactics';/);
   assert.match(app, /planningPanel\.hidden = !isPlanning;\s*panel\.hidden = !isBattle;/);
   assert.match(app, /doneButton\.hidden = game\.phase === 'combat'/);
   assert.match(app, /zone\.hidden = !isPlanning;/);
+});
+
+test('planning actions sit directly below the Cat Workbench', () => {
+  assert.doesNotMatch(html, /PICK YOUR DEFENDERS/);
+  assert.match(css, /\.planning-panel\s*{[^}]*flex:\s*0 1 auto;/s);
+});
+
+test('empty Cat Workbench slots stay visually blank', () => {
+  assert.doesNotMatch(html, /Hold, merge, then deploy\./);
+  assert.doesNotMatch(app, /<span class="empty-plus">\+<\/span><small>RESERVE<\/small>/);
+  assert.match(app, /slot\.setAttribute\('aria-label', `Empty Cat Workbench slot \$\{index \+ 1\}`\);/);
 });
 
 test('tutorial selectors follow the relocated planning, scout, adoption, and tactics UI', () => {
@@ -103,12 +128,40 @@ test('tutorial selectors follow the relocated planning, scout, adoption, and tac
   assert.doesNotMatch(html, /class="dog-preview-wing/);
 });
 
-test('the compact status strip is above the fence at every resolution', () => {
-  assert.match(html, /class="top-status-strip"[\s\S]*id="gold"[\s\S]*id="lives"[\s\S]*id="round"[\s\S]*id="squad-count"[\s\S]*id="settings"/);
-  assert.match(css, /\.top-status-strip\s*{[^}]*position:\s*absolute;[^}]*top:\s*-80px;[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\) 46px;/s);
+test('the permanent Cat Cart information panel restores the title and six square status controls', () => {
+  assert.match(html, /id="phase-control-wing"[\s\S]*class="phase-status-panel"[\s\S]*<h1>CATS <span>VS<\/span> DOGS<\/h1>[\s\S]*id="settings"[\s\S]*class="phase-hud"[\s\S]*id="gold"[\s\S]*id="lives"[\s\S]*id="round"[\s\S]*id="squad-count"[\s\S]*id="speed-toggle"[\s\S]*id="pause-toggle"[\s\S]*id="planning-panel"/);
+  assert.equal((html.match(/phase-hud-chip/g) ?? []).length, 6);
+  assert.match(css, /\.phase-hud\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s);
+  assert.match(css, /\.phase-hud-chip\.hud-chip\s*{[^}]*aspect-ratio:\s*1 \/ 1;[^}]*border-width:\s*2px;[^}]*box-shadow:\s*2px 2px 0 var\(--ink\);/s);
   assert.doesNotMatch(html, /id="tutorial"/);
   assert.doesNotMatch(html, /id="restart"/);
-  assert.doesNotMatch(html, /id="speed-toggle"|id="pause-toggle"/);
+});
+
+test('the command wing and supporting UI use the large readable type scale', () => {
+  assert.match(css, /\.field-house-layout\s*{[^}]*grid-template-columns:\s*5fr 6fr;[^}]*aspect-ratio:\s*11 \/ 14;/s);
+  assert.match(css, /\/\* Large-type interface scale\./);
+  assert.match(css, /\.phase-titlebar h1\s*{\s*font-size:\s*14px;/);
+  assert.match(css, /\.phase-hud-chip\.hud-chip\s*{[^}]*aspect-ratio:\s*auto;/);
+  assert.match(css, /\.phase-hud-chip\.hud-chip strong\s*{\s*font-size:\s*18px;/);
+  assert.match(css, /\.phase-control-wing \.shop-grid\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.phase-control-wing \.shop-card strong\s*{[^}]*white-space:\s*normal;[^}]*text-overflow:\s*clip;/s);
+  assert.match(css, /\.phase-control-wing \.tactics-panel > p\s*{[^}]*font-size:\s*13px;/);
+  assert.match(css, /\.phase-control-wing \.message\s*{[^}]*font-size:\s*13px;/);
+  assert.match(css, /\.tutorial-bubble p\s*{[^}]*font-size:\s*18px;/);
+  assert.match(css, /\.glossary-entry\s*{\s*height:\s*max-content;\s*min-height:\s*224px;/);
+  assert.match(html, /<small>Spend every coin · Clear every dog to win<\/small>/);
+});
+
+test('the Cat Cart wing and fence align with the left wood rail', () => {
+  assert.match(css, /\.field-house-layout::before\s*{[^}]*left:\s*-16px;/s);
+  assert.match(css, /\.phase-control-wing\s*{[^}]*width:\s*calc\(100% \+ 16px\);[^}]*margin-left:\s*-16px;[^}]*box-shadow:\s*inset 0 0 0 2px #75905e;/s);
+  assert.match(css, /\.phase-control-wing\.is-battle\s*{[^}]*box-shadow:\s*inset 0 0 0 2px #54849c,/s);
+});
+
+test('wood side rails begin at the house roofline', () => {
+  assert.match(css, /\.board-frame::after\s*{[^}]*height:\s*calc\(100% \/ 14 \* 2\);/s);
+  const houseRoof = css.match(/\.house-wing::before\s*{([\s\S]*?)\n}/)?.[1] ?? '';
+  assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
 });
 
 test('the glossary opens from Cat Cart and Settings', () => {

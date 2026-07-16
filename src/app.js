@@ -56,6 +56,7 @@ const dragHintAnimations = new Map();
 let tutorialStartNudged = false;
 let tutorialMoveFocusCleared = false;
 let gameSessionId = 0;
+let nextWaveVisible = false;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -1391,7 +1392,7 @@ function renderWorkbench() {
     slot.className = `bench-slot ${cat ? 'filled' : 'empty'}`;
     slot.dataset.benchIndex = String(index);
     if (!cat) {
-      slot.innerHTML = '<span class="empty-plus">+</span><small>RESERVE</small>';
+      slot.setAttribute('aria-label', `Empty Cat Workbench slot ${index + 1}`);
       workbenchEl.append(slot);
       continue;
     }
@@ -1434,23 +1435,34 @@ function renderWorkbench() {
 
 function renderDogPreview() {
   const zone = $('#next-wave-zone');
+  const board = $('#board');
+  const toggle = $('#next-wave-toggle');
+  const label = $('#next-wave-toggle-label');
   if (!dogPreviewEl || !zone) return;
   const isPlanning = game.phase === 'prep';
+  if (!isPlanning) nextWaveVisible = false;
   zone.hidden = !isPlanning;
   dogPreviewEl.innerHTML = '';
-  if (!isPlanning) return;
-  for (const { dog, row, col } of dogPreviewPlacements(game.nextWave)) {
+  dogPreviewEl.hidden = !nextWaveVisible;
+  zone.classList.toggle('showing-next-wave', nextWaveVisible);
+  board?.classList.toggle('showing-next-wave', nextWaveVisible);
+  toggle?.classList.toggle('is-active', nextWaveVisible);
+  toggle?.setAttribute('aria-pressed', String(nextWaveVisible));
+  toggle?.setAttribute('aria-label', nextWaveVisible ? 'Hide next wave' : 'Tap here to see next wave');
+  if (label) label.textContent = nextWaveVisible ? 'HIDE NEXT WAVE' : 'NEXT WAVE';
+  if (!isPlanning || !nextWaveVisible) return;
+  for (const { dog, row, col, count, grouped } of dogPreviewPlacements(game.nextWave)) {
     const cell = document.createElement('div');
     cell.className = 'dog-preview-cell incoming';
     cell.style.gridRow = String(row + 1);
     cell.style.gridColumn = String(col + 1);
     cell.append(unitCanvas('dog', dog));
-    cell.insertAdjacentHTML('beforeend', `<b>T${dog.tier}</b>`);
+    cell.insertAdjacentHTML('beforeend', `<b>${grouped ? `×${count}` : `T${dog.tier}`}</b>`);
+    const dogName = DOG_ROLE_INFO[dog.role]?.name ?? 'Dog';
+    cell.setAttribute('aria-label', grouped ? `${dogName}, ${count} incoming` : `${dogName}, incoming`);
     bindTooltip(cell, () => dogTooltipInfo(dog));
     dogPreviewEl.append(cell);
   }
-  const label = $('#preview-round');
-  if (label) label.textContent = `ROUND ${game.round}`;
 }
 
 const ACTIVE_COPY = {
@@ -3306,6 +3318,7 @@ function startTutorial() {
   tutorialCompletedActions.clear();
   tutorialStartNudged = false;
   tutorialMoveFocusCleared = false;
+  nextWaveVisible = false;
   game.shop = tutorialShop(1) ?? game.shop;
   game.message = 'Tutorial: follow the highlights.';
   render();
@@ -3603,6 +3616,7 @@ function resetGame() {
   game = createGame();
   selected = null;
   playing = false;
+  nextWaveVisible = false;
   manualPaused = false;
   glossaryPaused = false;
   if (glossaryModalEl) glossaryModalEl.hidden = true;
@@ -3652,6 +3666,12 @@ function onDoneClick() {
   playRound();
 }
 $('#done').addEventListener('click', onDoneClick);
+$('#next-wave-toggle')?.addEventListener('click', () => {
+  if (game.phase !== 'prep' || document.body.classList.contains('cat-sell-dragging')) return;
+  nextWaveVisible = !nextWaveVisible;
+  renderDogPreview();
+  renderBoard();
+});
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
 $('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
 

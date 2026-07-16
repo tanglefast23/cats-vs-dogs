@@ -101,19 +101,47 @@ test('next-wave dogs fill from top-left in chronological and left-to-right order
   );
 });
 
-test('next-wave dogs preview over their future lawn lanes without overlapping', () => {
+test('next-wave dogs fill the marked middle columns four at a time', () => {
   const dogs = [
-    { id: 'left-first', col: 0 },
-    { id: 'right', col: 5 },
-    { id: 'left-second', col: 0 },
+    { id: 'one', appearanceIndex: 0, col: 0 },
+    { id: 'two', appearanceIndex: 1, col: 5 },
+    { id: 'three', appearanceIndex: 2, col: 2 },
+    { id: 'four', appearanceIndex: 3, col: 1 },
+    { id: 'five', appearanceIndex: 4, col: 4 },
+    { id: 'six', appearanceIndex: 5, col: 3 },
   ];
 
   assert.deepEqual(
     dogPreviewPlacements(dogs).map(({ dog, row, col }) => ({ id: dog.id, row, col })),
     [
-      { id: 'left-first', row: 2, col: 0 },
-      { id: 'left-second', row: 3, col: 0 },
-      { id: 'right', row: 2, col: 5 },
+      { id: 'one', row: 1, col: 1 },
+      { id: 'two', row: 1, col: 2 },
+      { id: 'three', row: 1, col: 3 },
+      { id: 'four', row: 1, col: 4 },
+      { id: 'five', row: 2, col: 1 },
+      { id: 'six', row: 2, col: 2 },
+    ],
+  );
+});
+
+test('next-wave preview groups dogs by type only when individual spaces run out', () => {
+  const dogs = [
+    { id: 'chomps-1', role: 'scruffy', appearanceIndex: 0 },
+    { id: 'fetch-1', role: 'frisbee', appearanceIndex: 1 },
+    { id: 'chomps-2', role: 'scruffy', appearanceIndex: 2 },
+    { id: 'chomps-3', role: 'scruffy', appearanceIndex: 3 },
+    { id: 'fetch-2', role: 'frisbee', appearanceIndex: 4 },
+    { id: 'chomps-4', role: 'scruffy', appearanceIndex: 5 },
+    { id: 'chomps-5', role: 'scruffy', appearanceIndex: 6 },
+  ];
+
+  assert.deepEqual(
+    dogPreviewPlacements(dogs, 1, 4).map(({ dog, count, grouped, row, col }) => ({
+      id: dog.id, count, grouped, row, col,
+    })),
+    [
+      { id: 'chomps-1', count: 5, grouped: true, row: 1, col: 1 },
+      { id: 'fetch-1', count: 2, grouped: true, row: 1, col: 2 },
     ],
   );
 });

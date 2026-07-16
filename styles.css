@@ -60,12 +60,12 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 }
 
 .game-shell {
-  width: min(680px, calc(100% - 32px));
+  width: min(820px, calc(100% - 32px));
   min-height: 100vh;
   margin: 0 auto;
   padding: 20px 0 30px;
   display: grid;
-  grid-template-columns: minmax(480px, 680px);
+  grid-template-columns: minmax(680px, 820px);
   align-items: start;
   justify-content: center;
 }
@@ -400,77 +400,23 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .bench-slot > small { position: absolute; z-index: 4; left: 2px; right: 2px; bottom: 1px; font-size: 7px; font-weight: 900; line-height: 1; text-align: center; text-shadow: 1px 1px 0 #f4f0cf; }
 .bench-slot .reserve-level { position: absolute; z-index: 4; top: 1px; left: 1px; min-width: 18px; padding: 2px; border: 2px solid var(--ink); background: #ffe56e; font-size: 8px; }
 .bench-slot .copy-pips { z-index: 5; }
-.bench-slot .empty-plus { font-size: 18px; }
-.workbench-help { margin: 8px 2px 0; color: #50615a; font-size: 9px; line-height: 1.35; }
 
 .battle-column { display: flex; justify-content: center; min-width: 0; }
-/* Nine equal columns: three house columns attach to the left of the field's six columns. */
+/* Eleven equal columns: a five-column command wing gives the larger type room,
+   while the battlefield keeps its original six-column physical scale. */
 .field-house-layout {
   position: relative;
-  margin-top: 68px;
+  margin-top: 32px;
   display: grid;
-  grid-template-columns: 3fr 6fr;
+  grid-template-columns: 5fr 6fr;
   grid-template-rows: minmax(0, 12fr) minmax(0, 2fr);
   align-items: stretch;
-  width: min(100%, 680px, calc((100vh - 112px) * 9 / 14));
-  aspect-ratio: 9 / 14;
+  width: min(100%, 820px);
+  aspect-ratio: 11 / 14;
 }
-.top-status-strip {
-  position: absolute;
-  z-index: 28;
-  top: -80px;
-  left: 0;
-  right: 0;
-  height: 44px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) 46px;
-  overflow: hidden;
-  border: 3px solid var(--ink);
-  background: linear-gradient(180deg, #f1f8df, #d5e9bd);
-  box-shadow: 4px 4px 0 #08171e;
-}
-.top-status-item {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 7px;
-  border-right: 2px solid rgba(23,43,54,.35);
-}
-.top-status-item > span:last-child { min-width: 0; }
-.top-status-item small {
-  display: block;
-  margin-bottom: 3px;
-  color: #527062;
-  font-family: var(--px);
-  font-size: 6px;
-  line-height: 1;
-}
-.top-status-item strong {
-  display: block;
-  overflow: hidden;
-  font-size: 13px;
-  line-height: 1;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.top-status-strip .hud-icon { font-size: 14px; }
-.top-settings-button {
-  width: auto;
-  height: auto;
-  padding: 0;
-  border: 0;
-  border-left: 1px solid rgba(23,43,54,.35);
-  background: #ffe7a0;
-  box-shadow: none;
-  font-size: 21px;
-}
-.top-settings-button:hover { background: #fff1bd; }
 .board-frame { position: relative; grid-column: 2; grid-row: 1 / 3; width: 100%; }
-/* Brick edging frames the whole cat area: down the house's left wall, across the
-   bottom of house + yard, and up the yard's right edge to the territory line. */
+/* Brick edging frames the house row: down both outer walls and across the
+   bottom of house + yard. */
 .field-house-layout::after,
 .house-wing::after,
 .board-frame::after {
@@ -497,7 +443,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
     linear-gradient(90deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px);
 }
 .house-wing::after { left: -16px; top: 0; }
-.board-frame::after { right: -16px; height: calc(100% / 14 * 4); }
+.board-frame::after { right: -16px; height: calc(100% / 14 * 2); }
 /* Broken white picket fence across the back of the yard — the dogs came through here. */
 .field-house-layout::before {
   content: '';
@@ -505,7 +451,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   pointer-events: none;
 }
 .field-house-layout::before {
-  left: 0;
+  left: -16px;
   right: 0;
   top: -32px;
   height: 32px;
@@ -517,7 +463,8 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   grid-row: 1;
   display: flex;
   min-width: 0;
-  width: 100%;
+  width: calc(100% + 16px);
+  margin-left: -16px;
   height: 100%;
   flex-direction: column;
   padding: 8px;
@@ -527,18 +474,70 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   background:
     linear-gradient(90deg, rgba(255,255,255,.09) 50%, transparent 50%) 0 0 / 16px 16px,
     linear-gradient(180deg, #dbe9bd, #a8c982);
-  box-shadow: 0 0 0 2px #75905e;
+  box-shadow: inset 0 0 0 2px #75905e;
 }
 .phase-control-wing.is-battle {
   background:
     repeating-linear-gradient(135deg, rgba(120,210,255,.06) 0 8px, transparent 8px 18px),
     linear-gradient(180deg, #193746, #102732);
-  box-shadow: 0 0 0 2px #54849c, inset 0 0 34px rgba(68,183,231,.14);
+  box-shadow: inset 0 0 0 2px #54849c, inset 0 0 34px rgba(68,183,231,.14);
+}
+.phase-status-panel {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  margin: 2px 2px 9px;
+  padding: 7px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #edf6d9, #c7dfa9);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.phase-titlebar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.phase-titlebar h1 {
+  min-width: 0;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.phase-settings-button.icon-button {
+  flex: 0 0 31px;
+  width: 31px;
+  height: 31px;
+  font-size: 17px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.phase-hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.phase-hud-chip.hud-chip {
+  min-width: 0;
+  min-height: 48px;
+  aspect-ratio: 1 / 1;
+  padding: 4px;
+  border-width: 2px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.phase-hud-chip .hud-icon { font-size: 13px; }
+.phase-hud-chip.hud-chip strong { font-size: 13px; }
+.phase-hud-chip.hud-chip small { font-size: 6px; }
+.phase-control-wing.is-battle .phase-status-panel {
+  background: linear-gradient(180deg, #e6f2d4, #bdd8a0);
+  box-shadow: 3px 3px 0 #06141c;
 }
 .planning-panel {
   display: flex;
   min-height: 0;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
@@ -553,18 +552,27 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   inset: 0 0 auto;
   height: calc(100% * 10 / 14);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(15,42,34,.05), rgba(18,51,37,.12));
+  background: transparent;
+  pointer-events: none;
   transition: filter .16s ease, transform .16s ease, box-shadow .16s ease;
 }
 .dog-lawn-preview[hidden] { display: none; }
+.dog-lawn-preview.showing-next-wave {
+  background: linear-gradient(180deg, rgba(15,42,34,.05), rgba(18,51,37,.12)), #6ea24c;
+  pointer-events: auto;
+}
+body.cat-sell-dragging .next-wave-zone { pointer-events: auto; }
+.board.showing-next-wave .grid .dog-unit { visibility: hidden; }
 .dog-lawn-preview::after {
   content: '';
   position: absolute;
   z-index: -1;
   inset: 0;
   border-bottom: 2px dashed rgba(239,255,214,.24);
+  opacity: 0;
   pointer-events: none;
 }
+.dog-lawn-preview.showing-next-wave::after { opacity: 1; }
 .dog-preview-grid {
   position: absolute;
   inset: 0;
@@ -574,6 +582,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-template-rows: repeat(10, minmax(0, 1fr));
 }
+.dog-preview-grid[hidden] { display: none; }
 .dog-preview-cell {
   position: relative;
   min-width: 0;
@@ -599,11 +608,18 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   width: min(188px, calc(100% - 14px));
   padding: 6px 7px;
   border: 3px solid var(--ink);
+  appearance: none;
   background: #dcecc8;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
   box-shadow: 3px 3px 0 #08171e;
-  pointer-events: none;
+  pointer-events: auto;
   transform: translateX(-50%);
 }
+.preview-sign:hover { background: #eff8df; }
+.preview-sign.is-active { background: #ffe59b; }
+.preview-sign.is-active .tiny-label { display: none; }
 .preview-sign span, .preview-sign strong { display: block; }
 .preview-sign .tiny-label { font-size: 6px; }
 .preview-sign strong { margin-top: 3px; font-family: var(--px); font-size: 9px; }
@@ -636,9 +652,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   height: 100%;
   background:
     repeating-linear-gradient(90deg, #4b352e 0 4px, transparent 4px 44px) left bottom / 100% 16px no-repeat,
-    linear-gradient(180deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px) left bottom / 100% 16px no-repeat,
-    repeating-linear-gradient(180deg, #4b352e 0 4px, transparent 4px 44px) right top / 16px 100% no-repeat,
-    linear-gradient(90deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px) right top / 16px 100% no-repeat;
+    linear-gradient(180deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px) left bottom / 100% 16px no-repeat;
   pointer-events: none;
 }
 .board {
@@ -2672,7 +2686,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .phase-control-wing .shop-slot.unaffordable .price::before { font-size: 6px; }
 .phase-control-wing .shop-save { padding: 3px 1px; font-size: 7px; }
 .phase-control-wing .workbench-grid { gap: 4px; }
-.phase-control-wing .workbench-help { margin-top: 5px; font-size: 7px; line-height: 1.35; }
 .phase-control-wing .message { min-height: 0; margin-bottom: 6px; padding: 7px; font-size: 9px; line-height: 1.35; }
 .phase-control-wing .done-button { padding: 8px 5px; font-size: 9px; letter-spacing: .4px; }
 .phase-control-wing .done-button small { margin-top: 4px; font-size: 7px; line-height: 1.3; }
@@ -2819,22 +2832,16 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 
 /* Phones and narrow windows: board first, panel below, everything reachable. */
 @media (max-width: 1180px) and (min-width: 881px) {
-  .game-shell { grid-template-columns: minmax(480px, 680px); width: calc(100% - 24px); justify-items: center; }
+  .game-shell { grid-template-columns: minmax(680px, 820px); width: calc(100% - 24px); justify-items: center; }
   .battle-column { width: 100%; }
-  .control-panel { grid-column: 1; position: static; max-height: none; width: min(100%, 680px); justify-self: center; }
+  .control-panel { grid-column: 1; position: static; max-height: none; width: min(100%, 820px); justify-self: center; }
 }
 
 @media (max-width: 880px) {
   .game-shell { grid-template-columns: minmax(0, 1fr); width: calc(100% - 16px); padding: 12px 0 24px; gap: 16px; justify-items: center; }
   .battle-column { justify-content: center; width: 100%; }
-  .field-house-layout { width: min(100%, 680px, calc((100vh - 200px) * 9 / 14)); }
+  .field-house-layout { width: min(100%, 820px, calc((100vh - 200px) * 11 / 14)); }
   .control-panel { position: static; max-height: none; width: min(100%, 470px); order: 3; }
-  .top-status-strip { top: -76px; height: 40px; grid-template-columns: repeat(4, minmax(0, 1fr)) 42px; }
-  .top-status-item { gap: 4px; padding: 3px 4px; }
-  .top-status-item small { font-size: 5px; }
-  .top-status-item strong { font-size: 10px; }
-  .top-status-strip .hud-icon { font-size: 11px; }
-  .top-settings-button { font-size: 19px; }
   .glossary-modal { padding: 8px; }
   .glossary-card { width: calc(100vw - 16px); height: calc(100vh - 16px); padding: 11px; }
   .glossary-header h2 { font-size: 17px; }
@@ -3167,4 +3174,170 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   .tutorial-spotlight.tutorial-start-cue { animation: none; }
   .done-button.tutorial-start-cue { animation: none; }
   .tutorial-focus-highlight { animation: none; opacity: .82; }
+}
+
+/* Large-type interface scale.
+   The pixel face stays reserved for short display labels; running text remains
+   mono so it can grow without turning every panel into a wall of pixels. */
+:root { font-size: 14px; line-height: 1.4; }
+
+.phase-control-wing { padding: 10px; }
+.phase-status-panel { margin: 2px 2px 12px; padding: 10px; }
+.phase-titlebar { gap: 10px; margin-bottom: 10px; }
+.phase-titlebar h1 { font-size: 14px; line-height: 1.5; }
+.phase-settings-button.icon-button {
+  flex-basis: 38px;
+  width: 38px;
+  height: 38px;
+  font-size: 21px;
+}
+.phase-hud { gap: 7px; }
+.phase-hud-chip.hud-chip { min-height: 70px; aspect-ratio: auto; padding: 7px 5px; }
+.phase-hud-chip .hud-icon { font-size: 17px; }
+.phase-hud-chip.hud-chip strong { font-size: 18px; }
+.phase-hud-chip.hud-chip small { font-size: 8px; line-height: 1.25; }
+
+.phase-control-wing .shop-panel,
+.phase-control-wing .workbench-panel { padding: 10px; }
+.phase-control-wing .panel-heading { gap: 8px; margin-bottom: 9px; }
+.phase-control-wing .panel-heading h2 { margin-top: 3px; font-size: 13px; line-height: 1.45; }
+.phase-control-wing .panel-heading h2 small { font-size: 12px; }
+.phase-control-wing .tiny-label { font-size: 8px; line-height: 1.5; }
+.phase-control-wing .cart-actions { gap: 5px; }
+.phase-control-wing .cart-info-button { width: 34px; min-width: 34px; font-size: 11px; }
+.phase-control-wing .refresh-button { padding: 7px 8px; font-size: 11px; }
+.phase-control-wing .shop-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.phase-control-wing .shop-slot { gap: 5px; }
+.phase-control-wing .shop-card { padding: 7px 4px; }
+.phase-control-wing .shop-card canvas { width: 52px; height: 52px; }
+.phase-control-wing .shop-tier { top: 3px; left: 3px; padding: 2px 4px; font-size: 10px; }
+.phase-control-wing .shop-card strong {
+  display: flex;
+  min-height: 33px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.phase-control-wing .shop-card .ability-blurb {
+  min-height: 26px;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.phase-control-wing .shop-card .stats { gap: 6px; margin: 4px 0; font-size: 11px; }
+.phase-control-wing .price { padding: 3px 7px; font-size: 11px; }
+.phase-control-wing .shop-slot.unaffordable .price::before { font-size: 9px; }
+.phase-control-wing .shop-save { padding: 5px 3px; font-size: 10px; }
+.phase-control-wing .workbench-grid { gap: 7px; }
+.bench-slot > small { font-size: 9px; }
+.bench-slot .reserve-level { min-width: 22px; padding: 3px; font-size: 10px; }
+
+.phase-control-wing .message { margin-bottom: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
+.phase-control-wing .done-button { padding: 11px 8px; font-size: 13px; line-height: 1.35; }
+#done-label { font-size: 16px; line-height: 1.35; }
+.phase-control-wing .done-button small { margin-top: 6px; font-size: 10px; line-height: 1.45; }
+.phase-control-wing .tactics-panel { padding: 15px 13px; }
+.phase-control-wing .tactics-heading { gap: 4px; }
+.phase-control-wing .tactics-heading h2 { margin-top: 10px; font-size: 17px; line-height: 1.5; }
+.phase-control-wing .tactics-panel > p { margin: 12px 0 16px; font-size: 13px; line-height: 1.55; }
+.phase-control-wing .active-ability { padding: 11px 9px; }
+.phase-control-wing .active-ability b { font-size: 10px; line-height: 1.4; }
+.phase-control-wing .active-ability span { font-size: 12px; line-height: 1.5; }
+
+.preview-sign { width: min(230px, calc(100% - 18px)); padding: 8px 10px; }
+.preview-sign .tiny-label { font-size: 8px; }
+.preview-sign strong { margin-top: 5px; font-size: 12px; line-height: 1.4; }
+.preview-sign small { font-size: 11px; }
+.dog-preview-cell b { padding: 2px 4px; font-size: 10px; }
+.worker-slot .worker-badge { padding: 2px 4px; font-size: 10px; }
+.house-storage-grid .inventory-slot b,
+.inventory-slot b { min-width: 22px; padding: 1px 3px; font-size: 11px; }
+.station-output b { min-width: 25px; padding: 3px; font-size: 13px; }
+.station-output em { padding: 3px 5px; font-size: 8px; }
+.adoption-box-copy small { font-size: 9px; }
+.adoption-box-copy strong { font-size: 14px; }
+.adoption-box-copy em { font-size: 12px; line-height: 1.45; }
+.next-wave-adoption > b { font-size: 15px; }
+
+.unit-badge { min-width: 22px; height: 22px; padding: 2px 3px; font-size: 12px; }
+.equipment-marker b { min-width: 17px; height: 17px; font-size: 9px; }
+.equipment-uses { min-width: 18px; font-size: 8px; }
+.unit-status-guard b { font-size: 12px; }
+.unit-status-attack-up b,
+.unit-status-attack-down b { font-size: 9px; }
+.unit-status-frozen b { font-size: 11px; }
+.unit-status-tangled b { width: 19px; height: 19px; font-size: 9px; }
+.damage-number { font-size: 18px; }
+.damage-number.dmg-big { font-size: 24px; }
+.damage-number.dmg-huge { font-size: 32px; }
+.heal-number { font-size: 20px; }
+.wave-banner { padding: 12px 16px; font-size: 15px; }
+.turn-tag { padding: 8px 10px 7px; font-size: 10px; }
+
+.unit-tooltip { width: min(370px, calc(100vw - 24px)); padding: 13px 14px; }
+.unit-tooltip.is-grouped { width: min(760px, calc(100vw - 24px)); }
+.unit-tooltip.is-grouped .unit-tooltip-card { padding: 13px 14px; }
+.unit-tooltip strong { font-size: 17px; line-height: 1.35; }
+.unit-tooltip .tooltip-category,
+.glossary-entry .glossary-tier { padding: 3px 5px; font-size: 10px; line-height: 1.2; }
+.unit-tooltip .tooltip-stats { padding: 3px 7px; font-size: 14px; }
+.unit-tooltip .tooltip-attack { font-size: 14px; line-height: 1.5; }
+.unit-tooltip .tooltip-attack b { font-size: 11px; }
+.unit-tooltip .tooltip-note { font-size: 13px; line-height: 1.45; }
+.tooltip-effects-title { font-size: 9px; }
+.tooltip-effect-name { font-size: 9px; line-height: 1.35; }
+.tooltip-effect-value { font-size: 13px; }
+.tooltip-effect small { font-size: 12px; line-height: 1.4; }
+.move-limit-tooltip { width: min(310px, calc(100vw - 24px)); font-size: 14px; line-height: 1.5; }
+
+.glossary-header h2 { font-size: 28px; }
+.glossary-tabs button { min-height: 58px; font-size: 14px; }
+.glossary-entry { height: max-content; min-height: 224px; }
+.glossary-entry small { font-size: 12px; }
+.glossary-entry h3 { font-size: 15px; line-height: 1.45; }
+.glossary-entry b { font-size: 15px; }
+.glossary-entry p { font-size: 14px; line-height: 1.55; }
+.glossary-entry em { font-size: 13px; line-height: 1.45; }
+
+.settings-card { width: min(500px, calc(100vw - 32px)); padding: 20px; }
+.settings-header h2 { font-size: 22px; }
+.settings-row { gap: 12px; padding: 15px; }
+.settings-row strong { font-size: 17px; }
+.settings-row small { font-size: 13px; line-height: 1.4; }
+.settings-row output { min-width: 66px; padding: 7px 8px 6px; font-size: 12px; }
+.settings-range-labels { font-size: 9px; }
+.settings-hint { font-size: 13px; line-height: 1.5; }
+.settings-link-button { padding: 13px 15px; }
+.settings-link-button small { font-size: 9px; }
+.settings-link-button strong { font-size: 16px; }
+.settings-link-button > b { width: 36px; height: 36px; flex-basis: 36px; font-size: 12px; }
+
+.result-card { width: min(440px, calc(100vw - 32px)); padding: 25px; }
+.result-card > p:first-of-type { font-size: 13px; }
+.result-card h2 { font-size: 22px; line-height: 1.4; }
+.result-card p { font-size: 15px; line-height: 1.5; }
+.upgrade-callout { font-size: 15px; }
+.upgrade-reveal em { font-size: 13px; }
+.upgrade-reveal.upgrade-level-up .upgrade-callout { font-size: 17px; }
+.upgrade-reveal.upgrade-ultimate .upgrade-callout { font-size: 18px; }
+
+.tutorial-bubble { width: min(420px, calc(100vw - 28px)); max-width: 420px; padding: 20px 24px; }
+.tutorial-bubble p { margin-bottom: 16px; font-size: 18px; line-height: 1.55; }
+.tutorial-next { padding: 10px 18px; font-size: 15px; }
+.tutorial-skip { padding: 10px 14px; font-size: 14px; }
+
+@media (max-width: 880px) {
+  .phase-titlebar h1 { font-size: 11px; }
+  .phase-settings-button.icon-button { flex-basis: 34px; width: 34px; height: 34px; }
+  .phase-hud-chip.hud-chip { min-height: 52px; padding: 5px 3px; }
+  .phase-hud-chip.hud-chip strong { font-size: 15px; }
+  .phase-control-wing .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .phase-control-wing .panel-heading h2 { font-size: 11px; }
+  .phase-control-wing .shop-card strong { min-height: 30px; font-size: 11px; }
+  .glossary-header h2 { font-size: 20px; }
+  .glossary-tabs button { font-size: 10px; }
 }

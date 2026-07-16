@@ -13,21 +13,29 @@
 
     <section class="battle-column" aria-label="Backyard battlefield">
       <div class="field-house-layout">
-        <section class="top-status-strip" aria-label="Game status">
-          <div class="top-status-item"><span class="hud-icon coin" aria-hidden="true">●</span><span><small>GOLD</small><strong id="gold">10</strong></span></div>
-          <div class="top-status-item"><span class="hud-icon heart" aria-hidden="true">♥</span><span><small>LIVES</small><strong id="lives">3</strong></span></div>
-          <div class="top-status-item"><span><small>ROUND</small><strong id="round">1/10</strong></span></div>
-          <div class="top-status-item"><span><small>SQUAD</small><strong id="squad-count">0/5</strong></span></div>
-          <button id="settings" class="icon-button top-settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
-        </section>
         <aside id="phase-control-wing" class="phase-control-wing is-planning" aria-label="Planning controls">
+          <section class="phase-status-panel" aria-label="Game information">
+            <header class="phase-titlebar">
+              <h1>CATS <span>VS</span> DOGS</h1>
+              <button id="settings" class="icon-button phase-settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+            </header>
+            <section class="phase-hud" aria-label="Game status">
+              <div class="hud-chip phase-hud-chip"><span class="hud-icon coin" aria-hidden="true">●</span><strong id="gold">10</strong><small>GOLD</small></div>
+              <div class="hud-chip phase-hud-chip"><span class="hud-icon heart" aria-hidden="true">♥</span><strong id="lives">3</strong><small>LIVES</small></div>
+              <div class="hud-chip phase-hud-chip"><strong id="round">1/10</strong><small>ROUND</small></div>
+              <div class="hud-chip phase-hud-chip"><strong id="squad-count">0/5</strong><small>SQUAD</small></div>
+              <button id="speed-toggle" class="hud-chip phase-hud-chip speed-chip" type="button" aria-label="Toggle combat speed" aria-pressed="false" title="Toggle combat speed"><strong id="speed-label">1×</strong><small>SPEED</small></button>
+              <button id="pause-toggle" class="hud-chip phase-hud-chip pause-chip" type="button" aria-label="Pause combat" aria-pressed="false" title="Pause combat"><strong id="pause-label">Ⅱ</strong><small>PAUSE</small></button>
+            </section>
+          </section>
+
           <section id="planning-panel" class="planning-panel">
             <section id="shop-panel" class="shop-panel">
               <div class="panel-heading">
-                <div><span class="tiny-label">PICK YOUR DEFENDERS</span><h2>Cat Cart</h2></div>
+                <div><h2>Cat Cart</h2></div>
                 <div class="cart-actions">
                   <button id="cart-info" class="cart-info-button" type="button" aria-label="Open Cat and Dog Glossary" title="Cat &amp; Dog Glossary">i</button>
-                  <button id="refresh" class="refresh-button"><span>↻</span> Refresh <b>1</b></button>
+                  <button id="refresh" class="refresh-button">Refresh <b>1</b></button>
                 </div>
               </div>
               <div id="shop" class="shop-grid"></div>
@@ -38,7 +46,6 @@
                 <div><span class="tiny-label">RESERVE · MERGE · DEPLOY</span><h2>Cat Workbench <small id="bench-count">0/3</small></h2></div>
               </div>
               <div id="workbench" class="workbench-grid"></div>
-              <p class="workbench-help">Hold, merge, then deploy.</p>
             </section>
           </section>
 
@@ -53,7 +60,7 @@
 
           <section class="round-controls phase-action">
             <p id="message" class="message" role="status">Build your team, then start the round.</p>
-            <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Unspent gold is lost — spend it! · Clear every dog to win</small></button>
+            <button id="done" class="done-button" hidden><span id="done-label">START ROUND 1</span><small>Spend every coin · Clear every dog to win</small></button>
           </section>
         </aside>
         <aside class="house-wing" aria-label="Production House">
@@ -68,11 +75,11 @@
             <canvas id="yard-art" width="192" height="448" aria-hidden="true"></canvas>
             <div id="grid" class="grid"></div>
             <aside id="next-wave-zone" class="dog-lawn-preview next-wave-zone" aria-label="Next dog wave preview">
-              <div class="preview-sign">
-                <span class="tiny-label">SCOUT REPORT</span>
-                <strong>NEXT WAVE <small id="preview-round">ROUND 1</small></strong>
-              </div>
-              <div id="dog-preview-grid" class="dog-preview-grid"></div>
+              <button id="next-wave-toggle" class="preview-sign" type="button" aria-label="Tap here to see next wave" aria-pressed="false">
+                <span class="tiny-label">Tap here to see</span>
+                <strong id="next-wave-toggle-label">NEXT WAVE</strong>
+              </button>
+              <div id="dog-preview-grid" class="dog-preview-grid" hidden></div>
               <section id="next-wave-adoption" class="next-wave-adoption" aria-label="Adoption Box sell target" hidden>
                 <span class="adoption-box-icon" aria-hidden="true">▱</span>
                 <span class="adoption-box-copy">

@@ -170,20 +170,28 @@ export function dogPreviewQueue(dogs = []) {
     .map(({ dog }) => dog);
 }
 
-/** Place scout-report dogs over their future battlefield lanes without mutating them. */
-export function dogPreviewPlacements(dogs = [], rows = 10, cols = 6) {
-  const occupied = new Set();
-  return dogPreviewQueue(dogs).map((dog, index) => {
-    const fallbackCol = index % cols;
-    const col = Number.isInteger(dog.col)
-      ? Math.max(0, Math.min(cols - 1, dog.col))
-      : fallbackCol;
-    const arrival = Math.max(0, Math.floor(Number(dog.appearanceIndex) || 0));
-    let row = Math.min(rows - 1, 2 + arrival * 2);
-    while (row < rows - 1 && occupied.has(`${row}:${col}`)) row += 1;
-    occupied.add(`${row}:${col}`);
-    return { dog, row, col };
-  });
+/** Fill the Scout Report's middle four columns in reading order without mutating dogs. */
+export function dogPreviewPlacements(dogs = [], rows = 8, cols = 4) {
+  const safeRows = Math.max(1, Math.floor(Number(rows) || 1));
+  const safeCols = Math.max(1, Math.floor(Number(cols) || 1));
+  const capacity = safeRows * safeCols;
+  const queue = dogPreviewQueue(dogs);
+  const grouped = queue.length > capacity;
+  const entries = grouped
+    ? [...queue.reduce((types, dog) => {
+      const type = dog.role ?? dog.kind ?? dog.name ?? dog.id;
+      const existing = types.get(type);
+      if (existing) existing.count += 1;
+      else types.set(type, { dog, count: 1, grouped: true });
+      return types;
+    }, new Map()).values()]
+    : queue.map((dog) => ({ dog, count: 1, grouped: false }));
+
+  return entries.slice(0, capacity).map((entry, index) => ({
+    ...entry,
+    row: 1 + Math.floor(index / safeCols),
+    col: 1 + (index % safeCols),
+  }));
 }
 
 /** Living dogs Storm would hit in the hovered battlefield column. */

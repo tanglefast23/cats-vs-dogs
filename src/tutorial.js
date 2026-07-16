@@ -194,9 +194,9 @@ export const CORE_STEPS = [
   // Round 1 — the core loop
   { id: 'r1-stakes', round: 1, mode: 'tap', spotlight: '#board',
     text: "Dogs charge down these 6 lanes. If one reaches your house you lose a life — lose all 3 and it's game over." },
-  { id: 'r1-scout', round: 1, mode: 'tap', spotlight: '#dog-preview-grid',
+  { id: 'r1-scout', round: 1, mode: 'tap', spotlight: '#next-wave-toggle',
     completeOnActions: ['purchase-place', 'purchase-bench', 'purchase-merge'],
-    text: "This Scout Report shows which dogs are coming. Check it each round so you buy the right defenders." },
+    text: "Tap NEXT WAVE to see which dogs are coming. Tap Hide next wave to return to the dogs already on the battlefield." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,

@@ -335,6 +335,15 @@ test('the first placement lesson mutes the unrelated dog preview lane', () => {
     '.dog-lawn-preview');
 });
 
+test('tutorial targets follow the relocated planning, scout, adoption, and tactics UI', () => {
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r1-scout').spotlight, '#next-wave-toggle');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').spotlight, '#shop');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r1-start').spotlight, '#done');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').spotlight, '#next-wave-zone');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').dragTo, '#next-wave-zone');
+  assert.equal(TIPS.find((tip) => tip.id === 'tip-ability').spotlight, '#tactics-panel');
+});
+
 test('every tip is well-formed with a trigger', () => {
   assert.ok(TIPS.length > 0);
   for (const tip of TIPS) {
