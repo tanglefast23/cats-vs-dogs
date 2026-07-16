@@ -278,7 +278,7 @@ test('every core step is well-formed', () => {
     assert.ok(typeof step.text === 'function' || (typeof step.text === 'string' && step.text.length > 0));
     assert.ok(['tap', 'gate'].includes(step.mode));
     if (step.mode === 'gate') assert.equal(typeof step.isDone, 'function');
-    if (step.spotlight !== null) assert.equal(typeof step.spotlight, 'string');
+    if (step.spotlight !== null) assert.ok(['string', 'function'].includes(typeof step.spotlight));
     if (step.dragFrom) assert.ok(['string', 'function'].includes(typeof step.dragFrom));
     if (step.dragTo) assert.ok(['string', 'function'].includes(typeof step.dragTo));
     if (step.dragHints) assert.equal(typeof step.dragHints, 'function');
