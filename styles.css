@@ -87,7 +87,8 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 /* Cat works on the left half of its square; the appliance sits beside it on the right. */
 .worker-slot > canvas.slot-cat { position: absolute; left: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
 .worker-slot > canvas.slot-station { position: absolute; right: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
-.worker-slot.is-working { z-index: 2; overflow: visible; }
+/* Above the house roofline brick (z 6) so a mid-walk cat is never clipped behind it. */
+.worker-slot.is-working { z-index: 7; overflow: visible; }
 .worker-slot.is-working > canvas.slot-cat { z-index: 3; will-change: transform; }
 .worker-slot .worker-badge { position: absolute; left: 2px; top: 2px; padding: 1px 3px; border: 1px solid var(--ink); background: #ffe56e; font-size: 8px; font-weight: 900; }
 .worker-slot .copy-pips { z-index: 2; }
@@ -247,13 +248,15 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   0%, 100% { transform: rotate(32deg) translateY(-2%); }
   45%, 58% { transform: rotate(-48deg) translate(-8%, 12%); }
 }
+/* Work loops: the cat walks RIGHT to its appliance, works on it, then walks home. */
 @keyframes smith-pounding {
-  0%, 8%, 100% { transform: translateY(0) rotate(0); }
-  20% { transform: translateY(-72%) rotate(2deg); }
-  34%, 58% { transform: translate(-2%, -78%) rotate(3deg); }
-  46%, 70% { transform: translate(2%, -69%) rotate(-3deg); }
-  84% { transform: translateY(-72%) rotate(1deg); }
-  94% { transform: translateY(-18%) rotate(0); }
+  0%, 4%, 100% { transform: translateX(0) rotate(0); }
+  10% { transform: translate(30%, -5%) rotate(2deg); }
+  20% { transform: translateX(78%) rotate(0); }
+  32%, 56% { transform: translate(74%, -6%) rotate(3deg); }
+  44%, 68% { transform: translate(82%, 2%) rotate(-3deg); }
+  80% { transform: translateX(78%) rotate(1deg); }
+  90% { transform: translate(34%, -5%) rotate(0); }
 }
 @keyframes forge-spark-pop {
   0%, 40%, 100% { opacity: 0; transform: translate(0, 0) scale(.2); }
@@ -270,34 +273,39 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   78% { opacity: .35; transform: scale(.72) rotate(40deg); }
 }
 @keyframes cook-stirring {
-  0%, 8%, 100% { transform: translateY(0) rotate(0); }
-  20% { transform: translateY(-72%) rotate(-2deg); }
-  34%, 58% { transform: translate(-3%, -78%) rotate(-3deg); }
-  46%, 70% { transform: translate(3%, -70%) rotate(3deg); }
-  84% { transform: translateY(-73%) rotate(-1deg); }
-  94% { transform: translateY(-18%) rotate(0); }
+  0%, 4%, 100% { transform: translateX(0) rotate(0); }
+  10% { transform: translate(30%, -5%) rotate(-2deg); }
+  20% { transform: translateX(78%) rotate(0); }
+  32%, 56% { transform: translate(74%, -6%) rotate(-3deg); }
+  44%, 68% { transform: translate(82%, 2%) rotate(3deg); }
+  80% { transform: translateX(78%) rotate(-1deg); }
+  90% { transform: translate(34%, -5%) rotate(0); }
 }
 @keyframes trader-counting {
-  0%, 8%, 100% { transform: translateY(0) rotate(0); }
-  20% { transform: translateY(-72%) rotate(2deg); }
-  34%, 58% { transform: translate(-3%, -77%) rotate(2deg); }
-  46%, 70% { transform: translate(3%, -69%) rotate(-2deg); }
-  84% { transform: translateY(-72%) rotate(1deg); }
-  94% { transform: translateY(-18%) rotate(0); }
+  0%, 4%, 100% { transform: translateX(0) rotate(0); }
+  10% { transform: translate(30%, -5%) rotate(2deg); }
+  20% { transform: translateX(78%) rotate(0); }
+  32%, 56% { transform: translate(74%, -5%) rotate(2deg); }
+  44%, 68% { transform: translate(82%, 2%) rotate(-2deg); }
+  80% { transform: translateX(78%) rotate(1deg); }
+  90% { transform: translate(34%, -5%) rotate(0); }
 }
 @keyframes armourer-polishing {
-  0%, 8%, 100% { transform: translateY(0) rotate(0); }
-  20% { transform: translateY(-72%) rotate(-2deg); }
-  34%, 58% { transform: translate(-4%, -77%) rotate(-3deg); }
-  46%, 70% { transform: translate(4%, -69%) rotate(3deg); }
-  84% { transform: translateY(-72%) rotate(-1deg); }
-  94% { transform: translateY(-18%) rotate(0); }
+  0%, 4%, 100% { transform: translateX(0) rotate(0); }
+  10% { transform: translate(30%, -5%) rotate(-2deg); }
+  20% { transform: translateX(78%) rotate(0); }
+  32%, 56% { transform: translate(74%, -6%) rotate(-3deg); }
+  44%, 68% { transform: translate(82%, 2%) rotate(3deg); }
+  80% { transform: translateX(78%) rotate(-1deg); }
+  90% { transform: translate(34%, -5%) rotate(0); }
 }
-.worker-slot.has-output { z-index: 5; overflow: visible; isolation: isolate; }
-/* The finished item pops up over the appliance half as the tap-to-collect button. */
+.worker-slot.has-output { overflow: visible; }
+/* The finished item pops up over the appliance half as the tap-to-collect button.
+   The slot deliberately creates NO stacking context here, so the output's z-index
+   competes at page level and paints above the neighbouring square's background. */
 .station-output {
   position: absolute;
-  z-index: 5;
+  z-index: 8;
   inset: -5px -5px -5px auto;
   width: 52%;
   display: grid;
@@ -706,7 +714,6 @@ h1 span { color: var(--orange); font-size: .75em; }
 }
 .cart-info-button:hover { background: #fff1a2; }
 .refresh-button, .small-button { border: 2px solid var(--ink); background: #d8eec4; padding: 6px 8px; font-size: 10px; font-weight: 900; box-shadow: 2px 2px 0 var(--ink); cursor: pointer; }
-.refresh-button b { background: #e4a928; padding: 1px 4px; border: 1px solid var(--ink); }
 .refresh-button:disabled, .small-button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .sell-button { background: #f0b56d; }
 .sell-button:not(:disabled):hover { background: #ffd07b; transform: translateY(-1px); }
@@ -796,10 +803,7 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .shop-card strong { display: block; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-card .ability-blurb { display: block; margin-top: 1px; font-size: 8px; font-weight: 700; letter-spacing: .2px; color: #5c6f78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-card .stats { display: flex; justify-content: center; gap: 6px; font-size: 9px; margin: 3px 0; }
-.price { display: inline-block; padding: 2px 7px; background: #e4a928; border: 2px solid var(--ink); font-size: 10px; font-weight: 900; }
 .shop-slot.unaffordable .shop-card { opacity: 1; filter: none; }
-.shop-slot.unaffordable .price { background: #d84a45; color: #fff8dc; box-shadow: 2px 2px 0 #7e2928; }
-.shop-slot.unaffordable .price::before { content: 'NEED '; font-size: 7px; letter-spacing: .4px; }
 .shop-card.purchase-denied { animation: purchase-denied .52s steps(6); z-index: 3; }
 .hud-chip.gold-denied { animation: gold-denied .52s steps(5); }
 @keyframes purchase-denied {
@@ -2590,8 +2594,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
   text-overflow: clip;
 }
 .shop-card .stats { gap: 7px; margin: 4px 0; font-size: 11px; }
-.price { padding: 3px 8px; font-size: 11px; }
-.shop-slot.unaffordable .price::before { font-size: 9px; letter-spacing: .3px; }
 .shop-save { padding: 5px 2px; font-size: 11px; letter-spacing: .3px; }
 
 .message { min-height: 42px; padding: 9px 10px; font-size: 12px; line-height: 1.45; }
@@ -2647,8 +2649,6 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
   line-height: 1.25;
 }
 .phase-control-wing .shop-card .stats { gap: 3px; margin: 2px 0; font-size: 8px; }
-.phase-control-wing .price { padding: 2px 4px; font-size: 8px; }
-.phase-control-wing .shop-slot.unaffordable .price::before { font-size: 6px; }
 .phase-control-wing .shop-save { padding: 3px 1px; font-size: 7px; }
 .phase-control-wing .workbench-grid { gap: 4px; }
 .phase-control-wing .message { min-height: 0; margin-bottom: 6px; padding: 7px; font-size: 9px; line-height: 1.35; }
@@ -3194,8 +3194,6 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   line-height: 1.35;
 }
 .phase-control-wing .shop-card .stats { gap: 6px; margin: 4px 0; font-size: 11px; }
-.phase-control-wing .price { padding: 3px 7px; font-size: 11px; }
-.phase-control-wing .shop-slot.unaffordable .price::before { font-size: 9px; }
 .phase-control-wing .shop-save { padding: 5px 3px; font-size: 10px; }
 .phase-control-wing .workbench-grid { gap: 7px; }
 .bench-slot > small { font-size: 9px; }

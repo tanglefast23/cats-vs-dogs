@@ -242,12 +242,12 @@ test('temporary cat and dog statuses provide large-marker values and plain-langu
   ]);
 });
 
-test('Cat Cart summaries contain only badge, name, and cost', () => {
+test('Cat Cart summaries contain only badge and name', () => {
   assert.deepEqual(shopCardSummary({ category: 'fighter', sold: false }, { shopTier: 3, name: 'Laserpaw' }), {
-    badge: 'T3', name: 'Laserpaw', cost: 3,
+    badge: 'T3', name: 'Laserpaw',
   });
   assert.deepEqual(shopCardSummary({ category: 'worker', sold: false }, { name: 'Cashmere Cat' }), {
-    badge: 'WORK', name: 'Cashmere Cat', cost: 3,
+    badge: 'WORK', name: 'Cashmere Cat',
   });
 });
 

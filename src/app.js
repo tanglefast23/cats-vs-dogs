@@ -368,8 +368,7 @@ function renderShop() {
     button.append(unitCanvas(isWorker ? 'worker' : 'cat', slot));
     button.insertAdjacentHTML('beforeend', `
       <span class="shop-tier">${summary.badge}</span>
-      <strong>${summary.name}</strong>
-      <span class="price">● ${summary.cost}</span>`);
+      <strong>${summary.name}</strong>`);
     if (hasOwnedMatch) {
       button.title = 'Matching cat owned — drag this shop cat onto it to stack.';
       button.setAttribute('aria-label', `Level ${slot.level ?? 1} ${info.name}. Matching cat owned; drag onto it to stack.`);
