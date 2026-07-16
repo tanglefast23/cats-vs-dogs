@@ -10,8 +10,10 @@ Three connected things, built on one system:
 1. **Every cat and dog attack has its own graphics** — including the effect it leaves
    behind. Bombay Boom's splash must read as a bomb exploding across every square it
    damages, not as stray pellets.
-2. **Every cat and dog has its own hurt reaction** — a red flash plus a recoil and an
-   impact mark that matches whatever hit it (a bite, a tennis ball, a bone, a beam).
+2. **Every attack + dog combination has an animation** — the attack supplies the contact
+   effect (claw, pellet, yarn, bomb, beam), while each dog role performs its own reaction.
+   Chomps braces, Barkour bounces, Sir Flinches recoils, and the other roles remain just
+   as recognizable while being hit.
 3. **Every cat and dog has its own death animation** — it flips over, lands on its back
    in its own funny way, then flashes and fades out.
 
@@ -26,7 +28,7 @@ damage event. So an area attack — which is *one* projectile and *one* blast hi
 | Bombay Boom splash | `splash` + one `splash-secondary` per neighbour | a ball, then more balls flying sideways | one lobbed bomb, one explosion covering all 3 squares |
 | Bone Jovi bomb | `bone-bomb` + `bone-bomb-secondary` | same bug | same fix |
 | Laserpaw pierce | 3 × `piercing` | 3 separate balls | one beam through all 3 dogs |
-| Knotty Kitty tangle | `tangle` | generic yellow ball (no CSS rule exists) | yarn ball trailing string, dog left tethered |
+| Knotty Kitty tangle | `tangle` | generic yellow ball (no CSS rule exists) | spinning yarn ball thrown in an arc, followed by yarn visibly cinching around the exact dog |
 | Purrcy volley | 3 × `column` burst | 3 balls, no muzzle | 3 pellets with muzzle flash |
 | Frosty / Purrtal / Faux Paw / Thunderpaws / Meowstro | `homing` | all five share Hissiletoe's projectile | one skin each |
 
@@ -41,10 +43,28 @@ damage events and start being keyed to *attacks*.
 ```
 engine events ──► group into attacks ──► ATTACK_FX ──► projectile / path / impact
                         │
-                        ├─ per victim ──► HURT_FX  ──► red flash + recoil + source mark
+                        ├─ dog victim ──► ATTACK_DOG_FX ──► source mark + that dog's reaction
+                        ├─ cat victim ──► HURT_FX  ──► red flash + recoil + source mark
                         │
                         └─ hpAfter === 0 ──► DEATH_FX ──► flip, flop, strobe, fade
 ```
+
+## Overall animation rule: cover the complete attack × dog matrix
+
+An attack is not visually complete when only its projectile exists. It is complete when
+the projectile and the dog response read as one cause-and-effect combination. Every cat
+attack signature must therefore resolve against every dog role in `ATTACK_DOG_FX`.
+
+- **Attack half:** flight/path, muzzle, impact mark, weight, and sound.
+- **Dog half:** a role-specific performance such as brace, spin, duck, yelp, rattle,
+  bounce, flinch, stumble, or snarl.
+- **Status half:** if the attack applies a visible status, it must attach to the exact dog
+  that received it, including either dog in a stacked square. Knotty's yarn uses a fitted
+  bind for every dog silhouette instead of drawing one generic ring on the board cell.
+- **Shipping gate:** tests enumerate every attack signature against every dog role. Adding
+  either one without completing the combinations must fail the suite.
+
+This is the default rule for all future attacks, not a Knotty-only exception.
 
 ### New module: `src/battle-fx.js` (pure, testable)
 
@@ -56,10 +76,13 @@ Holds the attack graphics registry and the geometry helpers. No DOM.
   The caster is looked up in the pre-section game snapshot, so **the engine does not
   change**.
 - `ATTACK_FX[signature]` — `{ projectile, path, muzzle, impact, blast, hurt, sound }`.
-  `path` is one of `straight | lob | homing | beam | melee`. `blast` is set only for area
-  attacks and names the footprint rule.
+  `path` is one of `straight | lob | homing | yarn-throw | beam | melee`. `blast` is set
+  only for area attacks and names the footprint rule.
 - `HURT_FX[kind]` — `{ mark, recoil, shake, flash }`. `mark` is the source-specific
   decal: `chomp`, `dent`, `slice`, `thud`, `scorch`, `frost`, `burn`, `rake`, `spark`.
+- `DOG_REACTION_FX[role]` — the role's hit performance plus its fitted yarn-bind shape.
+- `ATTACK_DOG_FX[signature][role]` — the complete combination contract produced from the
+  attack and dog registries. Runtime rendering and matrix tests both read this table.
 - `blastCells(row, col, cols)` — the squares an explosion covers. Mirrors the engine's
   own splash rule exactly (target square plus the adjacent columns in the same row), so
   the fire lands on precisely the dogs that took damage. This is the single source of
@@ -145,6 +168,10 @@ relative to wherever the unit already sits.
 - every attack style the engine can emit resolves to an `ATTACK_FX` entry, so a new
   ability cannot silently fall back to a generic ball (this is the bug class that hid
   the bomb explosion);
+- every cat attack signature resolves against every dog role in `ATTACK_DOG_FX`, and all
+  dog roles have distinct hit reactions and fitted yarn-bind choreography;
+- Knotty's yarn follows a thrown arc whose midpoint lifts above a straight shot, lands on
+  the target, and wraps that target's DOM unit rather than the underlying board cell;
 - `blastCells` matches the engine's splash targeting for every board position, including
   the board edges where a column is clipped;
 - `contactVector` points from attacker to victim for all eight directions.
@@ -158,6 +185,9 @@ closes it.
 Browser verification (done): the bomb blast covers all three damaged squares with one
 explosion and no stray projectiles; Laserpaw fires one beam through three dogs rather than
 three shots; a bitten cat flips over; and three different dogs each fall in their own way.
+Knotty's projectile reads as a large spinning yarn ball with a loose trailing strand; on
+contact, the bind attaches to the exact dog and resolves as three yarn strands plus a knot
+without hiding the dog silhouette. The live playthrough reported no console or page errors.
 
 ## Out of scope
 

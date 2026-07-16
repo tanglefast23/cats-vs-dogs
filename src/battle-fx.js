@@ -1,4 +1,4 @@
-import { COLS, plusCells } from './game-engine.js';
+import { COLS, DOG_ROLE, plusCells } from './game-engine.js';
 
 /**
  * The graphics registry for every attack in the game, and for the mark each attack
@@ -20,6 +20,12 @@ export const ENGINE_ATTACK_STYLES = Object.freeze([
   'frost', 'rift', 'mirage', 'spark', 'note',
   // Dogs
   'bite', 'tennis', 'frisbee', 'bone-bomb', 'bone-bomb-secondary',
+]);
+
+/** Cat attacks that can land on a dog. Kept explicit so tests cover the full matrix. */
+export const CAT_ATTACK_SIGNATURES = Object.freeze([
+  'column', 'melee', 'homing', 'frost', 'rift', 'mirage', 'spark', 'note', 'tangle',
+  'bomb', 'bomb-cross', 'bomb-cross-secondary', 'piercing', 'encore', 'lightning',
 ]);
 
 /**
@@ -81,7 +87,7 @@ export const ATTACK_FX = Object.freeze({
   },
   // Knotty Kitty: yarn that trails a string and leaves the dog tethered.
   tangle: {
-    projectile: 'yarn', path: 'homing', muzzle: null, impact: 'wrap', tether: true, heavy: false,
+    projectile: 'yarn', path: 'yarn-throw', muzzle: null, impact: 'wrap', tether: true, heavy: false,
   },
   // Bombay Boom's regular attack: one lobbed bomb, one target square.
   bomb: {
@@ -158,6 +164,48 @@ export const HURT_FX = Object.freeze({
   warp: { mark: 'warp', recoil: 0.12, shake: 'soft' },
   chime: { mark: 'chime', recoil: 0.12, shake: 'soft' },
 });
+
+/**
+ * The part of a hit reaction that belongs to the dog, not the attack.
+ *
+ * HURT_FX says what a pellet, claw, bomb, or yarn impact does. This table says how each
+ * dog performs that hit: Chomps braces, Barkour springs, Sir Flinches recoils, and so on.
+ * `bind` is the yarn choreography fitted to that dog's silhouette.
+ */
+export const DOG_REACTION_FX = Object.freeze({
+  [DOG_ROLE.SCRUFFY]: Object.freeze({ reaction: 'brace', bind: 'barrel' }),
+  [DOG_ROLE.FRISBEE]: Object.freeze({ reaction: 'spin', bind: 'wing' }),
+  [DOG_ROLE.TENNIS]: Object.freeze({ reaction: 'duck', bind: 'visor' }),
+  [DOG_ROLE.HOWLER]: Object.freeze({ reaction: 'yelp', bind: 'howl' }),
+  [DOG_ROLE.LOBBER]: Object.freeze({ reaction: 'rattle', bind: 'cannon' }),
+  [DOG_ROLE.JUMPER]: Object.freeze({ reaction: 'bounce', bind: 'spring' }),
+  [DOG_ROLE.SKITTISH]: Object.freeze({ reaction: 'flinch', bind: 'cocoon' }),
+  [DOG_ROLE.MEDIC]: Object.freeze({ reaction: 'stumble', bind: 'medic' }),
+  [DOG_ROLE.GROWLER]: Object.freeze({ reaction: 'snarl', bind: 'collar' }),
+});
+
+/**
+ * Complete attack × dog contract. Every cat attack is paired with every dog role.
+ * The attack contributes its contact flavour; the dog contributes its own performance.
+ */
+export const ATTACK_DOG_FX = Object.freeze(Object.fromEntries(
+  CAT_ATTACK_SIGNATURES.map((signature) => [
+    signature,
+    Object.freeze(Object.fromEntries(
+      Object.values(DOG_ROLE).map((role) => [
+        role,
+        Object.freeze({ impact: ATTACK_FX[signature].impact, ...DOG_REACTION_FX[role] }),
+      ]),
+    )),
+  ]),
+));
+
+/** Resolve one attack hitting one dog, with safe fallbacks for old saves or unknown data. */
+export function attackDogFx(signature, role) {
+  const safeSignature = ATTACK_DOG_FX[signature] ? signature : 'homing';
+  const safeRole = DOG_REACTION_FX[role] ? role : DOG_ROLE.SCRUFFY;
+  return ATTACK_DOG_FX[safeSignature][safeRole];
+}
 
 /** The graphics key for one damage event, refining the six shared homing cats by coat. */
 export function attackSignature(event, caster = null) {

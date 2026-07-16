@@ -12,19 +12,21 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
-import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from './combat-animation.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
 import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
-  ATTACK_FX, HURT_FX, attackSignature, attackGroupKey, blastFootprint, contactVector, isKill,
+  ATTACK_FX, HURT_FX, attackDogFx, attackSignature, attackGroupKey, blastFootprint,
+  contactVector, isKill,
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
 import {
-  CORE_STEPS, TIPS, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
+  CORE_STEPS, TIPS, confirmTutorialSkip, tutorialMergeTaskForDrop,
+  refreshTutorialShop, tutorialShop, tutorialWave,
 } from './tutorial.js';
 
 let game = createGame();
@@ -45,9 +47,10 @@ let tutorialActive = false;
 let tutorialStepIndex = 0;
 const tutorialSeenTips = new Set();
 let tutorialCurrentTip = null;
-let dragHintKey = null;
-let dragHintAnim = null;
+const tutorialCompletedMergeTasks = new Set();
+const dragHintAnimations = new Map();
 let tutorialStartNudged = false;
+let gameSessionId = 0;
 
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
@@ -94,10 +97,7 @@ const tutorialMutedRegionEl = $('#tutorial-muted-region');
 const tutorialBubbleEl = $('#tutorial-bubble');
 const tutorialTextEl = $('#tutorial-text');
 const tutorialNextEl = $('#tutorial-next');
-const tutorialDropTargetEl = $('#tutorial-drop-target');
-const tutorialDragGhostEl = $('#tutorial-drag-ghost');
-const tutorialDragUnitEl = $('#tutorial-drag-unit');
-const tutorialSourceHighlightEl = $('#tutorial-source-highlight');
+const tutorialDragHintsEl = $('#tutorial-drag-hints');
 
 let tooltipEl = document.querySelector('.unit-tooltip');
 if (!tooltipEl) {
@@ -561,11 +561,22 @@ function playPendingUpgrade() {
   }, UPGRADE_TIMING.totalMs);
 }
 
+function recordTutorialMergeTask(action, source) {
+  if (!tutorialActive || game.round !== 2 || game.phase !== 'prep') return;
+  const task = tutorialMergeTaskForDrop(action, source);
+  if (task) tutorialCompletedMergeTasks.add(task);
+}
+
 function tryMerge(targetType, targetId) {
   if (!selected || (selected.type !== 'bench' && selected.type !== 'cat')) return false;
+  const sourceType = selected.type;
+  const source = sourceType === 'bench'
+    ? game.bench.find((cat) => cat.id === selected.id)
+    : game.cats.find((cat) => cat.id === selected.id);
   const before = game;
   game = mergeUnitOnto(game, selected.type, selected.id, targetType, targetId);
   if (game === before) return false;
+  recordTutorialMergeTask({ type: 'merge', targetType }, { ...source, type: sourceType });
   const reveal = queueUpgradeReveal(before, game, targetType, targetId);
   selected = null;
   game.message = reveal?.kind === 'level-up'
@@ -1031,6 +1042,7 @@ async function finishDrag(event, cancelled = false) {
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
+    recordTutorialMergeTask(action, state.source);
     const workerAction = action.type.includes('worker');
     game.message = action.type === 'sell' || action.type === 'tactics-move' || workerAction
       ? game.message
@@ -1362,7 +1374,30 @@ function showBombTargetPreview(row, col) {
   }
 }
 
-gridEl.addEventListener('pointerleave', clearBombTargetPreview);
+function clearStormTargetPreview() {
+  gridEl.querySelectorAll('.storm-preview-column')
+    .forEach((cell) => cell.classList.remove('storm-preview-column'));
+  gridEl.querySelectorAll('.storm-preview-dog')
+    .forEach((dog) => dog.classList.remove('storm-preview-dog'));
+}
+
+function showStormTargetPreview(col) {
+  clearStormTargetPreview();
+  if (activeTargeting?.mode !== 'storm') return;
+  gridEl.querySelectorAll(`.cell[data-col="${col}"]`)
+    .forEach((cell) => cell.classList.add('storm-preview-column'));
+  const affectedDogIds = new Set(stormTargetDogIds(game.dogs, col));
+  gridEl.querySelectorAll('.unit.dog-unit').forEach((dog) => {
+    dog.classList.toggle('storm-preview-dog', affectedDogIds.has(dog.dataset.unitId));
+  });
+}
+
+function clearAbilityTargetPreview() {
+  clearBombTargetPreview();
+  clearStormTargetPreview();
+}
+
+gridEl.addEventListener('pointerleave', clearAbilityTargetPreview);
 
 function renderTacticsPanel() {
   const panel = $('#tactics-panel');
@@ -1404,7 +1439,7 @@ function tryActiveTarget(row, col, cat, dog) {
     )));
     if (catchesDog) payload = { row, col };
   } else if (targeting.mode === 'freeze' && dog) payload = { dogId: dog.id };
-  else if (targeting.mode === 'storm' && dog) payload = { col };
+  else if (targeting.mode === 'storm' && stormTargetDogIds(game.dogs, col).length) payload = { col };
   else if (targeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat) payload = { row, col };
   else if (targeting.mode === 'encore' && cat && cat.id !== targeting.casterId) payload = { targetCatId: cat.id };
   else if (targeting.mode === 'teleport') {
@@ -1436,7 +1471,7 @@ function tryActiveTarget(row, col, cat, dog) {
   const nextGame = useActiveAbility(game, targeting.casterId, payload);
   if (nextGame !== before) {
     activeTargeting = null;
-    clearBombTargetPreview();
+    clearAbilityTargetPreview();
     gridEl.querySelectorAll('.bomb-aim').forEach((cell) => cell.classList.remove('bomb-aim'));
     if (targeting.mode === 'bomb-cross') {
       void playBombAbility(nextGame);
@@ -1584,8 +1619,8 @@ function renderBoard() {
       }
       if (activeTargeting) {
         const bombAiming = activeTargeting.mode === 'bomb-cross';
+        const stormAiming = activeTargeting.mode === 'storm';
         const validActiveTarget = (activeTargeting.mode === 'freeze' && dog)
-          || (activeTargeting.mode === 'storm' && dog)
           || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat && !decoy)
           || (activeTargeting.mode === 'encore' && cat && cat.id !== activeTargeting.casterId)
           || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && !activeTargeting.targetDogId && (cat || dog))
@@ -1596,6 +1631,10 @@ function renderBoard() {
           cell.classList.add('bomb-aim');
           cell.addEventListener('pointerenter', () => showBombTargetPreview(row, col));
           cell.addEventListener('focus', () => showBombTargetPreview(row, col));
+        } else if (stormAiming) {
+          cell.classList.add('storm-aim');
+          cell.addEventListener('pointerenter', () => showStormTargetPreview(col));
+          cell.addEventListener('focus', () => showStormTargetPreview(col));
         } else if (validActiveTarget) cell.classList.add('ability-target');
       }
       // A click-selected cat lights the same targets, the same way, a drag would.
@@ -1757,6 +1796,13 @@ function effectAtPercent(className, xPercent, yPercent, text = '') {
   return effect;
 }
 
+function clearDogReaction(target) {
+  if (!target) return;
+  for (const className of [...target.classList]) {
+    if (className.startsWith('dog-reaction-')) target.classList.remove(className);
+  }
+}
+
 /**
  * What it looks like to get hit.
  *
@@ -1771,6 +1817,8 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   const key = signature ?? attackSignature(event, fxUnitFor(event.from));
   const fx = ATTACK_FX[key] ?? ATTACK_FX.homing;
   const hurt = HURT_FX[fx.impact] ?? HURT_FX.thump;
+  const targetUnit = fxUnitFor(event.to);
+  const dogFx = targetUnit?.kind === 'dog' ? attackDogFx(key, targetUnit.role) : null;
   if (sound) playHit({ heavy: Boolean(fx.heavy) });
 
   const target = findUnitElement(event.to);
@@ -1800,6 +1848,7 @@ function showImpact(event, signature = null, { sound = true } = {}) {
 
   if (target) {
     target.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
+    clearDogReaction(target);
     void target.offsetWidth;
     if (isDecoyBlock) {
       target.classList.add('decoy-blocking');
@@ -1810,6 +1859,7 @@ function showImpact(event, signature = null, { sound = true } = {}) {
       target.style.setProperty('--hurt-dx', `${dx * hurt.recoil * 100}%`);
       target.style.setProperty('--hurt-dy', `${dy * hurt.recoil * 100}%`);
       target.classList.add('hurt', `shake-${hurt.shake}`);
+      if (dogFx) target.classList.add(`dog-reaction-${dogFx.reaction}`);
       const hpBar = target.querySelector('.hp-bar');
       if (hpBar) {
         hpBar.style.width = `${Math.max(0, event.hpAfter / event.maxHp * 100)}%`;
@@ -1821,6 +1871,7 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
   window.setTimeout(() => {
     target?.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
+    clearDogReaction(target);
   }, timing.impactMs);
 }
 
@@ -1872,6 +1923,7 @@ async function flyProjectile(event, signature, fx, { durationMs, arc = false }) 
   const start = cellCenter(event.fromRow, fromCol);
   const end = cellCenter(event.toRow, event.col);
   const homing = fx.path === 'homing';
+  const yarnThrow = fx.path === 'yarn-throw';
   const projectile = effectAt(
     `projectile-effect projectile-${fx.projectile} ${event.burst ? 'burst-projectile' : ''}`.trim(),
     event.fromRow,
@@ -1881,6 +1933,8 @@ async function flyProjectile(event, signature, fx, { durationMs, arc = false }) 
 
   const keyframes = arc
     ? lobShotKeyframes(start, end)
+      : yarnThrow
+        ? yarnThrowKeyframes(start, end)
       : homing
         ? homingShotKeyframes(start, end)
         : [
@@ -1919,6 +1973,7 @@ async function animateProjectileVolley(group, signature, fx, index) {
 
     const durationMs = fx.path === 'homing'
       ? timing.homingMs
+      : fx.path === 'yarn-throw' ? timing.yarnThrowMs
       : event.burst ? timing.burstProjectileMs : timing.projectileMs;
     await flyProjectile(event, signature, fx, { durationMs });
 
@@ -1929,15 +1984,29 @@ async function animateProjectileVolley(group, signature, fx, index) {
       return;
     }
     showImpact(event, signature);
-    if (fx.tether) showTether(event);
+    if (fx.tether) showTether(event, signature);
     await wait(timing.impactMs + timing.hpPauseMs);
   }));
 }
 
-/** Knotty Kitty's yarn stays attached to whatever it wrapped up. */
-function showTether(event) {
-  const wrap = effectAt('tangle-wrap', event.toRow, event.col);
-  window.setTimeout(() => wrap.remove(), timing.impactMs + timing.hpPauseMs);
+/** Knotty Kitty's yarn cinches onto the exact dog, including either dog in a stack. */
+function showTether(event, signature = 'tangle') {
+  const target = findUnitElement(event.to);
+  const unit = fxUnitFor(event.to);
+  if (!target || unit?.kind !== 'dog') return;
+
+  const combo = attackDogFx(signature, unit.role);
+  const wrap = document.createElement('span');
+  wrap.className = `tangle-bind bind-${combo.bind}`;
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.innerHTML = '<i></i><i></i><i></i><b></b>';
+  target.append(wrap);
+  target.classList.add('being-tied');
+
+  window.setTimeout(() => {
+    wrap.remove();
+    target.classList.remove('being-tied');
+  }, timing.impactMs + timing.hpPauseMs);
 }
 
 /**
@@ -2715,57 +2784,106 @@ function showTutorialBubble(text, selector, showContinue, opts) {
   positionTutorialOverlay(selector, showContinue, opts);
 }
 
+function setTutorialStartCue(active) {
+  $('#done')?.classList.toggle('tutorial-start-cue', active);
+  tutorialSpotlightEl?.classList.toggle('tutorial-start-cue', active);
+}
+
 function hideTutorialOverlay() {
+  setTutorialStartCue(false);
   tutorialOverlayEl.hidden = true;
   hideDragHint();
 }
 
-// Highlight the drop target and loop a ghost "drag" from source to target so the
-// player sees the exact gesture. from/to are CSS selectors resolved live.
-function showDragHint(fromSel, toSel) {
-  const from = document.querySelector(fromSel);
-  const to = document.querySelector(toSel);
-  if (!from || !to) { hideDragHint(); return; }
-  const tr = to.getBoundingClientRect();
-  const pad = 6;
-  tutorialDropTargetEl.hidden = false;
-  tutorialDropTargetEl.style.left = `${tr.left - pad}px`;
-  tutorialDropTargetEl.style.top = `${tr.top - pad}px`;
-  tutorialDropTargetEl.style.width = `${tr.width + pad * 2}px`;
-  tutorialDropTargetEl.style.height = `${tr.height + pad * 2}px`;
-  // Light up the source (card / storage item) so it's clearly where to drag from.
-  const fr0 = from.getBoundingClientRect();
-  tutorialSourceHighlightEl.hidden = false;
-  tutorialSourceHighlightEl.style.left = `${fr0.left - pad}px`;
-  tutorialSourceHighlightEl.style.top = `${fr0.top - pad}px`;
-  tutorialSourceHighlightEl.style.width = `${fr0.width + pad * 2}px`;
-  tutorialSourceHighlightEl.style.height = `${fr0.height + pad * 2}px`;
-  if (prefersReducedMotion) { tutorialDragGhostEl.hidden = true; return; }
-  const key = `${fromSel}=>${toSel}`;
-  if (dragHintKey === key && dragHintAnim) { tutorialDragGhostEl.hidden = false; return; }
-  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
-  dragHintKey = key;
-  const fr = from.getBoundingClientRect();
-  const srcCanvas = from.querySelector('canvas');
-  tutorialDragUnitEl.style.backgroundImage = srcCanvas ? `url(${srcCanvas.toDataURL()})` : 'none';
-  const fromX = fr.left + fr.width / 2, fromY = fr.top + fr.height / 2;
-  const toX = tr.left + tr.width / 2, toY = tr.top + tr.height / 2;
-  tutorialDragGhostEl.hidden = false;
-  dragHintAnim = tutorialDragGhostEl.animate([
-    { offset: 0,    left: `${fromX}px`, top: `${fromY}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(0.7)' },
-    { offset: 0.14, left: `${fromX}px`, top: `${fromY}px`, opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
-    { offset: 0.70, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
-    { offset: 0.86, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(0.88)' },
-    { offset: 1,    left: `${toX}px`,   top: `${toY}px`,   opacity: 0, transform: 'translate(-50%, -50%) scale(0.88)' },
-  ], { duration: 2200, iterations: Infinity, easing: 'ease-in-out' });
+// Highlight every unfinished drop and loop one ghost gesture per task. The
+// Round 2 merge lesson uses two cues at once; other lessons pass one cue.
+function dragHintElements(id) {
+  let root = [...tutorialDragHintsEl.children].find((child) => child.dataset.hintId === id);
+  if (!root) {
+    root = document.createElement('div');
+    root.className = 'tutorial-drag-hint';
+    root.dataset.hintId = id;
+    const source = document.createElement('div');
+    source.className = 'tutorial-source-highlight';
+    const target = document.createElement('div');
+    target.className = 'tutorial-drop-target';
+    const ghost = document.createElement('div');
+    ghost.className = 'tutorial-drag-ghost';
+    const unit = document.createElement('span');
+    unit.className = 'tutorial-drag-unit';
+    const cursor = document.createElement('span');
+    cursor.className = 'tutorial-drag-cursor';
+    cursor.setAttribute('aria-hidden', 'true');
+    ghost.append(unit, cursor);
+    root.append(source, target, ghost);
+    tutorialDragHintsEl.append(root);
+  }
+  return {
+    root,
+    source: root.querySelector('.tutorial-source-highlight'),
+    target: root.querySelector('.tutorial-drop-target'),
+    ghost: root.querySelector('.tutorial-drag-ghost'),
+    unit: root.querySelector('.tutorial-drag-unit'),
+  };
+}
+
+function showDragHints(hints) {
+  const activeIds = new Set();
+  hints.forEach((hint, index) => {
+    const from = hint?.from ? document.querySelector(hint.from) : null;
+    const to = hint?.to ? document.querySelector(hint.to) : null;
+    if (!from || !to) return;
+    const id = hint.id ?? `drag-${index}`;
+    activeIds.add(id);
+    const elements = dragHintElements(id);
+    const fr = from.getBoundingClientRect();
+    const tr = to.getBoundingClientRect();
+    const pad = 6;
+    Object.assign(elements.source.style, {
+      left: `${fr.left - pad}px`, top: `${fr.top - pad}px`,
+      width: `${fr.width + pad * 2}px`, height: `${fr.height + pad * 2}px`,
+    });
+    Object.assign(elements.target.style, {
+      left: `${tr.left - pad}px`, top: `${tr.top - pad}px`,
+      width: `${tr.width + pad * 2}px`, height: `${tr.height + pad * 2}px`,
+    });
+    const srcCanvas = from.querySelector('canvas');
+    elements.unit.style.backgroundImage = srcCanvas ? `url(${srcCanvas.toDataURL()})` : 'none';
+    const previous = dragHintAnimations.get(id);
+    if (prefersReducedMotion) {
+      previous?.animation.cancel();
+      dragHintAnimations.delete(id);
+      elements.ghost.hidden = true;
+      return;
+    }
+    const signature = `${hint.from}=>${hint.to}`;
+    if (previous?.signature === signature) { elements.ghost.hidden = false; return; }
+    previous?.animation.cancel();
+    const fromX = fr.left + fr.width / 2, fromY = fr.top + fr.height / 2;
+    const toX = tr.left + tr.width / 2, toY = tr.top + tr.height / 2;
+    elements.ghost.hidden = false;
+    const animation = elements.ghost.animate([
+      { offset: 0,    left: `${fromX}px`, top: `${fromY}px`, opacity: 0, transform: 'translate(-50%, -50%) scale(0.7)' },
+      { offset: 0.14, left: `${fromX}px`, top: `${fromY}px`, opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+      { offset: 0.70, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+      { offset: 0.86, left: `${toX}px`,   top: `${toY}px`,   opacity: 1, transform: 'translate(-50%, -50%) scale(0.88)' },
+      { offset: 1,    left: `${toX}px`,   top: `${toY}px`,   opacity: 0, transform: 'translate(-50%, -50%) scale(0.88)' },
+    ], { duration: 2200, iterations: Infinity, easing: 'ease-in-out' });
+    dragHintAnimations.set(id, { signature, animation });
+  });
+
+  [...tutorialDragHintsEl.children].forEach((root) => {
+    if (activeIds.has(root.dataset.hintId)) return;
+    dragHintAnimations.get(root.dataset.hintId)?.animation.cancel();
+    dragHintAnimations.delete(root.dataset.hintId);
+    root.remove();
+  });
 }
 
 function hideDragHint() {
-  if (dragHintAnim) { dragHintAnim.cancel(); dragHintAnim = null; }
-  dragHintKey = null;
-  if (tutorialDropTargetEl) tutorialDropTargetEl.hidden = true;
-  if (tutorialDragGhostEl) tutorialDragGhostEl.hidden = true;
-  if (tutorialSourceHighlightEl) tutorialSourceHighlightEl.hidden = true;
+  dragHintAnimations.forEach(({ animation }) => animation.cancel());
+  dragHintAnimations.clear();
+  tutorialDragHintsEl.replaceChildren();
 }
 
 function tutorialCatColumns(state) {
@@ -2776,7 +2894,16 @@ function tutorialCatColumns(state) {
     .filter((col) => typeof col === 'number');
 }
 
+function startNewGameSession() {
+  gameSessionId += 1;
+  const banner = $('#wave-banner');
+  if (!banner) return;
+  banner.hidden = true;
+  banner.classList.remove('is-exiting');
+}
+
 function startTutorial() {
+  startNewGameSession();
   startLevelMusic();
   game = createGame();
   selected = null;
@@ -2790,6 +2917,7 @@ function startTutorial() {
   tutorialStepIndex = 0;
   tutorialCurrentTip = null;
   tutorialSeenTips.clear();
+  tutorialCompletedMergeTasks.clear();
   tutorialStartNudged = false;
   game.shop = tutorialShop(1) ?? game.shop;
   game.message = 'Tutorial: follow the highlights.';
@@ -2799,8 +2927,11 @@ function startTutorial() {
 function endTutorial() {
   tutorialActive = false;
   tutorialCurrentTip = null;
-  $('#done')?.classList.remove('tutorial-start-cue');
   hideTutorialOverlay();
+}
+
+function requestTutorialSkip() {
+  if (confirmTutorialSkip((message) => window.confirm(message))) endTutorial();
 }
 
 // Set the scripted wave for the round we are about to start (R1 in the player's
@@ -2827,6 +2958,7 @@ function applyTutorialRound() {
 
 // Called at the tail of every render() while the tutorial is active.
 function syncTutorial() {
+  setTutorialStartCue(false);
   if (playing) { hideTutorialOverlay(); return; } // never cover a live animation
   if (game.phase === 'gameover' || game.phase === 'victory') { hideTutorialOverlay(); return; }
   // Nudge: don't start a round with gold still to spend.
@@ -2845,19 +2977,28 @@ function syncTutorial() {
   }
   while (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
-    if (step.mode === 'gate' && step.isDone(game)) { tutorialStepIndex += 1; continue; }
+    if (step.mode === 'gate' && step.isDone(game, tutorialCompletedMergeTasks)) {
+      tutorialStepIndex += 1;
+      continue;
+    }
     break;
   }
   if (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
     if (!step.showWhen || step.showWhen(game)) {
-      $('#done')?.classList.toggle('tutorial-start-cue', step.id === 'r1-start');
+      setTutorialStartCue(step.id === 'r1-start');
       const dragFrom = typeof step.dragFrom === 'function' ? step.dragFrom(game) : step.dragFrom;
       const dragTo = typeof step.dragTo === 'function' ? step.dragTo(game) : step.dragTo;
-      const isDrag = !!(dragFrom && dragTo);
-      showTutorialBubble(step.text, step.spotlight, step.mode === 'tap',
+      const dragHints = typeof step.dragHints === 'function'
+        ? step.dragHints(game, tutorialCompletedMergeTasks)
+        : dragFrom && dragTo ? [{ id: step.id, from: dragFrom, to: dragTo }] : [];
+      const text = typeof step.text === 'function'
+        ? step.text(game, tutorialCompletedMergeTasks)
+        : step.text;
+      const isDrag = dragHints.length > 0;
+      showTutorialBubble(text, step.spotlight, step.mode === 'tap',
         { dim: step.mode === 'tap', showSpotlight: !isDrag, mutedRegion: step.mutedRegion });
-      if (isDrag) showDragHint(dragFrom, dragTo);
+      if (isDrag) showDragHints(dragHints);
       else hideDragHint();
       return;
     }
@@ -2903,20 +3044,22 @@ function render() {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const WAVE_BANNER_READ_MS = 2400;
 
-async function runCombatSection() {
+async function runCombatSection(sessionId) {
   // Take the roll call before resolving: the engine drops the dead as it goes, and the
   // deaths cannot be animated without knowing who they were.
   snapshotUnits(game);
   const nextGame = resolveSection(game);
   await animateEvents(nextGame.events);
+  if (sessionId !== gameSessionId) return false;
   // Only now is it safe to re-render — that is what removes the bodies from the board.
   game = nextGame;
   render();
   await wait(timing.hpPauseMs);
+  return sessionId === gameSessionId;
 }
 
 /** Drop-in banner naming the wave and what just walked through the gate. */
-async function announceWave() {
+async function announceWave(sessionId) {
   const banner = $('#wave-banner');
   if (!banner) return;
   const fresh = game.dogs.filter((dog) => dog.row === 0);
@@ -2932,17 +3075,22 @@ async function announceWave() {
   banner.classList.remove('is-exiting');
   banner.hidden = false;
   await wait(WAVE_BANNER_READ_MS);
+  if (sessionId !== gameSessionId) return false;
   await waitForResume();
+  if (sessionId !== gameSessionId) return false;
   banner.classList.add('is-exiting');
   await Promise.all(banner.getAnimations({ subtree: true })
     .map((animation) => animation.finished.catch(() => {})));
+  if (sessionId !== gameSessionId) return false;
   banner.hidden = true;
   banner.classList.remove('is-exiting');
+  return true;
 }
 
 async function playRound() {
   if (playing || isGamePaused() || (game.phase !== 'prep' && game.phase !== 'tactics')) return;
   if (game.phase === 'prep' && game.cats.length === 0) return;
+  const sessionId = gameSessionId;
   const startingRound = game.phase === 'prep';
   playing = true;
   selected = null;
@@ -2951,15 +3099,20 @@ async function playRound() {
     if (tutorialActive) applyTutorialWave();
     game = startRound(game);
     render();
-    await announceWave();
+    if (!await announceWave(sessionId)) return;
     await waitForResume();
+    if (sessionId !== gameSessionId) return;
   } else {
     game = continueCombat(game);
     render();
   }
 
   await waitForResume();
-  if (game.phase === 'combat' && game.dogs.length > 0) await runCombatSection();
+  if (sessionId !== gameSessionId) return;
+  if (game.phase === 'combat' && game.dogs.length > 0) {
+    const completed = await runCombatSection(sessionId);
+    if (!completed) return;
+  }
   if (game.phase === 'combat') {
     const needsAnotherExchange = game.dogs.length > 0
       && (game.round >= MAX_ROUNDS || game.section < ACTIONS_PER_ROUND);
@@ -2970,6 +3123,7 @@ async function playRound() {
   render();
   if (game.phase === 'victory' || game.phase === 'gameover') {
     await wait(350);
+    if (sessionId !== gameSessionId) return;
     showResult();
   }
 }
@@ -2990,6 +3144,7 @@ function closeSettings() {
 }
 
 function resetGame() {
+  startNewGameSession();
   startLevelMusic();
   game = createGame();
   selected = null;
@@ -3015,7 +3170,7 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointermove', onDragMove, { passive: false });
 window.addEventListener('pointerup', (event) => { void finishDrag(event); });
 window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
-window.addEventListener('resize', () => { if (tutorialActive) { dragHintKey = null; syncTutorial(); } });
+window.addEventListener('resize', () => { if (tutorialActive) { hideDragHint(); syncTutorial(); } });
 window.addEventListener('click', (event) => {
   const control = event.target?.closest?.('button, input[type="checkbox"], [role="button"]');
   if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
@@ -3025,15 +3180,7 @@ window.addEventListener('click', (event) => {
 
 $('#refresh').addEventListener('click', () => {
   const previousGame = game;
-  if (tutorialActive) {
-    const previousGold = game.gold;
-    game = refreshShop(game);
-    game.gold = previousGold; // free reroll while learning
-    const scripted = tutorialShopAfterRefresh(game.round);
-    if (scripted) game.shop = scripted;
-  } else {
-    game = refreshShop(game);
-  }
+  game = tutorialActive ? refreshTutorialShop(game) : refreshShop(game);
   if (game !== previousGame) playRefreshClick();
   selected = null;
   render();
@@ -3050,7 +3197,7 @@ function onDoneClick() {
 $('#done').addEventListener('click', onDoneClick);
 $('#tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', advanceTutorialByTap);
-$('#tutorial-skip')?.addEventListener('click', endTutorial);
+$('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
 
 // Two-tap restart: a single stray click must not wipe a six-round run.
 const restartButton = $('#restart');

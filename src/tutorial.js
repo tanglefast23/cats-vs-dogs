@@ -3,11 +3,17 @@
 // a scripted opening. Consumed by the glue layer in app.js.
 import {
   CAT_COAT, CAT_COAT_INFO, CAT_ZONE_START, COLS, ROWS, catStatsFor, createDog, DOG_ROLE,
-  MAX_FIELD_CATS, WORKER_ROLE, WORKER_INFO,
+  MAX_FIELD_CATS, refreshShop, WORKER_ROLE, WORKER_INFO,
 } from './game-engine.js';
 
 let seq = 0;
 const nextId = (prefix) => `${prefix}-${(seq += 1)}`;
+
+export const TUTORIAL_SKIP_CONFIRMATION = 'Are you sure you want to skip the tutorial?';
+
+export function confirmTutorialSkip(confirm) {
+  return confirm(TUTORIAL_SKIP_CONFIRMATION);
+}
 
 // --- scripted shop slots (shapes mirror makeShopSlot) ---
 export function fighterSlot(coat) {
@@ -49,6 +55,14 @@ export function tutorialShop(round) {
 export function tutorialShopAfterRefresh(round) {
   if (round === 1) return [workerSlot(WORKER_ROLE.COOK), workerSlot(WORKER_ROLE.TRADER), fighterSlot(CAT_COAT.ORANGE)];
   return null;
+}
+
+export function refreshTutorialShop(game) {
+  const next = refreshShop(game);
+  if (next === game) return game;
+  const scripted = tutorialShopAfterRefresh(next.round);
+  if (scripted) next.shop = scripted;
+  return next;
 }
 
 // --- scripted waves ---
@@ -93,6 +107,58 @@ export function tutorialOpenLaneSelector(game) {
   return `#board .cell[data-row="${Math.max(CAT_ZONE_START, ROWS - 1)}"][data-col="${col}"]`;
 }
 
+export const TUTORIAL_MERGE_TASK = Object.freeze({
+  BATTLEFIELD: 'battlefield',
+  CART: 'cart',
+});
+
+export function tutorialMergeTaskForDrop(action, source) {
+  if (action?.targetType !== 'cat' || source?.coat !== CAT_COAT.ORANGE) return null;
+  if (action.type === 'merge' && source.type === 'cat') return TUTORIAL_MERGE_TASK.BATTLEFIELD;
+  if (action.type === 'purchase-merge' && source.type === 'shop-fighter') return TUTORIAL_MERGE_TASK.CART;
+  return null;
+}
+
+const boardCatSelector = (cat) => `#board .cell[data-row="${cat.row}"][data-col="${cat.col}"]`;
+
+export function tutorialWoundedCatSelector(game) {
+  const wounded = game.cats.find((cat) => cat.hp < cat.maxHp);
+  return wounded ? `${boardCatSelector(wounded)} .unit:not(.dog-unit):not(.decoy-unit)` : null;
+}
+
+export function tutorialMergeHints(game, completedTasks = new Set()) {
+  const purrcys = game.cats
+    .filter((cat) => cat.coat === CAT_COAT.ORANGE && cat.level === 1)
+    .sort((a, b) => (b.copies ?? 1) - (a.copies ?? 1) || a.row - b.row || a.col - b.col);
+  const target = purrcys[0];
+  const hints = [];
+
+  if (!completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD) && purrcys.length >= 2) {
+    hints.push({
+      id: TUTORIAL_MERGE_TASK.BATTLEFIELD,
+      from: boardCatSelector(purrcys[1]),
+      to: boardCatSelector(target),
+    });
+  }
+  if (!completedTasks.has(TUTORIAL_MERGE_TASK.CART) && target) {
+    const from = tutorialShopFighterSelector(game, CAT_COAT.ORANGE);
+    if (from) hints.push({ id: TUTORIAL_MERGE_TASK.CART, from, to: boardCatSelector(target) });
+  }
+  return hints;
+}
+
+export function tutorialMergeText(completedTasks = new Set()) {
+  const battlefieldDone = completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD);
+  const cartDone = completedTasks.has(TUTORIAL_MERGE_TASK.CART);
+  if (battlefieldDone && !cartDone) {
+    return 'Battlefield cats stacked! Now drag the matching Purrcy from the Cat Cart onto that stack.';
+  }
+  if (cartDone && !battlefieldDone) {
+    return 'Cat Cart cat stacked! Now drag one battlefield Purrcy onto the other.';
+  }
+  return 'Complete both merges: drag one battlefield Purrcy onto the other, and drag the matching Purrcy from the Cat Cart onto the stack.';
+}
+
 // --- coach steps: linear, rounds 1-3. mode 'tap' shows a Continue button;
 // mode 'gate' advances when isDone(game) is true. showWhen (optional) delays
 // the bubble until the game is in the right phase. ---
@@ -132,9 +198,10 @@ export const CORE_STEPS = [
     text: "Whisker baked a treat overnight. Tap her station to collect it — it waits in storage until a cat needs it.",
     isDone: (g) => inventoryHasItem(g) },
   { id: 'r2-merge', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
-    dragFrom: '#shop .pet-draggable', dragTo: '#board .cell .unit',
-    text: "Three matching cats merge into one powerhouse. Drag a Purrcy onto another, then buy the third and drop it on too.",
-    isDone: (g) => catAtLevel(g, CAT_COAT.ORANGE, 2) },
+    dragHints: tutorialMergeHints,
+    text: (_g, completedTasks) => tutorialMergeText(completedTasks),
+    isDone: (_g, completedTasks) => completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD)
+      && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
     text: "Power spike! One strong cat beats three weak ones — and it's tough enough to survive a bite now." },
   { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep',
@@ -145,7 +212,7 @@ export const CORE_STEPS = [
   { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
     text: "One of your cats is still hurt — wounds carry over between rounds. Let's patch it up." },
   { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep',
-    dragFrom: '#inventory .pet-draggable', dragTo: '#board .cell .unit',
+    dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
     text: "Drag Whisker's treat from House Storage onto the hurt cat — heal +2. That's the payoff of production.",
     isDone: (g) => !anyWoundedCat(g) },
 ];
@@ -163,9 +230,9 @@ export const TIPS = [
   { id: 'tip-coins', spotlight: '#production-grid',
     text: "Cashmere Cat's coins go straight to your gold — more coins, more cats.",
     when: (g) => ownsWorkerRole(g, WORKER_ROLE.TRADER) },
-  { id: 'tip-ability', spotlight: '#board',
-    text: "This new cat has a special move — it only fires in the pause. Open the Tactics window and use it.",
-    when: (g) => ownsAbilityCat(g) },
+  { id: 'tip-ability', spotlight: '#tactics-panel',
+    text: "This new cat has a special move — it only fires here in the Tactics Window. Use it now.",
+    when: (g) => g.phase === 'tactics' && ownsAbilityCat(g) },
   { id: 'tip-fill-house', spotlight: '#production-grid',
     text: "You've still got a free House slot — a second producer means more healing, coins, weapons, or armour. Grab one when it shows in the shop.",
     when: (g) => g.round >= 7 && g.workers.some((w) => !w) },

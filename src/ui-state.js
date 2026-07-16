@@ -136,6 +136,14 @@ export function dogPreviewQueue(dogs = []) {
     .map(({ dog }) => dog);
 }
 
+/** Living dogs Storm would hit in the hovered battlefield column. */
+export function stormTargetDogIds(dogs = [], col) {
+  if (!Number.isInteger(col)) return [];
+  return dogs
+    .filter((dog) => dog.hp > 0 && dog.col === col)
+    .map((dog) => dog.id);
+}
+
 /** Resolve where production output will land so collection animation matches engine behavior. */
 export function productionCollectionDestination(inventory = [], output = null) {
   if (!output?.kind) return null;

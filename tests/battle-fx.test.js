@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ATTACK_FX, HURT_FX, ENGINE_ATTACK_STYLES,
-  attackSignature, blastCells, blastFootprint, contactVector, isKill, attackGroupKey,
+  ATTACK_FX, ATTACK_DOG_FX, CAT_ATTACK_SIGNATURES, DOG_REACTION_FX, HURT_FX,
+  ENGINE_ATTACK_STYLES, attackDogFx, attackSignature, blastCells, blastFootprint,
+  contactVector, isKill, attackGroupKey,
 } from '../src/battle-fx.js';
-import { COLS } from '../src/game-engine.js';
+import { yarnThrowKeyframes } from '../src/combat-animation.js';
+import { COLS, DOG_ROLE } from '../src/game-engine.js';
 
 // The bug this whole system exists to prevent: an ability ships, the engine stamps a new
 // style on its events, and the renderer silently falls back to a generic ball. That is
@@ -49,6 +51,44 @@ test('the six homing cats each get their own projectile skin', () => {
 test('an unknown caster falls back without throwing', () => {
   assert.ok(ATTACK_FX[attackSignature({ type: 'shot', style: 'homing' }, null)]);
   assert.ok(ATTACK_FX[attackSignature({ type: 'shot' }, null)]);
+});
+
+test('every cat attack has a reaction combo for every dog role', () => {
+  const dogOnlySignatures = new Set(['bite', 'tennis', 'frisbee', 'bone-bomb', 'bone-bomb-secondary']);
+  const expectedCatSignatures = Object.keys(ATTACK_FX).filter((signature) => !dogOnlySignatures.has(signature));
+  assert.deepEqual(
+    new Set(CAT_ATTACK_SIGNATURES),
+    new Set(expectedCatSignatures),
+    'every cat attack must enter the attack + dog animation matrix',
+  );
+  for (const signature of CAT_ATTACK_SIGNATURES) {
+    for (const role of Object.values(DOG_ROLE)) {
+      const combo = ATTACK_DOG_FX[signature]?.[role];
+      assert.ok(combo, `missing ${signature} + ${role} animation combo`);
+      assert.equal(combo.impact, ATTACK_FX[signature].impact);
+      assert.equal(combo.reaction, DOG_REACTION_FX[role].reaction);
+      assert.ok(combo.bind, `${signature} + ${role} has no yarn-bind choreography`);
+    }
+  }
+});
+
+test('all nine dog roles perform their own hit reaction', () => {
+  const reactions = Object.values(DOG_ROLE).map((role) => attackDogFx('column', role).reaction);
+  assert.equal(new Set(reactions).size, Object.values(DOG_ROLE).length);
+  assert.deepEqual(attackDogFx('unknown', 'unknown'), attackDogFx('homing', DOG_ROLE.SCRUFFY));
+});
+
+test('Knotty throws a yarn ball in an arc instead of reusing the homing path', () => {
+  assert.equal(ATTACK_FX.tangle.path, 'yarn-throw');
+  const start = { xPercent: 50, yPercent: 90 };
+  const end = { xPercent: 20, yPercent: 20 };
+  const frames = yarnThrowKeyframes(start, end);
+  assert.equal(frames[0].left, '50%');
+  assert.equal(frames[0].top, '90%');
+  assert.equal(frames.at(-1).left, '20%');
+  assert.ok(Math.abs(Number(frames.at(-1).top.replace('%', '')) - 20) < 1e-9);
+  const straightMidY = (start.yPercent + end.yPercent) / 2;
+  assert.ok(Number(frames[Math.floor(frames.length / 2)].top.replace('%', '')) < straightMidY);
 });
 
 // Secondary damage is a victim of one blast, never its own projectile.

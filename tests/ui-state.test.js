@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_ROLE_MARKERS,
@@ -68,6 +68,18 @@ test('next-wave dogs fill from top-left in chronological and left-to-right order
     dogPreviewQueue([laterLeft, nowRight, nowLeft]).map((dog) => dog.id),
     ['now-left', 'now-right', 'later-left'],
   );
+});
+
+test('Storm preview identifies every living dog in the hovered column', () => {
+  const dogs = [
+    { id: 'top-dog', row: 2, col: 4, hp: 8 },
+    { id: 'stacked-dog', row: 2, col: 4, hp: 3 },
+    { id: 'other-column', row: 5, col: 3, hp: 8 },
+    { id: 'defeated-dog', row: 7, col: 4, hp: 0 },
+  ];
+
+  assert.deepEqual(stormTargetDogIds(dogs, 4), ['top-dog', 'stacked-dog']);
+  assert.deepEqual(stormTargetDogIds(dogs, 1), []);
 });
 
 test('production collection feedback targets matching storage, empty storage, or gold', () => {
@@ -916,6 +928,7 @@ test('level music loops quietly and follows the shared sound setting', async () 
   assert.equal(players[0].loop, true);
   assert.equal(players[0].preload, 'auto');
   assert.equal(players[0].volume, sound.LEVEL_MUSIC_VOLUME);
+  assert.ok(sound.LEVEL_MUSIC_VOLUME >= 0.35, 'music should remain clearly audible');
   assert.equal(players[0].playCount, 1);
 
   sound.setSoundEnabled(false);

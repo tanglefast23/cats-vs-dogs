@@ -763,6 +763,31 @@ h1 span { color: var(--orange); font-size: .75em; }
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+.cell.storm-aim { cursor: crosshair; }
+.cell.storm-preview-column,
+.cell.cat-zone.storm-preview-column:hover {
+  z-index: 3;
+  background:
+    linear-gradient(90deg,
+      rgba(10, 53, 116, .68) 0 7%,
+      rgba(91, 195, 255, .3) 7% 50%,
+      rgba(118, 221, 255, .36) 50% 93%,
+      rgba(10, 53, 116, .68) 93% 100%);
+  box-shadow:
+    inset 4px 0 0 rgba(7, 38, 91, .92),
+    inset -4px 0 0 rgba(7, 38, 91, .92),
+    inset 9px 0 12px rgba(45, 143, 225, .22),
+    inset -9px 0 12px rgba(45, 143, 225, .22);
+}
+.unit.dog-unit.storm-preview-dog { z-index: 7; }
+.unit.dog-unit.storm-preview-dog > canvas {
+  filter:
+    drop-shadow(2px 0 0 #ff294d)
+    drop-shadow(-2px 0 0 #ff294d)
+    drop-shadow(0 2px 0 #ff294d)
+    drop-shadow(0 -2px 0 #ff294d)
+    drop-shadow(0 0 5px rgba(150, 0, 30, .92));
+}
 .decoy-unit { opacity: .9; filter: drop-shadow(0 0 5px #8ee7ff); }
 .decoy-unit > canvas { opacity: .5; }
 .decoy-shield {
@@ -1096,17 +1121,27 @@ h1 span { color: var(--orange); font-size: .75em; }
   background: #ffe56e;
   box-shadow: 6px -7px 0 -3px #ffe56e, 0 0 0 2px #f1c083, 0 0 12px 4px rgba(255, 229, 110, .7);
 }
-/* Knotty Kitty — the yarn ball, still trailing its string. */
+/* Knotty Kitty — a readable ball of yarn, tumbling through a hand-thrown arc. */
 .projectile-yarn {
-  width: 13px; height: 13px; border-radius: 50%; border-color: #9a3f77;
-  background: radial-gradient(circle at 34% 30%, #ffb6dc 0 26%, #df6ba8 28%);
-  box-shadow: 0 0 0 2px #ffb6dc, 0 0 10px 3px rgba(223, 107, 168, .7);
+  width: 20px; height: 20px; border: 2px solid #6f2859; border-radius: 50%;
+  background:
+    repeating-radial-gradient(ellipse at 35% 38%, transparent 0 3px, rgba(111,40,89,.6) 4px 5px, transparent 6px 8px),
+    radial-gradient(circle at 31% 25%, #ffd3e9 0 15%, #ef8fbe 18% 48%, #cf4f91 52% 100%);
+  box-shadow: 0 0 0 2px #ffb6dc, 2px 3px 0 rgba(83,31,67,.7), 0 0 12px 4px rgba(223, 107, 168, .65);
+}
+.projectile-yarn::after {
+  content: ''; left: 2px; top: 2px; width: 12px; height: 12px; border: 2px solid rgba(111,40,89,.72);
+  border-color: rgba(111,40,89,.72) transparent; border-radius: 50%; background: transparent;
+  animation: yarn-ball-spin .18s linear infinite;
 }
 .projectile-yarn.has-tether::before {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 2px; height: 46px;
-  background: repeating-linear-gradient(#df6ba8 0 4px, transparent 4px 8px);
-  transform: translate(-50%, 0); opacity: .8;
+  content: ''; position: absolute; left: 48%; top: 72%; width: 13px; height: 42px;
+  border-left: 3px solid #df6ba8; border-bottom: 3px solid #df6ba8;
+  border-radius: 0 0 0 85%; transform-origin: 0 0; opacity: .92;
+  filter: drop-shadow(1px 1px 0 #6f2859); animation: yarn-tail-wave .24s steps(3) infinite alternate;
 }
+@keyframes yarn-ball-spin { to { transform: rotate(360deg); } }
+@keyframes yarn-tail-wave { from { transform: rotate(-8deg) skewX(-7deg); } to { transform: rotate(8deg) skewX(9deg); } }
 /* Bombay Boom — the satchel charge, fuse lit. */
 .projectile-bomb {
   width: 15px; height: 15px; border-radius: 50%; border-color: #14181f;
@@ -1183,6 +1218,26 @@ h1 span { color: var(--orange); font-size: .75em; }
 .unit.hurt::after { content: ''; position: absolute; inset: 9%; background: rgba(255,32,32,.55); border: 3px solid #ffdfd4; animation: hurt-overlay .34s steps(4) forwards; z-index: 2; }
 .unit.hurt canvas { animation: hurt-flash .34s steps(4); }
 .unit.hurt { z-index: 6; }
+/* Every dog performs the same attack contact in its own way. The first animation keeps
+   the universal red damage flash; the second is the role's personality layered on top. */
+.unit.hurt.dog-reaction-brace canvas { animation: hurt-flash .34s steps(4), dog-hit-brace .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-spin canvas { animation: hurt-flash .34s steps(4), dog-hit-spin .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-duck canvas { animation: hurt-flash .34s steps(4), dog-hit-duck .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-yelp canvas { animation: hurt-flash .34s steps(4), dog-hit-yelp .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-rattle canvas { animation: hurt-flash .34s steps(4), dog-hit-rattle .34s steps(6); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-bounce canvas { animation: hurt-flash .34s steps(4), dog-hit-bounce .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-flinch canvas { animation: hurt-flash .34s steps(4), dog-hit-flinch .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-stumble canvas { animation: hurt-flash .34s steps(4), dog-hit-stumble .34s steps(4); animation-composition: replace, add; }
+.unit.hurt.dog-reaction-snarl canvas { animation: hurt-flash .34s steps(4), dog-hit-snarl .34s steps(4); animation-composition: replace, add; }
+@keyframes dog-hit-brace { 35% { transform: scale(1.14, .82); } 70% { transform: scale(.96, 1.04); } }
+@keyframes dog-hit-spin { 38% { transform: rotate(18deg) scale(.9); } 72% { transform: rotate(-7deg); } }
+@keyframes dog-hit-duck { 40% { transform: translateY(12%) scale(1.08, .78); } 75% { transform: translateY(-3%); } }
+@keyframes dog-hit-yelp { 38% { transform: translateY(-13%) rotate(-5deg); } 70% { transform: translateY(4%) rotate(3deg); } }
+@keyframes dog-hit-rattle { 20% { transform: rotate(-7deg); } 40% { transform: rotate(7deg); } 60% { transform: rotate(-5deg); } 80% { transform: rotate(3deg); } }
+@keyframes dog-hit-bounce { 35% { transform: translateY(-18%) scale(.9, 1.12); } 70% { transform: translateY(6%) scale(1.08, .88); } }
+@keyframes dog-hit-flinch { 36% { transform: translateX(15%) rotate(9deg) scale(.88); } 72% { transform: translateX(-4%) rotate(-3deg); } }
+@keyframes dog-hit-stumble { 38% { transform: translate(-8%, 6%) rotate(-12deg); } 72% { transform: translate(3%, 2%) rotate(5deg); } }
+@keyframes dog-hit-snarl { 34% { transform: translateY(6%) scale(1.16, .82); } 68% { transform: translateY(-4%) scale(.96, 1.06); } }
 /* Added to the unit's own transform, never replacing it: stacked dogs already carry a
    stack offset, and overwriting it would snap them across the tile as they got hit. */
 .unit.hurt.shake-soft { animation: knockback-soft .34s steps(4); animation-composition: add; }
@@ -1327,16 +1382,41 @@ h1 span { color: var(--orange); font-size: .75em; }
   100% { opacity: 0; transform: translate(-50%, -100%) scaleX(.2); }
 }
 
-/* Knotty Kitty leaves the dog wrapped up. */
-.tangle-wrap {
-  position: absolute; width: 30px; height: 30px; transform: translate(-50%, -50%);
-  border: 3px dashed #df6ba8; border-radius: 50%; z-index: 16;
-  animation: tangle-wrap .5s steps(4) forwards;
+/* Knotty Kitty binds the actual target, not the square underneath it. Each dog role has
+   a fitted wrap so stacked dogs and different silhouettes still read as individually tied. */
+.tangle-bind {
+  --bind-rotate: 0deg;
+  position: absolute; left: 50%; top: 52%; width: 80%; height: 62%; z-index: 9;
+  pointer-events: none; transform: translate(-50%, -50%) rotate(var(--bind-rotate));
+  filter: drop-shadow(1px 2px 0 #6f2859);
+  animation: tangle-bind-in .64s steps(6) both;
 }
-@keyframes tangle-wrap {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.5) rotate(0deg); }
-  40% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(90deg); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(.9) rotate(180deg); }
+.tangle-bind i {
+  position: absolute; left: 3%; width: 94%; height: 0; border-top: 2px solid #ef8fbe;
+  box-shadow: 0 1px 0 #6f2859; opacity: .92; transform-origin: 50% 50%;
+}
+.tangle-bind i:nth-child(1) { top: 23%; transform: rotate(18deg); }
+.tangle-bind i:nth-child(2) { top: 49%; transform: rotate(-16deg) scaleX(.96); }
+.tangle-bind i:nth-child(3) { top: 72%; transform: rotate(8deg) scaleX(.9); }
+.tangle-bind b {
+  position: absolute; right: 6%; top: 42%; width: 6px; height: 6px; border: 1px solid #6f2859;
+  border-radius: 50%; background: #ffb6dc; box-shadow: -3px 3px 0 -2px #cf4f91;
+}
+.bind-barrel { width: 86%; height: 58%; --bind-rotate: -4deg; }
+.bind-wing { width: 77%; height: 68%; --bind-rotate: 8deg; }
+.bind-visor { top: 49%; width: 74%; height: 55%; --bind-rotate: -10deg; }
+.bind-howl { top: 48%; width: 82%; height: 70%; --bind-rotate: 3deg; }
+.bind-cannon { width: 88%; height: 63%; --bind-rotate: 7deg; }
+.bind-spring { top: 56%; width: 72%; height: 76%; --bind-rotate: -8deg; }
+.bind-cocoon { top: 49%; width: 78%; height: 84%; --bind-rotate: 11deg; }
+.bind-medic { width: 80%; height: 67%; --bind-rotate: -6deg; }
+.bind-collar { top: 47%; width: 89%; height: 58%; --bind-rotate: 4deg; }
+@keyframes tangle-bind-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(calc(var(--bind-rotate) - 160deg)) scale(1.55); }
+  34% { opacity: 1; transform: translate(-50%, -50%) rotate(calc(var(--bind-rotate) + 18deg)) scale(.9); }
+  58% { transform: translate(-50%, -50%) rotate(calc(var(--bind-rotate) - 7deg)) scale(1.06); }
+  78% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--bind-rotate)) scale(.96); }
 }
 
 /* Meowstro conducting an encore. */
@@ -1538,7 +1618,7 @@ h1 span { color: var(--orange); font-size: .75em; }
 
 .unit-tooltip {
   position: fixed;
-  z-index: 40;
+  z-index: 10000;
   width: min(310px, calc(100vw - 24px));
   padding: 10px 11px;
   border: 3px solid var(--ink);
@@ -2299,7 +2379,9 @@ h1 span { color: var(--orange); font-size: .75em; }
      but drop the acrobatics and the props. The JS skips the flip to match. */
   .board.board-blast-shake, .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before,
   .unit.hurt.shake-soft, .unit.hurt.shake-hard, .unit.hurt.shake-rattle,
-  .cell.bomb-footprint, .unit.decoy-blocking::before { animation: none; }
+  .cell.bomb-footprint, .unit.decoy-blocking::before, .tangle-bind,
+  .projectile-yarn::after, .projectile-yarn.has-tether::before { animation: none; }
+  .unit.hurt[class*="dog-reaction-"] canvas { animation: hurt-flash .34s steps(4); }
   .unit-dying[class*="gag-"]::after, .unit.ko-tongue::before { display: none; }
   .wave-banner.is-exiting { animation: none; }
 }
@@ -2340,19 +2422,34 @@ h1 span { color: var(--orange); font-size: .75em; }
   border: 0; font-size: 12px; transition: background-color 140ms ease-out, color 140ms ease-out, box-shadow 140ms ease-out;
 }
 .tutorial-skip:hover, .tutorial-skip:focus-visible {
-  background: #ffd24a; color: #12203a; box-shadow: 0 0 0 2px rgba(255, 210, 74, .35);
+  background: var(--red); color: #fff8dc; box-shadow: 0 0 0 2px rgba(216, 74, 69, .35);
 }
 
-/* Once the first setup is complete, wait a beat and gently point at the next action. */
-.done-button.tutorial-start-cue { animation: tutorial-start-wiggle 520ms ease-out 1600ms 2; }
+/* Make the first Start Round prompt read as the next action, not another amber panel edge. */
+.tutorial-spotlight.tutorial-start-cue {
+  box-shadow: 0 0 0 5px #68e7ff, 0 0 18px rgba(104, 231, 255, .9);
+  animation: tutorial-start-ring-pulse 1.05s ease-in-out infinite;
+}
+.done-button.tutorial-start-cue {
+  box-shadow: 4px 4px 0 var(--ink), 0 0 0 4px rgba(104, 231, 255, .72), 0 0 18px rgba(104, 231, 255, .62);
+  animation: tutorial-start-wiggle 2.4s ease-in-out infinite;
+}
+@keyframes tutorial-start-ring-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px #68e7ff, 0 0 12px rgba(104, 231, 255, .72); }
+  50% { box-shadow: 0 0 0 8px #68e7ff, 0 0 28px rgba(104, 231, 255, 1); }
+}
 @keyframes tutorial-start-wiggle {
-  0%, 100% { transform: translateX(0) rotate(0); }
-  25% { transform: translateX(-3px) rotate(-.6deg); }
-  50% { transform: translateX(3px) rotate(.6deg); }
-  75% { transform: translateX(-2px) rotate(-.35deg); }
+  0%, 68%, 100% { transform: translateX(0) rotate(0); }
+  74% { transform: translateX(-4px) rotate(-.7deg); }
+  80% { transform: translateX(4px) rotate(.7deg); }
+  86% { transform: translateX(-3px) rotate(-.5deg); }
+  92% { transform: translateX(2px) rotate(.35deg); }
 }
 
 /* Drag hint: pulsing drop target + looping ghost drag demo */
+#tutorial-drag-hints, .tutorial-drag-hint {
+  position: absolute; inset: 0; pointer-events: none;
+}
 .tutorial-drop-target {
   position: absolute; border-radius: 10px;
   border: 3px solid #5ad17a;
@@ -2412,5 +2509,6 @@ h1 span { color: var(--orange); font-size: .75em; }
   .tutorial-spotlight { transition: none; }
   .tutorial-drop-target { animation: none; }
   .tutorial-source-highlight { animation: none; }
+  .tutorial-spotlight.tutorial-start-cue { animation: none; }
   .done-button.tutorial-start-cue { animation: none; }
 }

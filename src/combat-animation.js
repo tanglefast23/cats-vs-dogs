@@ -6,6 +6,8 @@ export const COMBAT_TIMING = Object.freeze({
   burstProjectileMs: 1040,
   // White-cat homing shot is only modestly slower so its sine-seek stays fluid.
   homingMs: 1650,
+  // Knotty's yarn is visibly thrown: slower than a pellet, quicker than a guided shot.
+  yarnThrowMs: 1100,
   shotStaggerMs: 130,
   // Rapid successive pellets within one orange-cat volley.
   burstStaggerMs: 90,
@@ -123,6 +125,40 @@ export function homingShotKeyframes(start, end, {
       left: `${x}%`,
       top: `${y}%`,
       transform: `translate(-50%, -50%) scale(${scale}) rotate(${angle}deg)`,
+    });
+  }
+  return frames;
+}
+
+/**
+ * Knotty Kitty throws a real ball of yarn rather than firing another guided missile.
+ * The ball follows one clean parabolic toss with a tiny sideways hand-thrown wobble;
+ * the yarn texture itself spins in CSS so the loose strand can keep trailing behind it.
+ */
+export function yarnThrowKeyframes(start, end, {
+  steps = 26,
+  arcPercent = 8,
+  wobblePercent = 1.15,
+} = {}) {
+  const frames = [];
+  const dx = end.xPercent - start.xPercent;
+  const dy = end.yPercent - start.yPercent;
+  const length = Math.hypot(dx, dy) || 1;
+  const nx = -dy / length;
+  const ny = dx / length;
+
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps;
+    const lift = Math.sin(Math.PI * t) * arcPercent;
+    const wobble = Math.sin(Math.PI * t * 3) * Math.sin(Math.PI * t) * wobblePercent;
+    const x = start.xPercent + dx * t + nx * wobble;
+    const y = start.yPercent + dy * t + ny * wobble - lift;
+    const scale = 0.72 + Math.sin(Math.PI * t) * 0.36 + t * 0.16;
+
+    frames.push({
+      left: `${x}%`,
+      top: `${y}%`,
+      transform: `translate(-50%, -50%) scale(${scale})`,
     });
   }
   return frames;
