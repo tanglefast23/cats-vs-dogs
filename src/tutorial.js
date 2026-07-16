@@ -226,7 +226,7 @@ export const CORE_STEPS = [
   // Round 2 — collect + first merge
   { id: 'r2-collect', round: 2, mode: 'gate', spotlight: '#production-grid', showWhen: (g) => g.phase === 'prep',
     completeOnActions: ['collect-food'],
-    text: "Whisker baked a treat overnight. Tap her station to collect it — it waits in storage until a cat needs it.",
+    text: "Whisker baked a treat overnight. Tap it to collect it — supplies show up in the Tactics Window during battle.",
     isDone: (g) => inventoryHasKind(g, 'food') },
   { id: 'r2-merge', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     dragHints: tutorialMergeHints,
@@ -260,11 +260,11 @@ export const CORE_STEPS = [
   // pack (scripted in app.js), so one Whisker treat fully patches it.
   { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
     completeOnActions: ['use-food'],
-    text: "One of your cats is still hurt — wounds carry over between rounds. Let's patch it up." },
-  { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep',
+    text: "One of your cats is still hurt — wounds carry over between rounds. Start the round; you can feed it in the Tactics Window." },
+  { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'tactics',
     completeOnActions: ['use-food'],
     dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
-    text: "Drag Whisker's treat from House Storage onto the hurt cat — heal +2. That's the payoff of production.",
+    text: "Drag Whisker's treat from House Supplies onto the hurt cat — heal +2. That's the payoff of production.",
     isDone: () => false },
 ];
 

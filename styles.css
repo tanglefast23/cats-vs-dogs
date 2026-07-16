@@ -80,51 +80,17 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   background: linear-gradient(#f0d6a2, #d6ab70 60%, #b97d4e);
   box-shadow: 7px 8px 0 #08171e;
 }
-.production-grid { display: grid; width: 100%; height: 100%; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 0; }
-.house-storage-bin {
-  position: relative;
-  z-index: 2;
-  grid-column: 1;
-  grid-row: 1 / 3;
-  min-width: 0;
-  overflow: hidden;
-}
-.inventory-grid.house-storage-grid {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 0;
-}
-.house-storage-grid .inventory-slot {
-  min-width: 0;
-  min-height: 0;
-  aspect-ratio: auto;
-  border: 1px solid rgba(255,248,220,.5);
-  background-color: #cdbb91;
-  background-image:
-    repeating-linear-gradient(135deg, rgba(255,248,220,.13) 0 2px, transparent 2px 8px),
-    repeating-linear-gradient(45deg, rgba(92,65,43,.06) 0 1px, transparent 1px 9px);
-  box-shadow: none;
-}
-.house-storage-grid .inventory-slot.empty { border-style: solid; }
-.house-storage-grid .inventory-slot.filled { border-color: rgba(255,248,220,.5); background-color: #ead9ad; }
-.house-storage-grid .inventory-slot canvas { width: 88%; height: 88%; }
-.house-storage-grid .inventory-slot b { right: 1px; bottom: 1px; min-width: 18px; font-size: 9px; }
-.house-storage-grid .inventory-slot small { display: none; }
+.production-grid { display: grid; width: 100%; height: 100%; grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; gap: 0; }
 .production-cell { position: relative; min-width: 0; border: 3px solid var(--ink); background: #e8d7ad; box-shadow: 2px 2px 0 #765238; overflow: hidden; }
 .worker-slot { padding: 0; cursor: pointer; background: #c9dfaa; }
 .worker-slot.empty { border-style: dashed; background: rgba(255,248,220,.55); }
-.worker-slot > canvas { position: absolute; inset: 9%; width: 82%; height: 82%; image-rendering: pixelated; }
+/* Cat works on the left half of its square; the appliance sits beside it on the right. */
+.worker-slot > canvas.slot-cat { position: absolute; left: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
+.worker-slot > canvas.slot-station { position: absolute; right: 3%; top: 8%; width: 44%; height: 84%; image-rendering: pixelated; }
 .worker-slot.is-working { z-index: 2; overflow: visible; }
-.worker-slot.is-working > canvas { z-index: 3; will-change: transform; }
+.worker-slot.is-working > canvas.slot-cat { z-index: 3; will-change: transform; }
 .worker-slot .worker-badge { position: absolute; left: 2px; top: 2px; padding: 1px 3px; border: 1px solid var(--ink); background: #ffe56e; font-size: 8px; font-weight: 900; }
 .worker-slot .copy-pips { z-index: 2; }
-.station-cell { display: grid; place-items: center; background: #8b6647; }
-.station-cell canvas { width: 100%; height: 100%; image-rendering: pixelated; }
-.station-cell.empty { opacity: .42; filter: grayscale(.8); }
-.station-cell.active > canvas { position: relative; z-index: 1; }
 .station-progress {
   position: absolute;
   z-index: 5;
@@ -160,7 +126,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   background: repeating-linear-gradient(90deg, #ffc54b 0 7px, #e87832 7px 10px);
   box-shadow: inset 0 1px 0 #fff08b;
 }
-.work-action { position: absolute; z-index: 4; inset: 0; overflow: hidden; pointer-events: none; }
+.work-action { position: absolute; z-index: 4; inset: 0 0 0 auto; width: 50%; overflow: hidden; pointer-events: none; }
 .trade-coin {
   position: absolute;
   left: 43%;
@@ -251,19 +217,19 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 }
 .armour-glint.glint-one { left: 48%; top: 13%; }
 .armour-glint.glint-two { left: 61%; top: 30%; animation-delay: .14s; }
-.worker-slot.worker-hammer > canvas {
+.worker-slot.worker-hammer > canvas.slot-cat {
   transform-origin: 70% 72%;
   animation: smith-pounding 2.24s steps(16) 1 both;
 }
-.worker-slot.worker-stir > canvas {
+.worker-slot.worker-stir > canvas.slot-cat {
   transform-origin: 64% 76%;
   animation: cook-stirring 2.24s steps(16) 1 both;
 }
-.worker-slot.worker-coin > canvas {
+.worker-slot.worker-coin > canvas.slot-cat {
   transform-origin: 72% 68%;
   animation: trader-counting 2.24s steps(16) 1 both;
 }
-.worker-slot.worker-polish > canvas {
+.worker-slot.worker-polish > canvas.slot-cat {
   transform-origin: 50% 76%;
   animation: armourer-polishing 2.24s steps(16) 1 both;
 }
@@ -327,18 +293,20 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   84% { transform: translateY(-72%) rotate(-1deg); }
   94% { transform: translateY(-18%) rotate(0); }
 }
-.station-cell.has-output { z-index: 5; overflow: visible; cursor: pointer; isolation: isolate; }
+.worker-slot.has-output { z-index: 5; overflow: visible; isolation: isolate; }
+/* The finished item pops up over the appliance half as the tap-to-collect button. */
 .station-output {
   position: absolute;
   z-index: 5;
-  inset: -5px;
+  inset: -5px -5px -5px auto;
+  width: 52%;
   display: grid;
   place-items: center;
   padding: 0;
   border: 3px solid #fff4bd;
   background: radial-gradient(circle, rgba(255,248,177,.98) 0 44%, rgba(255,190,55,.9) 72%, rgba(69,44,26,.92) 73%);
   color: white;
-  pointer-events: none;
+  cursor: pointer;
   box-shadow: 0 0 0 3px #ffe56e, 0 0 20px 7px rgba(255,231,91,.72);
   animation: output-ready .78s steps(3) infinite;
 }
@@ -349,14 +317,15 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .sparkle-a { left: -8px; top: 3px; }
 .sparkle-b { right: -8px; top: 14px; animation-delay: -.24s; }
 .sparkle-c { left: 9px; bottom: -8px; animation-delay: -.48s; }
-.station-cell.is-collecting .station-output { animation: output-collected .3s cubic-bezier(.2,.9,.25,1.3) forwards; }
-.station-cell.is-collecting .output-coins canvas { animation: coin-collect-spin .34s cubic-bezier(.2,.8,.2,1) forwards; }
-.station-cell.collection-blocked { animation: collection-blocked .35s steps(4); }
+.worker-slot.is-collecting .station-output { animation: output-collected .3s cubic-bezier(.2,.9,.25,1.3) forwards; }
+.worker-slot.is-collecting .output-coins canvas { animation: coin-collect-spin .34s cubic-bezier(.2,.8,.2,1) forwards; }
+.worker-slot.collection-blocked { animation: collection-blocked .35s steps(4); }
 .collection-flyer { position: fixed; z-index: 1000; width: 68px; height: 68px; pointer-events: none; filter: drop-shadow(0 0 8px #fff2a1); }
 .collection-flyer canvas { width: 100%; height: 100%; image-rendering: pixelated; }
 .collection-flyer.coin-flyer canvas { filter: saturate(1.45) brightness(1.2); }
-.inventory-slot.collection-arrival,
+.worker-slot.collection-arrival,
 .hud-chip.collection-arrival { position: relative; z-index: 8; animation: collection-arrival .62s cubic-bezier(.2,.85,.25,1.35); }
+.worker-slot.collection-arrival { overflow: visible; }
 .collection-gain { position: absolute; z-index: 20; left: 50%; top: 12%; color: #fff45f; font-family: var(--px); font-size: 17px; text-shadow: 2px 2px 0 var(--ink), 0 0 8px #fff; pointer-events: none; animation: collection-gain-float .9s ease-out forwards; }
 @keyframes output-ready { 50% { filter: brightness(1.18); transform: scale(1.045); box-shadow: 0 0 0 4px #fff7a8, 0 0 26px 10px rgba(255,231,91,.82); } }
 @keyframes output-sparkle { 0%,100% { opacity: .2; transform: scale(.45) rotate(0); } 45% { opacity: 1; transform: scale(1.28) rotate(90deg); } }
@@ -409,7 +378,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
   margin-top: 32px;
   display: grid;
   grid-template-columns: 5fr 6fr;
-  grid-template-rows: minmax(0, 12fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 13fr) minmax(0, 1fr);
   align-items: stretch;
   width: min(100%, 820px);
   aspect-ratio: 11 / 14;
@@ -443,7 +412,7 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
     linear-gradient(90deg, #59413a 0 2px, #b17c5d 2px 6px, #8c6250 6px 13px, #4b352e 13px);
 }
 .house-wing::after { left: -16px; top: 0; }
-.board-frame::after { right: -16px; height: calc(100% / 14 * 2); }
+.board-frame::after { right: -16px; height: calc(100% / 14 * 1); }
 /* Broken white picket fence across the back of the yard — the dogs came through here. */
 .field-house-layout::before {
   content: '';
@@ -640,7 +609,6 @@ body.cat-sell-dragging .next-wave-zone { pointer-events: auto; }
 .house-wing .production-cell { border: 1px solid rgba(255,248,220,.5); box-shadow: none; }
 .house-wing .production-cell small { display: none; }
 .house-wing .worker-slot.empty .empty-plus { font-family: var(--px); font-size: 14px; }
-.house-wing .station-cell.empty .empty-plus { font-size: 14px; color: #e1b97b; }
 .house-wing::before {
   content: '';
   position: absolute;
@@ -867,6 +835,11 @@ body.cat-sell-dragging .next-wave-zone.sale-blocked { animation: none; }
 .active-ability.targeting { background: #8ee7ff; outline: 3px solid #fff; }
 .active-ability.used { opacity: .45; box-shadow: none; }
 .no-active-cats { grid-column: 1 / -1; color: #52646c; }
+/* Collected production items surface here between combat exchanges. */
+.tactics-supplies { margin-top: 8px; padding-top: 8px; border-top: 2px solid rgba(49,85,140,.3); }
+.tactics-supplies .tiny-label { display: block; margin-bottom: 5px; color: #31558c; }
+.tactics-supplies-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tactics-supplies-grid .inventory-slot { max-width: 72px; }
 .cell.ability-target { z-index: 3; cursor: crosshair; animation: ability-target-pulse .65s steps(2) infinite; }
 .cell.bomb-aim { cursor: crosshair; }
 .cell.bomb-aim.bomb-footprint,
@@ -3246,7 +3219,6 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 .preview-sign small { font-size: 11px; }
 .dog-preview-cell b { padding: 2px 4px; font-size: 10px; }
 .worker-slot .worker-badge { padding: 2px 4px; font-size: 10px; }
-.house-storage-grid .inventory-slot b,
 .inventory-slot b { min-width: 22px; padding: 1px 3px; font-size: 11px; }
 .station-output b { min-width: 25px; padding: 3px; font-size: 13px; }
 .station-output em { padding: 3px 5px; font-size: 8px; }

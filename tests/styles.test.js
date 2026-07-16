@@ -159,7 +159,7 @@ test('the Cat Cart wing and fence align with the left wood rail', () => {
 });
 
 test('wood side rails begin at the house roofline', () => {
-  assert.match(css, /\.board-frame::after\s*{[^}]*height:\s*calc\(100% \/ 14 \* 2\);/s);
+  assert.match(css, /\.board-frame::after\s*{[^}]*height:\s*calc\(100% \/ 14 \* 1\);/s);
   const houseRoof = css.match(/\.house-wing::before\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
 });
