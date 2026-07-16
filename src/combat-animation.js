@@ -13,6 +13,8 @@ export const COMBAT_TIMING = Object.freeze({
   burstStaggerMs: 90,
   impactMs: 340,
   hpPauseMs: 300,
+  // A floating damage number: pop in with overshoot, drift upward, fade out.
+  damageNumberMs: 950,
   meleeMs: 430,
   movePauseMs: 260,
   stormChargeMs: 380,

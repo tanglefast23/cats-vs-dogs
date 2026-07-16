@@ -14,14 +14,14 @@ import {
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, catSelectionAdvice, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
-import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playHit, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, isSoundEnabled, setSoundEnabled, loadSoundEnabled, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeUpgrade } from './upgrade-animation.js';
 import { BLUE_SCRATCH_FLURRY } from './melee-animation.js';
 import {
   ATTACK_FX, HURT_FX, attackDogFx, attackSignature, attackGroupKey, blastFootprint,
-  contactVector, isKill,
+  contactVector, isKill, damageNumberFx,
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
 import {
@@ -1819,7 +1819,15 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   const hurt = HURT_FX[fx.impact] ?? HURT_FX.thump;
   const targetUnit = fxUnitFor(event.to);
   const dogFx = targetUnit?.kind === 'dog' ? attackDogFx(key, targetUnit.role) : null;
-  if (sound) playHit({ heavy: Boolean(fx.heavy) });
+  const isDecoyBlock = Boolean(event.decoyBlock);
+  if (sound) {
+    if (isDecoyBlock) playArmourBlock();
+    else playImpact(fx.impact, { heavy: Boolean(fx.heavy) });
+  }
+  // Armour rings even for blast victims whose boom already played: the soak is its own cue.
+  if (!isDecoyBlock && (event.blocked ?? 0) > 0) {
+    playArmourBlock({ broken: Boolean(event.armourBroken) });
+  }
 
   const target = findUnitElement(event.to);
   // The blow comes from the attacker's tile; storm bolts and blasts come from above.
@@ -1837,14 +1845,20 @@ function showImpact(event, signature = null, { sound = true } = {}) {
   const mark = effectAtPercent(`hurt-mark mark-${hurt.mark}`, contactX, contactY);
   mark.style.setProperty('--mark-angle', `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
 
-  const isDecoyBlock = Boolean(event.decoyBlock);
-  const tone = event.type === 'melee' || event.type === 'dog-shot' ? '' : ' to-dog';
-  const damage = effectAt(
-    `damage-number${tone}${isDecoyBlock ? ' block-number' : ''}`,
-    event.toRow,
-    event.col,
-    isDecoyBlock ? 'BLOCK!' : `-${event.damage}`,
-  );
+  const numberFx = damageNumberFx(event);
+  const damage = effectAt(`damage-number ${numberFx.classes}`, event.toRow, event.col, numberFx.text);
+  damage.style.setProperty('--dmg-drift', `${numberFx.driftX}px`);
+  damage.style.setProperty('--dmg-tilt', `${numberFx.tiltDeg}deg`);
+  damage.style.setProperty('--dmg-ms', `${timing.damageNumberMs}ms`);
+  if (numberFx.blocked) {
+    // The armour sticker: shield plus how much it soaked, cracking off when it breaks.
+    const chip = document.createElement('b');
+    chip.className = `armour-chip${numberFx.blocked.broken ? ' armour-breaks' : ''}`;
+    const icon = document.createElement('i');
+    icon.textContent = '🛡️';
+    chip.append(icon, String(numberFx.blocked.amount));
+    damage.append(chip);
+  }
 
   if (target) {
     target.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
@@ -1868,7 +1882,7 @@ function showImpact(event, signature = null, { sound = true } = {}) {
     }
   }
   window.setTimeout(() => { burst.remove(); mark.remove(); }, timing.impactMs);
-  window.setTimeout(() => damage.remove(), timing.impactMs + timing.hpPauseMs);
+  window.setTimeout(() => damage.remove(), timing.damageNumberMs);
   window.setTimeout(() => {
     target?.classList.remove('hurt', 'shake-soft', 'shake-hard', 'shake-rattle', 'decoy-blocking');
     clearDogReaction(target);
@@ -2050,7 +2064,7 @@ async function animateLobbedBlast(group, primary, signature, fx, index) {
   });
 
   $('#board')?.classList.add('board-blast-shake');
-  playHit({ heavy: true });
+  playImpact(fx.impact, { heavy: true });
 
   // Everything caught in the blast reacts from the aim square outward.
   group.events.forEach((event) => {
@@ -2102,7 +2116,7 @@ async function animateBeam(group, primary, signature, fx, index) {
     return;
   }
 
-  playHit({ heavy: true });
+  playImpact(fx.impact, { heavy: true });
   // Front dog burns through first, then the beam pushes deeper into the lane.
   [...hits]
     .sort((left, right) => right.toRow - left.toRow)
@@ -2452,7 +2466,7 @@ async function animateStorm(events) {
     board?.classList.add('storm-recoil');
     targetMarkers.forEach((marker) => marker.classList.add('is-striking'));
     await wait(timing.stormFlashLeadMs);
-    playHit({ heavy: true });
+    playImpact(ATTACK_FX.lightning.impact, { heavy: true });
     strikes.forEach((event) => showImpact(event, 'lightning', { sound: false }));
     await wait(timing.stormAftermathMs);
   } finally {

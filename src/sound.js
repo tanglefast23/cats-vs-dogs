@@ -332,6 +332,122 @@ export function playHit({ heavy = false } = {}) {
   noiseBurst({ duration: 0.05, volume: 0.04, filterFreq: 1800 });
 }
 
+/** Small pitch wobble so repeated hits never sound machine-stamped. */
+function jitter(frequency) {
+  return frequency * (0.93 + Math.random() * 0.14);
+}
+
+/**
+ * One voice per impact kind in battle-fx's HURT_FX table, so what you hear matches what
+ * hit you: teeth crunch, claws rake, frost rings, bombs boom, music-notes chime.
+ * Guarded by a test — every impact the graphics can show must have a sound.
+ */
+export const IMPACT_SOUNDS = Object.freeze({
+  // Teeth sink in: two low crunches.
+  chomp: () => {
+    tone({ frequency: jitter(210), slideTo: 80, duration: 0.11, type: 'square', volume: 0.06 });
+    noiseBurst({ duration: 0.07, volume: 0.05, filterFreq: 950 });
+    later(70, () => {
+      if (!soundEnabled) return;
+      tone({ frequency: jitter(150), slideTo: 60, duration: 0.09, type: 'square', volume: 0.05 });
+      noiseBurst({ duration: 0.06, volume: 0.04, filterFreq: 700 });
+    });
+  },
+  // Three fast claw swipes, each a shade lower.
+  rake: () => {
+    [0, 55, 110].forEach((delay, swipe) => later(delay, () => {
+      if (!soundEnabled) return;
+      noiseBurst({ duration: 0.045, volume: 0.042, filterFreq: 3400 - swipe * 500 });
+      tone({ frequency: jitter(820 - swipe * 120), slideTo: 380, duration: 0.05, type: 'sawtooth', volume: 0.02 });
+    }));
+  },
+  // A pellet pew.
+  spark: () => {
+    tone({ frequency: jitter(920), slideTo: 420, duration: 0.07, type: 'square', volume: 0.05, attack: 0.002, decay: 0.04 });
+    noiseBurst({ duration: 0.035, volume: 0.03, filterFreq: 2400 });
+  },
+  // The plain body blow.
+  thump: () => {
+    tone({ frequency: jitter(460), slideTo: 190, duration: 0.09, type: 'square', volume: 0.055 });
+    noiseBurst({ duration: 0.05, volume: 0.04, filterFreq: 1500 });
+  },
+  // Bombay Boom's fireball.
+  scorch: () => {
+    tone({ frequency: jitter(120), slideTo: 42, duration: 0.22, type: 'square', volume: 0.075 });
+    noiseBurst({ duration: 0.16, volume: 0.07, filterFreq: 750 });
+    later(60, () => { if (soundEnabled) noiseBurst({ duration: 0.12, volume: 0.045, filterFreq: 420 }); });
+  },
+  // Bone Jovi's mortar shell landing.
+  thud: () => {
+    tone({ frequency: jitter(150), slideTo: 55, duration: 0.16, type: 'square', volume: 0.07 });
+    noiseBurst({ duration: 0.11, volume: 0.06, filterFreq: 600 });
+  },
+  // Laserpaw's beam boring through.
+  burn: () => {
+    tone({ frequency: jitter(680), slideTo: 260, duration: 0.14, type: 'sawtooth', volume: 0.035 });
+    noiseBurst({ duration: 0.13, volume: 0.035, filterFreq: 4200 });
+  },
+  // An icy crystalline ring.
+  frost: () => {
+    tone({ frequency: jitter(1180), slideTo: 1560, duration: 0.1, type: 'sine', volume: 0.045, attack: 0.002, decay: 0.06 });
+    noiseBurst({ duration: 0.04, volume: 0.02, filterFreq: 5200 });
+    later(60, () => { if (soundEnabled) tone({ frequency: jitter(1680), duration: 0.09, type: 'triangle', volume: 0.03 }); });
+  },
+  // Static crack.
+  zap: () => {
+    tone({ frequency: jitter(1150), slideTo: 240, duration: 0.07, type: 'sawtooth', volume: 0.05, attack: 0.001, decay: 0.03 });
+    noiseBurst({ duration: 0.05, volume: 0.045, filterFreq: 3600 });
+    later(45, () => { if (soundEnabled) tone({ frequency: jitter(760), slideTo: 180, duration: 0.05, type: 'square', volume: 0.03 }); });
+  },
+  // Yarn cinching soft and snug.
+  wrap: () => {
+    tone({ frequency: jitter(340), slideTo: 210, duration: 0.09, type: 'triangle', volume: 0.04 });
+    noiseBurst({ duration: 0.05, volume: 0.02, filterFreq: 900 });
+  },
+  // The hollow pok of a tennis ball.
+  dent: () => {
+    tone({ frequency: jitter(540), slideTo: 250, duration: 0.06, type: 'triangle', volume: 0.06, attack: 0.001, decay: 0.035 });
+    noiseBurst({ duration: 0.03, volume: 0.025, filterFreq: 1300 });
+  },
+  // Frisbee or card whoosh, then the snick as it lands.
+  slice: () => {
+    noiseBurst({ duration: 0.06, volume: 0.04, filterFreq: 4800 });
+    tone({ frequency: jitter(760), slideTo: 1180, duration: 0.06, type: 'square', volume: 0.028 });
+    later(50, () => { if (soundEnabled) tone({ frequency: jitter(980), slideTo: 460, duration: 0.05, type: 'square', volume: 0.035 }); });
+  },
+  // A portal blip, up then folded back down.
+  warp: () => {
+    tone({ frequency: jitter(480), slideTo: 940, duration: 0.11, type: 'sine', volume: 0.045 });
+    later(70, () => { if (soundEnabled) tone({ frequency: jitter(700), slideTo: 350, duration: 0.09, type: 'sine', volume: 0.03 }); });
+  },
+  // Meowstro's note lands as a small chord.
+  chime: () => {
+    tone({ frequency: jitter(880), duration: 0.12, type: 'triangle', volume: 0.05, attack: 0.002, decay: 0.07 });
+    later(70, () => { if (soundEnabled) tone({ frequency: jitter(1320), duration: 0.1, type: 'sine', volume: 0.035 }); });
+  },
+});
+
+/** The sound of one hit landing, matched to the attack's impact kind. */
+export function playImpact(kind, { heavy = false } = {}) {
+  if (!soundEnabled) return;
+  const play = IMPACT_SOUNDS[kind];
+  if (play) play();
+  else playHit({ heavy });
+}
+
+/** Metallic ting when armour soaks part of a hit; a sad clatter follows when it breaks. */
+export function playArmourBlock({ broken = false } = {}) {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(1240), slideTo: 880, duration: 0.09, type: 'triangle', volume: 0.05, attack: 0.001, decay: 0.05 });
+  noiseBurst({ duration: 0.03, volume: 0.02, filterFreq: 5600 });
+  if (!broken) return;
+  later(90, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: 620, slideTo: 140, duration: 0.16, type: 'square', volume: 0.05 });
+    noiseBurst({ duration: 0.12, volume: 0.05, filterFreq: 1700 });
+  });
+}
+
 /** Bright two-stage pickup chime for production output collection. */
 export function playCollection(kind = 'item') {
   if (!soundEnabled) return;

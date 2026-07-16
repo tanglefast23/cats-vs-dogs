@@ -268,3 +268,41 @@ export function isKill(event) {
   }
   return event.hpAfter === 0 && event.hpBefore > 0;
 }
+
+/** How hard a floating number shouts: bigger hits earn bigger type, kills always shout. */
+export function damageTier(event) {
+  if (event.decoyBlock) return 'big';
+  if (isKill(event) || event.damage >= 8) return 'huge';
+  if (event.damage >= 4) return 'big';
+  return 'small';
+}
+
+/**
+ * The floating combat number for one damage event: what it says, how big it pops, and
+ * the armour chip pinned beside it when protection soaked part of the blow.
+ *
+ * Every hit pops in with overshoot, drifts a little sideways so stacked hits stay
+ * readable, and lands slightly tilted. Drift and tilt come from the injected random so
+ * tests can pin them down. The engine already reports how much armour or a catnip guard
+ * blocked (`blocked`) and whether the hit spent the armour's last use (`armourBroken`);
+ * this just decides how that is worn on screen.
+ */
+export function damageNumberFx(event, random = Math.random) {
+  const isBlock = Boolean(event.decoyBlock);
+  // Dogs attack with `melee` bites and `dog-shot` throws; everything else is a cat attack.
+  const hitsCat = event.type === 'melee' || event.type === 'dog-shot';
+  const blocked = !isBlock && (event.blocked ?? 0) > 0
+    ? { amount: event.blocked, broken: Boolean(event.armourBroken) }
+    : null;
+  return {
+    text: isBlock ? 'BLOCK!' : `-${event.damage}`,
+    classes: [
+      hitsCat ? '' : 'to-dog',
+      isBlock ? 'block-number' : '',
+      `dmg-${damageTier(event)}`,
+    ].filter(Boolean).join(' '),
+    driftX: Math.round((random() * 2 - 1) * 14),
+    tiltDeg: Math.round((random() * 2 - 1) * 9),
+    blocked,
+  };
+}

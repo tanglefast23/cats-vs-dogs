@@ -1203,10 +1203,59 @@ h1 span { color: var(--orange); font-size: .75em; }
   box-shadow: -8px 0 #b7c7ce, 8px 0 #b7c7ce, 0 -8px #c9d6dc, 0 8px #c9d6dc;
 }
 .impact-burst { position: absolute; width: 12px; height: 12px; background: #fff5a0; border: 2px solid #d43e34; box-shadow: -12px 0 #f26a3d, 12px 0 #f26a3d, 0 -12px #ffd34e, 0 12px #ffd34e, -8px -8px #fff5a0, 8px -8px #fff5a0, -8px 8px #fff5a0, 8px 8px #fff5a0; transform: translate(-50%, -50%); animation: impact-pop .34s steps(4) forwards; z-index: 16; }
-.damage-number { position: absolute; color: #ff3e3e; font-family: var(--px); font-size: 12px; font-style: normal; text-shadow: 2px 2px 0 #5b131c, -1px -1px 0 #fff4dc; transform: translate(-50%, -80%); animation: damage-rise .64s steps(6) forwards; z-index: 18; }
+.damage-number {
+  --dmg-drift: 0px;
+  --dmg-tilt: 0deg;
+  --dmg-ms: 950ms;
+  --dmg-outline: #4a1016;
+  position: absolute;
+  z-index: 18;
+  color: #ff5347;
+  font-family: var(--px);
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+  text-shadow:
+    2px 0 0 var(--dmg-outline), -2px 0 0 var(--dmg-outline),
+    0 2px 0 var(--dmg-outline), 0 -2px 0 var(--dmg-outline),
+    2px 2px 0 var(--dmg-outline), -2px 2px 0 var(--dmg-outline),
+    2px -2px 0 var(--dmg-outline), -2px -2px 0 var(--dmg-outline),
+    0 3px 0 var(--dmg-outline);
+  transform: translate(-50%, -66%) scale(0) rotate(var(--dmg-tilt));
+  animation: damage-pop var(--dmg-ms) cubic-bezier(.23, 1, .32, 1) forwards;
+  pointer-events: none;
+}
+.damage-number.dmg-big { font-size: 19px; }
+.damage-number.dmg-huge { font-size: 26px; filter: drop-shadow(0 0 6px rgba(255, 244, 150, .55)); }
+.damage-number .armour-chip {
+  position: absolute;
+  left: 74%;
+  top: 56%;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 3px;
+  border: 2px solid #164d78;
+  background: #e8f7ff;
+  color: #1d5c8f;
+  font-size: .52em;
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: none;
+  box-shadow: 1px 1px 0 rgba(17, 38, 32, .5);
+  transform: scale(0);
+  animation: armour-chip-pop calc(var(--dmg-ms) * .5) cubic-bezier(.34, 1.56, .64, 1) forwards;
+  animation-delay: calc(var(--dmg-ms) * .08);
+}
+.damage-number .armour-chip i { font-style: normal; font-size: 1.2em; line-height: 1; }
+.damage-number .armour-chip.armour-breaks {
+  animation:
+    armour-chip-pop calc(var(--dmg-ms) * .32) cubic-bezier(.34, 1.56, .64, 1) forwards,
+    armour-chip-break calc(var(--dmg-ms) * .5) ease-in calc(var(--dmg-ms) * .42) forwards;
+}
 /* Damage you deal lands gold; damage you take stays red — an exchange reads from color alone. */
-.damage-number.to-dog { color: #ffd743; text-shadow: 2px 2px 0 #5b3d10, -1px -1px 0 #fff4dc; }
-.damage-number.block-number { color: #bff6ff; text-shadow: 2px 2px 0 #164d78, -1px -1px 0 #fff; }
+.damage-number.to-dog { --dmg-outline: #59380b; color: #ffd743; }
+.damage-number.block-number { --dmg-outline: #164d78; color: #bff6ff; }
 .heal-number { position: absolute; color: #7cf08d; font-size: 16px; font-weight: 900; text-shadow: 2px 2px 0 #194b31, -1px -1px 0 #efffdc; transform: translate(-50%, -60%); animation: heal-rise .68s steps(6) forwards; z-index: 19; }
 .unit.healed canvas { filter: brightness(1.25) drop-shadow(0 0 6px #83f29a); }
 /* ---------------------------------------------------------------------------
@@ -1530,7 +1579,27 @@ h1 span { color: var(--orange); font-size: .75em; }
 .super-effect { position: absolute; bottom: -9%; width: calc(100% / 6); aspect-ratio: 1; animation: super-run .85s steps(12) forwards; }
 .super-effect canvas { width: 100%; height: 100%; image-rendering: pixelated; }
 @keyframes impact-pop { 0% { transform: translate(-50%, -50%) scale(.25); opacity: 1; } 70% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
-@keyframes damage-rise { 0% { transform: translate(-50%, -20%); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(-50%, -180%); opacity: 0; } }
+/* Pop in with overshoot, settle, then float up with a sideways drift and fade out. */
+@keyframes damage-pop {
+  0% { transform: translate(-50%, -66%) scale(0) rotate(var(--dmg-tilt)); opacity: 0; }
+  12% { transform: translate(-50%, -104%) scale(1.42) rotate(var(--dmg-tilt)); opacity: 1; }
+  24% { transform: translate(-50%, -94%) scale(.92) rotate(var(--dmg-tilt)); }
+  36% { transform: translate(-50%, -98%) scale(1.08) rotate(var(--dmg-tilt)); }
+  48% { transform: translate(calc(-50% + var(--dmg-drift) * .35), -112%) scale(1) rotate(var(--dmg-tilt)); opacity: 1; }
+  78% { transform: translate(calc(-50% + var(--dmg-drift) * .8), -168%) scale(1) rotate(var(--dmg-tilt)); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dmg-drift)), -215%) scale(.9) rotate(var(--dmg-tilt)); opacity: 0; }
+}
+@keyframes armour-chip-pop {
+  0% { transform: scale(0) rotate(-12deg); }
+  55% { transform: scale(1.25) rotate(4deg); }
+  100% { transform: scale(1) rotate(-3deg); }
+}
+/* The last protected hit: the sticker greys out, swings loose, and falls off. */
+@keyframes armour-chip-break {
+  0% { transform: scale(1) rotate(-3deg); opacity: 1; filter: none; }
+  30% { transform: scale(1.1) rotate(9deg); filter: grayscale(.6); }
+  100% { transform: scale(.7) rotate(38deg) translateY(14px); opacity: 0; filter: grayscale(1); }
+}
 @keyframes heal-rise { 0% { transform: translate(-50%, 10%) scale(.75); opacity: 0; } 25%,70% { opacity: 1; } 100% { transform: translate(-50%, -170%) scale(1.08); opacity: 0; } }
 @keyframes hurt-overlay { 0%, 55% { opacity: 1; } 25%, 80% { opacity: .15; } 100% { opacity: 0; } }
 @keyframes hurt-flash { 0%, 50% { filter: sepia(1) saturate(8) hue-rotate(315deg) brightness(1.3) drop-shadow(2px 3px 0 rgba(17,38,32,.4)); transform: translateX(-3px); } 25%, 75% { transform: translateX(3px); } 100% { filter: drop-shadow(2px 3px 0 rgba(17,38,32,.4)); transform: translateX(0); } }
