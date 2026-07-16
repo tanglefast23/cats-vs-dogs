@@ -1082,8 +1082,16 @@ test('cat tooltips describe each coat attack style', () => {
   assert.match(ghost.attack, /homing|column|sine|random/i);
   assert.equal(tabby.category, 'T1');
   assert.equal(catTooltipInfo({ level: 1, coat: CAT_COAT.PRISM }).category, 'T3');
-  assert.equal(brawler.stats, 'Health 12/12 · Attack 1/action · 2/round');
-  assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7/action · 14/round');
+  assert.equal(tabby.stats, 'Health 6/6 · Attack 2+1+1');
+  assert.equal(catTooltipInfo({ level: 2, coat: CAT_COAT.ORANGE }).stats, 'Health 13/13 · Attack 5+5+4');
+  assert.equal(brawler.stats, 'Health 12/12 · Attack 1');
+  assert.equal(armedBrawler.stats, 'Health 9/12 · Attack 7');
+});
+
+test('cat tooltips get straight to the attack description', () => {
+  Object.values(CAT_COAT_INFO).forEach((info) => {
+    assert.doesNotMatch(info.attackDetail, /^Each action,/i);
+  });
 });
 
 test('cat tooltips fully explain equipment, temporary buffs, and active ability state', () => {

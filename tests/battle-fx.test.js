@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ATTACK_FX, ATTACK_DOG_FX, CAT_ATTACK_SIGNATURES, DOG_REACTION_FX, HURT_FX,
+  ATTACK_FX, ATTACK_DOG_FX, ATTACK_RECOIL_FX, CAT_ATTACK_SIGNATURES, DOG_REACTION_FX, HURT_FX,
   ENGINE_ATTACK_STYLES, attackDogFx, attackSignature, blastCells, blastFootprint,
-  contactVector, isKill, attackGroupKey, damageNumberFx, damageTier,
+  contactVector, isKill, attackGroupKey, attackRecoilFx, damageNumberFx, damageTier, fanOffset,
 } from '../src/battle-fx.js';
 import { yarnThrowKeyframes } from '../src/combat-animation.js';
 import { COLS, DOG_ROLE } from '../src/game-engine.js';
@@ -46,6 +46,29 @@ test('the six homing cats each get their own projectile skin', () => {
     seen.add(ATTACK_FX[signature].projectile);
   }
   assert.equal(seen.size, skins.size, 'the six homing cats must not share a projectile');
+});
+
+test('every projectile cat and Laserpaw has launch recoil', () => {
+  for (const signature of CAT_ATTACK_SIGNATURES) {
+    const fx = ATTACK_FX[signature];
+    if (!fx.projectile && fx.path !== 'beam') continue;
+    assert.ok(fx.recoil, `${signature} does not declare launch recoil`);
+    assert.ok(ATTACK_RECOIL_FX[fx.recoil], `${signature} uses unknown recoil ${fx.recoil}`);
+  }
+  assert.equal(ATTACK_FX.melee.recoil, undefined);
+  assert.equal(ATTACK_FX.lightning.recoil, undefined);
+  assert.ok(ATTACK_RECOIL_FX.laser.distance > ATTACK_RECOIL_FX.standard.distance);
+});
+
+test('launch recoil pushes the cat opposite its projectile', () => {
+  const upwardShot = attackRecoilFx('homing', 12, 2, 4, 2);
+  assert.ok(upwardShot.dy > 0, 'an upward shot should push the cat down');
+  assert.ok(Math.abs(upwardShot.dx) < 1e-9);
+
+  const diagonalShot = attackRecoilFx('bomb', 12, 1, 5, 4);
+  assert.ok(diagonalShot.dx < 0, 'a shot toward the right should push the cat left');
+  assert.ok(diagonalShot.dy > 0, 'a shot upward should push the cat down');
+  assert.equal(attackRecoilFx('melee', 12, 2, 11, 2), null);
 });
 
 test('an unknown caster falls back without throwing', () => {
@@ -215,19 +238,34 @@ test('armour that soaks damage pins a protection chip beside the number', () => 
   );
 });
 
+// Purrcy's three pellets land on the same square within a second of each other. Each
+// number takes its own seat — centre, left, right — so -1 -1 -1 reads as three hits.
+test('quick hits on one square fan out instead of stacking', () => {
+  assert.deepEqual([0, 1, 2, 3, 4].map(fanOffset), [0, -32, 32, -64, 64]);
+
+  const event = { type: 'shot', to: 'dog1', damage: 2, hpBefore: 9, hpAfter: 7 };
+  const seats = [0, 1, 2].map((slot) => damageNumberFx(event, Math.random, slot));
+  const positions = seats.map((fx) => fx.fanX);
+  assert.equal(new Set(positions).size, 3, 'three quick hits must take three distinct seats');
+  // Fanned numbers keep drifting outward on their own side, opening the fan as it rises.
+  for (const fx of seats.slice(1)) {
+    assert.equal(Math.sign(fx.driftX), Math.sign(fx.fanX), 'drift continues on the fan side');
+  }
+});
+
 test('drift and tilt are bounded and follow the injected random', () => {
   const event = { type: 'shot', to: 'dog1', damage: 2, hpBefore: 9, hpAfter: 7 };
   assert.deepEqual(
     [damageNumberFx(event, () => 0).driftX, damageNumberFx(event, () => 0).tiltDeg],
-    [-14, -9],
+    [-4, -9],
   );
   assert.deepEqual(
     [damageNumberFx(event, () => 0.5).driftX, damageNumberFx(event, () => 0.5).tiltDeg],
-    [0, 0],
+    [9, 0],
   );
   for (let i = 0; i < 40; i += 1) {
     const fx = damageNumberFx(event);
-    assert.ok(Math.abs(fx.driftX) <= 14, 'drift stays inside its own tile');
+    assert.ok(Math.abs(fx.driftX) >= 4 && Math.abs(fx.driftX) <= 14, 'drift is visible but stays near its tile');
     assert.ok(Math.abs(fx.tiltDeg) <= 9, 'tilt stays readable');
   }
 });

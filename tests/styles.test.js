@@ -34,6 +34,28 @@ test('tutorial outlines stay strongly visible with reduced motion', () => {
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*\.tutorial-spotlight::after, \.tutorial-source-highlight::after\s*{[^}]*animation:\s*none;[^}]*0 0 14px/s);
 });
 
+test('Knotty yarn stays tied after cinching and has a separate fade phase', () => {
+  assert.match(css, /@keyframes tangle-bind-in\s*{[\s\S]*100%\s*{\s*opacity:\s*1;/s);
+  assert.match(css, /\.tangle-bind\.is-fading\s*{\s*animation:\s*tangle-bind-out var\(--tangle-fade-ms\) linear forwards;/s);
+  assert.match(css, /@keyframes tangle-bind-out\s*{[\s\S]*from\s*{\s*opacity:\s*1;[\s\S]*to\s*{\s*opacity:\s*0;/s);
+  assert.match(app, /restoreActiveTethers\(\);/);
+});
+
+test('ranged cats recoil on launch and Laserpaw braces against the beam', () => {
+  assert.match(app, /showAttackRecoil\(event, signature\);/);
+  assert.match(app, /showAttackRecoil\(primary, signature, \{ durationMs: timing\.blastMs \}\);/);
+  assert.match(app, /phase: 'charge',[\s\S]*durationMs: timing\.beamChargeMs/s);
+  assert.match(css, /\.unit\.attack-recoil-standard\s*{[^}]*cat-launch-standard/s);
+  assert.match(css, /\.unit\.attack-recoil-laser\s*{[^}]*cat-laser-pressure/s);
+  assert.match(css, /@keyframes cat-laser-pressure\s*{[\s\S]*var\(--attack-recoil-x\)[\s\S]*var\(--attack-recoil-half-x\)/s);
+  assert.match(css, /\.backblast-laser\s*{[^}]*animation-name:\s*laser-backblast/s);
+});
+
+test('launch recoil respects reduced-motion preferences', () => {
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*\.unit\[class\*="attack-recoil-"\][\s\S]*animation:\s*none/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*\.launch-backblast\s*{\s*display:\s*none;/s);
+});
+
 test('repositionable cats use a separate faint tutorial glow', () => {
   assert.match(css, /#tutorial-focus-highlights,\s*\.tutorial-focus-highlight\s*{[^}]*pointer-events:\s*none/s);
   assert.match(css, /\.tutorial-focus-highlight\s*{[^}]*animation:\s*tutorial-focus-glow 1\.6s/s);
