@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   ATTACK_FX, ATTACK_DOG_FX, CAT_ATTACK_SIGNATURES, DOG_REACTION_FX, HURT_FX,
   ENGINE_ATTACK_STYLES, attackDogFx, attackSignature, blastCells, blastFootprint,
-  contactVector, isKill, attackGroupKey,
+  contactVector, isKill, attackGroupKey, damageNumberFx, damageTier,
 } from '../src/battle-fx.js';
 import { yarnThrowKeyframes } from '../src/combat-animation.js';
 import { COLS, DOG_ROLE } from '../src/game-engine.js';
@@ -169,6 +169,67 @@ test('contactVector is a unit vector, and a self-hit does not divide by zero', (
 
   const same = contactVector(3, 3, 3, 3);
   assert.ok(Number.isFinite(same.dx) && Number.isFinite(same.dy));
+});
+
+// The floating number scales with the blow: chip damage whispers, big hits shout,
+// and the killing blow always gets the huge treatment even when the number is small.
+test('damage numbers grow with the damage, and a kill always goes huge', () => {
+  assert.equal(damageTier({ to: 'dog1', damage: 1, hpBefore: 9, hpAfter: 8 }), 'small');
+  assert.equal(damageTier({ to: 'dog1', damage: 4, hpBefore: 9, hpAfter: 5 }), 'big');
+  assert.equal(damageTier({ to: 'dog1', damage: 8, hpBefore: 19, hpAfter: 11 }), 'huge');
+  assert.equal(damageTier({ to: 'dog1', damage: 2, hpBefore: 2, hpAfter: 0 }), 'huge', 'the killing blow shouts');
+  assert.equal(damageTier({ to: 'decoy1', decoyBlock: true, blocksBefore: 2, blocksAfter: 1 }), 'big');
+});
+
+test('damage numbers read gold on dogs and red on cats', () => {
+  const onDog = damageNumberFx({ type: 'shot', to: 'dog1', damage: 3, hpBefore: 9, hpAfter: 6 });
+  assert.equal(onDog.text, '-3');
+  assert.ok(onDog.classes.includes('to-dog'));
+  for (const dogAttack of ['melee', 'dog-shot']) {
+    const onCat = damageNumberFx({ type: dogAttack, to: 'cat1', damage: 3, hpBefore: 9, hpAfter: 6 });
+    assert.ok(!onCat.classes.includes('to-dog'), `${dogAttack} hits a cat, so its number must stay red`);
+  }
+});
+
+test('a decoy block says BLOCK! and never wears an armour chip', () => {
+  const fx = damageNumberFx({
+    type: 'melee', to: 'decoy1', decoyBlock: true, blocked: 5, blocksBefore: 2, blocksAfter: 1, damage: 0,
+  });
+  assert.equal(fx.text, 'BLOCK!');
+  assert.ok(fx.classes.includes('block-number'));
+  assert.equal(fx.blocked, null);
+});
+
+// The armour chip is the engine's own arithmetic worn on screen: applyDogDamage reports
+// how much the armour soaked (`blocked`) and whether the hit spent its last use.
+test('armour that soaks damage pins a protection chip beside the number', () => {
+  const base = { type: 'melee', to: 'cat1', damage: 3, hpBefore: 9, hpAfter: 6 };
+  assert.equal(damageNumberFx(base).blocked, null, 'no armour, no chip');
+  assert.deepEqual(
+    damageNumberFx({ ...base, blocked: 2, armourBroken: false }).blocked,
+    { amount: 2, broken: false },
+  );
+  assert.deepEqual(
+    damageNumberFx({ ...base, blocked: 4, armourBroken: true }).blocked,
+    { amount: 4, broken: true },
+  );
+});
+
+test('drift and tilt are bounded and follow the injected random', () => {
+  const event = { type: 'shot', to: 'dog1', damage: 2, hpBefore: 9, hpAfter: 7 };
+  assert.deepEqual(
+    [damageNumberFx(event, () => 0).driftX, damageNumberFx(event, () => 0).tiltDeg],
+    [-14, -9],
+  );
+  assert.deepEqual(
+    [damageNumberFx(event, () => 0.5).driftX, damageNumberFx(event, () => 0.5).tiltDeg],
+    [0, 0],
+  );
+  for (let i = 0; i < 40; i += 1) {
+    const fx = damageNumberFx(event);
+    assert.ok(Math.abs(fx.driftX) <= 14, 'drift stays inside its own tile');
+    assert.ok(Math.abs(fx.tiltDeg) <= 9, 'tilt stays readable');
+  }
 });
 
 // A death is just an event that took a unit to zero. No engine change needed to spot it.
