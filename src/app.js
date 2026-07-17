@@ -57,6 +57,8 @@ const dragHintAnimations = new Map();
 let tutorialStartNudged = false;
 let tutorialStartNudgeDismissed = false;
 let tutorialMoveFocusCleared = false;
+let tutorialStartedActionId = null;
+let tutorialScoutPreviewTimer = null;
 let tutorialReadyCueTimer = null;
 let pendingTappedCatInfo = null;
 let gameSessionId = 0;
@@ -886,7 +888,12 @@ function showValidDropTargets(source) {
 function startDragVisual(event) {
   if (!dragState || dragState.started) return;
   dragState.started = true;
-  if (dragState.source.type !== 'item') hideTutorialOverlay();
+  const tutorialActionId = tutorialDragActionId(dragState.source);
+  if (tutorialActionId) {
+    dragState.tutorialActionId = tutorialActionId;
+    tutorialStartedActionId = tutorialActionId;
+    hideTutorialOverlay();
+  }
   if (dragState.source.type === 'cat') clearTutorialMoveFocus();
   suppressNextPetClick = true;
   hideUnitTooltip();
@@ -1173,6 +1180,7 @@ async function finishDrag(event, cancelled = false) {
   window.setTimeout(() => { suppressNextPetClick = false; }, 0);
 
   if (!valid) {
+    if (state.tutorialActionId === tutorialStartedActionId) tutorialStartedActionId = null;
     const movementMessage = movementRestrictionMessage(action, state.source);
     const fieldCapReached = action.reason === 'field-cap';
     const productionCat = state.source.type === 'shop-worker'
@@ -1355,7 +1363,7 @@ function productionWorkerSlot(index) {
   }
   slot.insertAdjacentHTML('beforeend', `<b>L${worker.level}</b><small>${info.shortName}</small><span class="copy-pips">${Array.from({ length: worker.copies ?? 1 }, () => '<i></i>').join('')}</span>`);
   bindPetDrag(slot, 'worker', { ...worker, workerIndex: index });
-  bindTooltip(slot, () => workerTooltipInfo(worker, info));
+  if (!worker.pendingOutput) bindTooltip(slot, () => workerTooltipInfo(worker, info));
 
   if (worker.pendingOutput) {
     slot.classList.add('has-output');
@@ -3098,6 +3106,7 @@ function positionTutorialOverlay(selector, opts = {}) {
     mutedRegion = null,
     anchorSelectors = [],
     bubblePlacement = null,
+    showContinue = true,
   } = opts;
   const target = selector ? document.querySelector(selector) : null;
   const pad = TUTORIAL_SPOTLIGHT_PAD;
@@ -3135,16 +3144,27 @@ function positionTutorialOverlay(selector, opts = {}) {
         bottom: Math.max(...anchorRects.map((r) => r.bottom)),
       }
     : target?.getBoundingClientRect();
-  if (anchorRect) {
+  const bubbleH = tutorialBubbleEl.offsetHeight || 140;
+  const bubbleW = tutorialBubbleEl.offsetWidth || 300;
+  const viewportPad = 12;
+  if (bubblePlacement === 'between-targets' && anchorRects.length >= 2) {
+    const [upperTarget, lowerTarget] = [...anchorRects].sort((a, b) => a.top - b.top);
+    const gapTop = upperTarget.bottom + TUTORIAL_BUBBLE_CLEARANCE;
+    const gapBottom = lowerTarget.top - TUTORIAL_BUBBLE_CLEARANCE;
+    const centeredTop = gapTop + (gapBottom - gapTop - bubbleH) / 2;
+    tutorialBubbleEl.style.top = `${Math.min(
+      Math.max(viewportPad, centeredTop),
+      window.innerHeight - bubbleH - viewportPad,
+    )}px`;
+    tutorialBubbleEl.style.left = `${Math.max(viewportPad, (window.innerWidth - bubbleW) / 2)}px`;
+    tutorialBubbleEl.style.transform = 'none';
+  } else if (anchorRect) {
     const r = {
       left: anchorRect.left, top: anchorRect.top,
       right: anchorRect.right, bottom: anchorRect.bottom,
       width: anchorRect.right - anchorRect.left,
       height: anchorRect.bottom - anchorRect.top,
     };
-    const bubbleH = tutorialBubbleEl.offsetHeight || 140;
-    const bubbleW = tutorialBubbleEl.offsetWidth || 300;
-    const viewportPad = 12;
     // Target padding + the visible ring + 10px of clear space requested around it.
     const targetGap = TUTORIAL_SPOTLIGHT_PAD + TUTORIAL_OUTLINE_REACH + TUTORIAL_BUBBLE_CLEARANCE;
     const rawLeft = anchorRects.length ? r.left + r.width / 2 - bubbleW / 2 : r.left;
@@ -3192,7 +3212,7 @@ function positionTutorialOverlay(selector, opts = {}) {
     tutorialBubbleEl.style.left = '50%';
     tutorialBubbleEl.style.transform = 'translate(-50%, -50%)';
   }
-  tutorialNextEl.hidden = false;
+  tutorialNextEl.hidden = !showContinue;
 }
 
 function showTutorialBubble(text, selector, opts) {
@@ -3275,15 +3295,39 @@ function clearTutorialMoveFocus() {
 function completeTutorialTipForAction(actionType) {
   if (!tutorialActive) return;
   tutorialCompletedActions.add(actionType);
-  const stepCompletes = CORE_STEPS[tutorialStepIndex]?.completeOnActions?.includes(actionType);
+  const step = CORE_STEPS[tutorialStepIndex];
+  const stepResponds = step?.completeOnActions?.includes(actionType)
+    || step?.completeOnAllActions?.includes(actionType);
   const tipCompletes = tutorialCurrentTip?.completeOnActions?.includes(actionType);
-  if (!stepCompletes && !tipCompletes) return;
+  if (!stepResponds && !tipCompletes) return;
+  if (stepResponds && tutorialStepIsDone(step) && tutorialStartedActionId === step.id) {
+    tutorialStartedActionId = null;
+  }
   if (tipCompletes) {
+    if (tutorialStartedActionId === tutorialCurrentTip.id) tutorialStartedActionId = null;
     tutorialSeenTips.add(tutorialCurrentTip.id);
     tutorialCurrentTip = null;
     tutorialMoveFocusCleared = true;
   }
   hideTutorialOverlay();
+}
+
+function clearTutorialScoutPreviewTimer() {
+  if (tutorialScoutPreviewTimer !== null) window.clearTimeout(tutorialScoutPreviewTimer);
+  tutorialScoutPreviewTimer = null;
+}
+
+function scheduleTutorialScoutAdvance(step) {
+  clearTutorialScoutPreviewTimer();
+  tutorialScoutPreviewTimer = window.setTimeout(() => {
+    tutorialScoutPreviewTimer = null;
+    if (!tutorialActive || CORE_STEPS[tutorialStepIndex]?.id !== step.id) return;
+    nextWaveVisible = false;
+    completeTutorialTipForAction('view-next-wave');
+    renderDogPreview();
+    renderBoard();
+    syncTutorial();
+  }, step.advanceDelayMs);
 }
 
 // Highlight every unfinished drop and loop one ghost gesture per task. The
@@ -3394,6 +3438,7 @@ function startNewGameSession() {
 }
 
 function startTutorial() {
+  clearTutorialScoutPreviewTimer();
   startNewGameSession();
   startLevelMusic();
   game = createGame();
@@ -3414,6 +3459,7 @@ function startTutorial() {
   tutorialStartNudged = false;
   tutorialStartNudgeDismissed = false;
   tutorialMoveFocusCleared = false;
+  tutorialStartedActionId = null;
   nextWaveVisible = false;
   game.shop = tutorialShop(1) ?? game.shop;
   game.message = 'Tutorial: follow the highlights.';
@@ -3421,8 +3467,10 @@ function startTutorial() {
 }
 
 function endTutorial() {
+  clearTutorialScoutPreviewTimer();
   tutorialActive = false;
   tutorialCurrentTip = null;
+  tutorialStartedActionId = null;
   clearTutorialReadyCue();
   hideTutorialOverlay();
 }
@@ -3468,11 +3516,15 @@ function showCurrentTutorialTip() {
     dim: false,
     showSpotlight: focusSelectors.length === 0,
     anchorSelectors: focusSelectors,
+    showContinue: tutorialCurrentTip.mode !== 'gate',
   });
 }
 
 function completedByTutorialAction(item) {
-  return item?.completeOnActions?.some((action) => tutorialCompletedActions.has(action)) ?? false;
+  const completedAny = item?.completeOnActions?.some((action) => tutorialCompletedActions.has(action)) ?? false;
+  const completedAll = item?.completeOnAllActions?.length > 0
+    && item.completeOnAllActions.every((action) => tutorialCompletedActions.has(action));
+  return completedAny || completedAll;
 }
 
 function tutorialStepIsDone(step) {
@@ -3491,22 +3543,26 @@ function syncTutorial() {
   // Nudge: don't start a round with gold still to spend.
   if (tutorialStartNudged && !tutorialStartNudgeDismissed && game.phase === 'prep' && game.gold > 0) {
     hideDragHint();
+    if (tutorialStartedActionId === 'gold-nudge') { hideTutorialOverlay(); return; }
     showTutorialBubble(`Hold on — you've still got ${game.gold} gold. Buy a cat or use Cat Cart refreshes until it's gone; unspent gold is lost.`,
-      '#shop', { dim: false });
+      '#shop', { dim: false, showContinue: false });
     return;
   }
+  if (tutorialStartedActionId === 'gold-nudge') tutorialStartedActionId = null;
   // Squad-full coaching, once, the moment you hit the 5-cat cap.
   if (game.phase === 'prep' && game.cats.length >= MAX_FIELD_CATS
       && tutorialStepIndex >= CORE_STEPS.length
       && !tutorialCurrentTip && !tutorialSeenTips.has('squad-full')) {
-    tutorialCurrentTip = { id: 'squad-full', spotlight: '#next-wave-zone',
+    tutorialCurrentTip = { id: 'squad-full', mode: 'gate', spotlight: '#next-wave-zone',
       completeOnActions: ['made-squad-room'],
+      dragSources: [{ types: ['cat', 'bench'] }],
       isDone: (state) => state.cats.length < MAX_FIELD_CATS,
       text: "Squad's full at 5! Pick up your weakest cat and the Adoption Box appears just above cat territory. Hover until its border glows, then drop the cat there for gold and a free slot." };
   }
   while (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
     if (tutorialStepIsDone(step)) {
+      if (tutorialStartedActionId === step.id) tutorialStartedActionId = null;
       tutorialDismissedSteps.delete(step.id);
       tutorialStepIndex += 1;
       continue;
@@ -3515,6 +3571,10 @@ function syncTutorial() {
   }
   if (tutorialStepIndex < CORE_STEPS.length) {
     const step = CORE_STEPS[tutorialStepIndex];
+    if (tutorialStartedActionId === step.id) {
+      hideTutorialOverlay();
+      return;
+    }
     if (tutorialDismissedSteps.has(step.id)) {
       hideTutorialOverlay();
       return;
@@ -3540,6 +3600,7 @@ function syncTutorial() {
           mutedRegion: step.mutedRegion,
           anchorSelectors: focusSelectors,
           bubblePlacement: step.bubblePlacement,
+          showContinue: step.mode !== 'gate',
         });
       if (focusSelectors.length && !tutorialMoveFocusCleared) showTutorialFocus(focusSelectors);
       else hideTutorialFocus();
@@ -3551,10 +3612,15 @@ function syncTutorial() {
     return;
   }
   if (tutorialCurrentTip && tutorialTipIsDone(tutorialCurrentTip)) {
+    if (tutorialStartedActionId === tutorialCurrentTip.id) tutorialStartedActionId = null;
     tutorialSeenTips.add(tutorialCurrentTip.id);
     tutorialCurrentTip = null;
   }
   if (tutorialCurrentTip) {
+    if (tutorialStartedActionId === tutorialCurrentTip.id) {
+      hideTutorialOverlay();
+      return;
+    }
     showCurrentTutorialTip();
     return;
   }
@@ -3590,6 +3656,55 @@ function continueTutorial() {
     return;
   }
   if (step) { tutorialStepIndex += 1; syncTutorial(); }
+}
+
+function tutorialActionStartSelectors(item) {
+  const selectors = typeof item?.actionStartSelectors === 'function'
+    ? item.actionStartSelectors(game)
+    : item?.actionStartSelectors;
+  return (Array.isArray(selectors) ? selectors : [selectors]).filter(Boolean);
+}
+
+function currentTutorialActionItem() {
+  const step = CORE_STEPS[tutorialStepIndex];
+  if (step?.mode === 'gate') return step;
+  if (tutorialCurrentTip?.mode === 'gate') return tutorialCurrentTip;
+  return null;
+}
+
+function dragSourceMatches(criteria, source) {
+  if (criteria.types && !criteria.types.includes(source.type)) return false;
+  if (criteria.coat !== undefined && source.coat !== criteria.coat) return false;
+  if (criteria.role !== undefined && source.role !== criteria.role) return false;
+  if (criteria.itemKind !== undefined && source.itemKind !== criteria.itemKind) return false;
+  return true;
+}
+
+function tutorialDragActionId(source) {
+  if (!tutorialActive) return null;
+  if (tutorialStartNudged && !tutorialStartNudgeDismissed && game.phase === 'prep' && game.gold > 0) {
+    return source.type === 'shop-fighter' || source.type === 'shop-worker' ? 'gold-nudge' : null;
+  }
+  const item = currentTutorialActionItem();
+  return item?.dragSources?.some((criteria) => dragSourceMatches(criteria, source)) ? item.id : null;
+}
+
+function dismissTutorialWhenActionStarts(event) {
+  if (!tutorialActive || tutorialOverlayEl.hidden) return;
+  if (event.target?.closest?.('#tutorial-next, #tutorial-skip')) return;
+  if (tutorialStartNudged && !tutorialStartNudgeDismissed && game.phase === 'prep' && game.gold > 0) {
+    if (event.target?.closest?.('#refresh')) {
+      tutorialStartedActionId = 'gold-nudge';
+      hideTutorialOverlay();
+    }
+    return;
+  }
+  const item = currentTutorialActionItem();
+  if (!item) return;
+  if (tutorialActionStartSelectors(item).some((selector) => event.target?.closest?.(selector))) {
+    tutorialStartedActionId = item.id;
+    hideTutorialOverlay();
+  }
 }
 
 function render() {
@@ -3737,6 +3852,7 @@ function closeSettings() {
 }
 
 function resetGame() {
+  clearTutorialScoutPreviewTimer();
   startNewGameSession();
   startLevelMusic();
   game = createGame();
@@ -3800,14 +3916,21 @@ $('#done').addEventListener('click', onDoneClick);
 $('#next-wave-toggle')?.addEventListener('click', () => {
   if (game.phase !== 'prep' || document.body.classList.contains('cat-sell-dragging')) return;
   nextWaveVisible = !nextWaveVisible;
-  if (nextWaveVisible) completeTutorialTipForAction('view-next-wave');
+  const tutorialStep = CORE_STEPS[tutorialStepIndex];
+  if (tutorialActive && nextWaveVisible && tutorialStep?.id === 'r1-scout') {
+    scheduleTutorialScoutAdvance(tutorialStep);
+  } else {
+    completeTutorialTipForAction(nextWaveVisible ? 'view-next-wave' : 'hide-next-wave');
+  }
   renderDogPreview();
   renderBoard();
+  if (tutorialActive) syncTutorial();
 });
 $('#tutorial')?.addEventListener('click', startTutorial);
 $('#mobile-tutorial')?.addEventListener('click', startTutorial);
 tutorialNextEl?.addEventListener('click', continueTutorial);
 $('#tutorial-skip')?.addEventListener('click', requestTutorialSkip);
+window.addEventListener('pointerdown', dismissTutorialWhenActionStarts);
 
 // Two-tap restart: a single stray click must not wipe a six-round run.
 const restartButton = $('#restart');

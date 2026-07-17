@@ -147,6 +147,9 @@ test('round 1 places both cats before teaching tap-for-info', () => {
 
   const step = CORE_STEPS[infoIndex];
   assert.deepEqual(step.completeOnActions, ['view-cat-info', 'open-glossary']);
+  assert.equal(step.bubblePlacement, 'between-targets');
+  assert.equal(step.mode, 'gate');
+  assert.equal(step.actionStartSelectors, tutorialCatInfoSelectors);
   assert.match(step.text, /Tap the cat you just placed/i);
   assert.match(step.text, /yellow “i” in the Cat Cart/i);
 
@@ -269,9 +272,10 @@ test('round 2 teaches the Adoption Box hover gesture in text and action', () => 
   assert.equal(adoptStep.dragFrom(game),
     '#board .cell[data-row="13"][data-col="4"]');
   assert.equal(adoptStep.dragTo, '#next-wave-zone');
-  assert.equal(adoptStep.mode, 'tap');
+  assert.equal(adoptStep.mode, 'gate');
   assert.equal(adoptStep.bubblePlacement, 'target-top');
   assert.deepEqual(adoptStep.completeOnActions, ['sell']);
+  assert.deepEqual(adoptStep.dragSources, [{ types: ['cat', 'bench'], coat: CAT_COAT.WHITE }]);
   assert.match(adoptStep.text, /Adoption Box appears just above cat territory/i);
   assert.match(adoptStep.text, /border glows/i);
   assert.match(adoptStep.text, /drop Hissiletoe there to sell/i);
@@ -331,8 +335,9 @@ test('core lessons only complete from actions that prove the taught behavior', (
 });
 
 test('actionable lessons can declare the successful action that completes them', () => {
-  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r1-scout').completeOnActions,
-    ['view-next-wave', 'purchase-place', 'purchase-bench', 'purchase-merge']);
+  const scout = CORE_STEPS.find((entry) => entry.id === 'r1-scout');
+  assert.deepEqual(scout.completeOnActions, ['view-next-wave']);
+  assert.equal(scout.advanceDelayMs, 1500);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
 });
@@ -364,13 +369,20 @@ test('every core step is well-formed', () => {
     assert.ok(step.id && typeof step.id === 'string');
     assert.ok(typeof step.text === 'function' || (typeof step.text === 'string' && step.text.length > 0));
     assert.ok(['tap', 'gate'].includes(step.mode));
-    if (step.mode === 'gate') assert.equal(typeof step.isDone, 'function');
+    if (step.mode === 'gate') {
+      const hasCompletionGate = typeof step.isDone === 'function'
+        || step.completeOnActions?.length > 0
+        || step.completeOnAllActions?.length > 0;
+      const hasActionStart = step.dragSources?.length > 0 || step.actionStartSelectors;
+      assert.equal(hasCompletionGate, true, `${step.id} needs proof that its action completed`);
+      assert.ok(hasActionStart, `${step.id} needs a real action-start trigger`);
+    }
     if (step.spotlight !== null) assert.ok(['string', 'function'].includes(typeof step.spotlight));
     if (step.dragFrom) assert.ok(['string', 'function'].includes(typeof step.dragFrom));
     if (step.dragTo) assert.ok(['string', 'function'].includes(typeof step.dragTo));
     if (step.dragHints) assert.equal(typeof step.dragHints, 'function');
     if (step.mutedRegion) assert.equal(typeof step.mutedRegion, 'string');
-    if (step.bubblePlacement) assert.ok(['target-top'].includes(step.bubblePlacement));
+    if (step.bubblePlacement) assert.ok(['target-top', 'between-targets'].includes(step.bubblePlacement));
   }
   assert.equal(new Set(CORE_STEPS.map((s) => s.id)).size, CORE_STEPS.length);
 });
@@ -383,7 +395,8 @@ test('the first placement lesson mutes the unrelated dog preview lane', () => {
 test('tutorial targets follow the relocated planning, scout, adoption, and tactics UI', () => {
   const scoutStep = CORE_STEPS.find((step) => step.id === 'r1-scout');
   assert.equal(scoutStep.spotlight, '#next-wave-toggle');
-  assert.ok(scoutStep.completeOnActions.includes('view-next-wave'));
+  assert.deepEqual(scoutStep.completeOnActions, ['view-next-wave']);
+  assert.equal(scoutStep.advanceDelayMs, 1500);
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').spotlight, '#shop');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-start').spotlight, '#done');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').spotlight, '#next-wave-zone');
@@ -395,9 +408,25 @@ test('every tip is well-formed with a trigger', () => {
   assert.ok(TIPS.length > 0);
   for (const tip of TIPS) {
     assert.ok(tip.id && tip.text);
+    assert.ok(['tap', 'gate'].includes(tip.mode));
     assert.equal(typeof tip.when, 'function');
   }
   assert.equal(new Set(TIPS.map((t) => t.id)).size, TIPS.length);
+});
+
+test('only information lessons use Continue; action lessons wait for the game action', () => {
+  assert.deepEqual(
+    CORE_STEPS.filter((step) => step.mode === 'tap').map((step) => step.id),
+    ['r1-stakes', 'r2-admire'],
+  );
+  assert.deepEqual(
+    TIPS.filter((tip) => tip.mode === 'gate').map((tip) => tip.id),
+    ['tip-ability'],
+  );
+  assert.deepEqual(
+    TIPS.filter((tip) => tip.mode === 'tap').map((tip) => tip.id),
+    ['tip-new-cats', 'tip-coins', 'tip-fill-house'],
+  );
 });
 
 test('round 2 teaches movement at the first Tactics Window', () => {

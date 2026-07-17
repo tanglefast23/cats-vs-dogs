@@ -115,12 +115,29 @@ test('tutorial buttons cannot intercept a cat drop through the nearby bubble', (
   assert.match(css, /body\.pet-dragging \.tutorial-next,\s*body\.pet-dragging \.tutorial-skip\s*{\s*pointer-events:\s*none;/s);
 });
 
-test('every tutorial text bubble offers Continue without requiring its highlighted action', () => {
+test('Production House cats suppress their info card while any output is ready to collect', () => {
+  assert.match(app, /if \(!worker\.pendingOutput\) bindTooltip\(slot, \(\) => workerTooltipInfo\(worker, info\)\);/);
+});
+
+test('tutorial action bubbles omit Continue and dismiss only when their action starts', () => {
   assert.match(app, /function positionTutorialOverlay\(selector, opts = \{\}\)/);
-  assert.match(app, /tutorialNextEl\.hidden = false;/);
+  assert.match(app, /tutorialNextEl\.hidden = !showContinue;/);
+  assert.match(app, /showContinue: step\.mode !== 'gate'/);
+  assert.match(app, /showContinue: tutorialCurrentTip\.mode !== 'gate'/);
+  assert.match(app, /function dismissTutorialWhenActionStarts\(event\)/);
+  assert.match(app, /tutorialActionStartSelectors\(item\)\.some/);
+  assert.match(app, /tutorialStartedActionId = item\.id;\s*hideTutorialOverlay\(\);/s);
+  assert.match(app, /window\.addEventListener\('pointerdown', dismissTutorialWhenActionStarts\);/);
   assert.match(app, /if \(step\?\.mode === 'gate'\) \{\s*tutorialDismissedSteps\.add\(step\.id\);\s*hideTutorialOverlay\(\);/s);
   assert.match(app, /if \(tutorialDismissedSteps\.has\(step\.id\)\) \{\s*hideTutorialOverlay\(\);\s*return;/s);
-  assert.match(app, /if \(tutorialStepIsDone\(step\)\) \{\s*tutorialDismissedSteps\.delete\(step\.id\);/s);
+  assert.match(app, /if \(tutorialStepIsDone\(step\)\) \{[\s\S]*?tutorialDismissedSteps\.delete\(step\.id\);/s);
+});
+
+test('tutorial lessons can center a bubble between two targets', () => {
+  assert.match(app, /bubblePlacement === 'between-targets' && anchorRects\.length >= 2/);
+  assert.match(app, /const \[upperTarget, lowerTarget\] = \[\.\.\.anchorRects\]\.sort/);
+  assert.match(app, /const gapTop = upperTarget\.bottom \+ TUTORIAL_BUBBLE_CLEARANCE;/);
+  assert.match(app, /const gapBottom = lowerTarget\.top - TUTORIAL_BUBBLE_CLEARANCE;/);
 });
 
 test('tutorial lessons can pin a bubble inside the top of a battlefield target', () => {
@@ -129,8 +146,12 @@ test('tutorial lessons can pin a bubble inside the top of a battlefield target',
   assert.match(app, /bubblePlacement:\s*step\.bubblePlacement/);
 });
 
-test('starting any cat drag dismisses the visible tutorial overlay', () => {
-  assert.match(app, /dragState\.started = true;\s*if \(dragState\.source\.type !== 'item'\) hideTutorialOverlay\(\);/);
+test('only a matching tutorial drag dismisses the visible action bubble', () => {
+  assert.match(app, /const tutorialActionId = tutorialDragActionId\(dragState\.source\);/);
+  assert.match(app, /dragState\.tutorialActionId = tutorialActionId;\s*tutorialStartedActionId = tutorialActionId;\s*hideTutorialOverlay\(\);/s);
+  assert.match(app, /criteria\.types && !criteria\.types\.includes\(source\.type\)/);
+  assert.match(app, /criteria\.coat !== undefined && source\.coat !== criteria\.coat/);
+  assert.match(app, /if \(state\.tutorialActionId === tutorialStartedActionId\) tutorialStartedActionId = null;/);
 });
 
 test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and scales up as the cat approaches', () => {
@@ -153,7 +174,8 @@ test('the Next Wave button toggles the incoming dogs over the current battlefiel
   assert.match(app, /let nextWaveVisible = false;/);
   assert.match(app, /dogPreviewEl\.hidden = !nextWaveVisible;/);
   assert.match(app, /board\?\.classList\.toggle\('showing-next-wave', nextWaveVisible\);/);
-  assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*if \(nextWaveVisible\) completeTutorialTipForAction\('view-next-wave'\);\s*renderDogPreview\(\);\s*renderBoard\(\);/);
+  assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*const tutorialStep = CORE_STEPS\[tutorialStepIndex\];\s*if \(tutorialActive && nextWaveVisible && tutorialStep\?\.id === 'r1-scout'\) \{\s*scheduleTutorialScoutAdvance\(tutorialStep\);/);
+  assert.match(app, /function scheduleTutorialScoutAdvance\(step\)[\s\S]*window\.setTimeout\(\(\) => \{[\s\S]*nextWaveVisible = false;[\s\S]*completeTutorialTipForAction\('view-next-wave'\);[\s\S]*syncTutorial\(\);[\s\S]*step\.advanceDelayMs/s);
   assert.match(app, /toggle\?\.setAttribute\('aria-pressed', String\(nextWaveVisible\)\);/);
   assert.match(app, /label\.textContent = nextWaveVisible \? 'HIDE NEXT WAVE' : 'NEXT WAVE';/);
   assert.match(app, /if \(grouped\) cell\.insertAdjacentHTML\('beforeend', `<b>×\$\{count\}<\/b>`\);/);
