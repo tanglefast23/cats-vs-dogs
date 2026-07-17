@@ -9,9 +9,10 @@ import {
   refreshTutorialShop,
   catOnBoard, boardCatCount, producerInHouse, producerInShop, catAtLevel,
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole,
-  tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, confirmTutorialSkip,
+  tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, tutorialPurrcyIsWounded, confirmTutorialSkip,
+  tutorialShopWorkerSelector, tutorialBlockedCatDragMessage, tutorialBlockedDropMessage,
   tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors,
-  tutorialCatInfoSelectors, allTutorialCatsMoved,
+  tutorialCatInfoSelectors, allTutorialCatsMoved, woundTutorialPurrcy,
   TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
@@ -69,7 +70,7 @@ test('tutorialWave scripts R1 in the covered lanes; other rounds use the normal 
   assert.deepEqual(r1.map((d) => d.col).sort(), [2, 4]);
   assert.ok(r1.every((d) => d.row === 0));
 
-  // R3's heal is staged via a scripted persisted wound (app.js), not a wave dog.
+  // Healing is now taught immediately after the Round 2 move, so Round 3 needs no scripted dog.
   assert.equal(tutorialWave(3, [3]), null);
   assert.equal(tutorialWave(2, [1]), null);
 });
@@ -124,6 +125,22 @@ test('tutorial purchase hints follow the unused Purrcy shop card', () => {
     '#shop .shop-card[data-shop-index="0"]');
 });
 
+test('the Whisker Biscuit lesson blocks other cat drags without blocking Biscuit', () => {
+  const game = createGame();
+  game.shop = tutorialShopAfterRefresh(1);
+  const step = CORE_STEPS.find((entry) => entry.id === 'r1-produce');
+
+  assert.equal(tutorialShopWorkerSelector(game, WORKER_ROLE.COOK),
+    '#shop .shop-card[data-shop-index="0"]');
+  assert.match(tutorialBlockedCatDragMessage(step, { type: 'shop-fighter', coat: CAT_COAT.ORANGE }),
+    /Drag Whisker Biscuit/i);
+  assert.match(tutorialBlockedCatDragMessage(step, { type: 'shop-worker', role: WORKER_ROLE.TRADER }),
+    /Drag Whisker Biscuit/i);
+  assert.equal(tutorialBlockedCatDragMessage(step, { type: 'shop-worker', role: WORKER_ROLE.COOK }), null);
+  assert.equal(tutorialBlockedCatDragMessage(step, { type: 'item', itemKind: 'food' }), null,
+    'the guard is narrowly limited to cat drags');
+});
+
 test('tutorial purchase hints choose a lane the player has not used', () => {
   const game = createGame();
   assert.equal(tutorialOpenLaneSelector(game),
@@ -161,17 +178,35 @@ test('round 1 places both cats before teaching tap-for-info', () => {
   ]);
 });
 
-test('tutorial heal hint targets the wounded cat instead of the first board unit', () => {
+test('tutorial heal hint targets wounded Purrcy instead of another hurt cat', () => {
   const game = createGame();
   const healthy = { ...createCat(1, CAT_COAT.GREY), row: 13, col: 2 };
   const wounded = { ...createCat(1, CAT_COAT.ORANGE), row: 12, col: 4 };
+  healthy.hp -= 1;
   wounded.hp -= 2;
   game.cats.push(healthy, wounded);
 
   assert.equal(tutorialWoundedCatSelector(game),
     '#board .cell[data-row="12"][data-col="4"] .unit:not(.dog-unit):not(.decoy-unit)');
+  assert.equal(tutorialPurrcyIsWounded(game), true);
   wounded.hp = wounded.maxHp;
   assert.equal(tutorialWoundedCatSelector(game), null);
+  assert.equal(tutorialPurrcyIsWounded(game), false, 'another wounded cat does not redirect Purrcy\'s lesson');
+});
+
+test('the movement payoff wounds Purrcy without hurting another cat', () => {
+  const game = createGame();
+  const healthy = { ...createCat(1, CAT_COAT.GREY), row: 13, col: 2 };
+  const purrcy = { ...createCat(2, CAT_COAT.ORANGE), row: 12, col: 4 };
+  game.cats.push(healthy, purrcy);
+
+  assert.equal(woundTutorialPurrcy(game), purrcy);
+  assert.equal(purrcy.hp, purrcy.maxHp - 2);
+  assert.equal(healthy.hp, healthy.maxHp);
+
+  const woundedHp = purrcy.hp;
+  woundTutorialPurrcy(game);
+  assert.equal(purrcy.hp, woundedHp, 'an existing wound is not deepened');
 });
 
 test('the movement lesson targets only cats that can still move', () => {
@@ -207,6 +242,24 @@ test('the merge lesson classifies the battlefield and Cat Cart drops separately'
     { type: 'purchase-merge', targetType: 'cat' },
     { type: 'shop-fighter', coat: CAT_COAT.GREY },
   ), null);
+});
+
+test('the merge lesson blocks unrelated cats and non-merge Purrcy drops', () => {
+  const step = CORE_STEPS.find((entry) => entry.id === 'r2-merge');
+
+  assert.match(tutorialBlockedCatDragMessage(step, { type: 'shop-fighter', coat: CAT_COAT.GREY }),
+    /Only Purrcy/i);
+  assert.match(tutorialBlockedCatDragMessage(step, { type: 'shop-worker', role: WORKER_ROLE.COOK }),
+    /Only Purrcy/i);
+  assert.equal(tutorialBlockedCatDragMessage(step, { type: 'cat', coat: CAT_COAT.ORANGE }), null);
+  assert.equal(tutorialBlockedCatDragMessage(step, { type: 'shop-fighter', coat: CAT_COAT.ORANGE }), null);
+
+  assert.match(tutorialBlockedDropMessage(step, { type: 'move' }), /Drop Purrcy onto/i);
+  assert.match(tutorialBlockedDropMessage(step, { type: 'purchase-place' }), /Drop Purrcy onto/i);
+  assert.equal(tutorialBlockedDropMessage(step, { type: 'merge' }), null);
+  assert.equal(tutorialBlockedDropMessage(step, { type: 'purchase-merge' }), null);
+  assert.equal(tutorialBlockedDropMessage(step, { type: 'invalid' }), null,
+    'normal invalid drops keep their existing feedback');
 });
 
 test('the merge lesson keeps only unfinished drag demonstrations visible', () => {
@@ -283,11 +336,14 @@ test('core lessons only complete from actions that prove the taught behavior', (
     { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 },
     { ...createCat(1, CAT_COAT.GREY), row: 13, col: 3 },
   ];
-  assert.equal(buySecond.isDone(game), false, 'a non-Purrcy defender does not prove the second-lane lesson');
+  assert.equal(buySecond.isDone(game), false, 'a non-Purrcy defender does not prove that a second Purrcy was placed');
   game.cats[1] = { ...createCat(1, CAT_COAT.ORANGE), row: 12, col: 2 };
-  assert.equal(buySecond.isDone(game), false, 'two Purrcys in one column do not cover another lane');
+  assert.equal(buySecond.isDone(game), true, 'a second Purrcy in the same column must not trap the tutorial');
   game.cats[1].col = 3;
   assert.equal(buySecond.isDone(game), true);
+
+  game.cats = [{ ...createCat(1, CAT_COAT.ORANGE), copies: 2, row: 13, col: 2 }];
+  assert.equal(buySecond.isDone(game), true, 'stacking the second Purrcy onto the first must also continue');
 
   game.workers[0] = { role: WORKER_ROLE.TRADER };
   assert.equal(placeProducer.isDone(game), false, 'the heal lesson requires Whisker Biscuit');
@@ -303,26 +359,29 @@ test('core lessons only complete from actions that prove the taught behavior', (
 test('actionable lessons can declare the successful action that completes them', () => {
   const scout = CORE_STEPS.find((entry) => entry.id === 'r1-scout');
   assert.deepEqual(scout.completeOnActions, ['view-next-wave']);
-  assert.equal(scout.advanceDelayMs, 3000);
-  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
-  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
+  assert.equal(scout.advanceDelayMs, 2600);
+  assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r2-heal').completeOnActions, ['use-food']);
 });
 
-test('round 3 immediately teaches feeding an apple during planning', () => {
-  const step = CORE_STEPS.find((entry) => entry.id === 'r3-hurt');
+test('moving a cat immediately leads into healing the wounded Purrcy', () => {
+  const moveIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-move');
+  const step = CORE_STEPS[moveIndex + 1];
   const game = createGame();
   const woundedCat = { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 };
   woundedCat.hp -= 2;
-  game.round = 3;
+  game.round = 2;
+  game.phase = 'tactics';
   game.cats.push(woundedCat);
   game.inventory[0] = { kind: 'food', tier: 1, quantity: 1 };
 
-  assert.equal(step.mode, 'gate', 'the planning screen stays undimmed for the drag');
+  assert.equal(step.id, 'r2-heal');
+  assert.equal(step.mode, 'gate', 'the tactics screen stays undimmed for the drag');
   assert.equal(step.showWhen(game), true);
-  assert.equal(step.spotlight, '#inventory');
+  assert.equal(step.spotlight, '#board');
+  assert.equal(step.bubblePlacement, 'target-top');
   assert.equal(step.dragFrom, '#inventory .pet-draggable');
   assert.equal(step.dragTo(game), tutorialWoundedCatSelector(game));
-  assert.equal(step.text, 'Your cat is hurt. Feed it an apple from the Supplies section.');
+  assert.equal(step.text, "Great move, now heal Purrcy, who's been hurt, with the food from below. That's the payoff of worker cats!");
   assert.equal(step.isDone(game), false);
 
   game.cats[0].hp = game.cats[0].maxHp;
@@ -362,7 +421,7 @@ test('tutorial targets follow the relocated planning, scout, spending, and tacti
   const scoutStep = CORE_STEPS.find((step) => step.id === 'r1-scout');
   assert.equal(scoutStep.spotlight, '#next-wave-toggle');
   assert.deepEqual(scoutStep.completeOnActions, ['view-next-wave']);
-  assert.equal(scoutStep.advanceDelayMs, 3000);
+  assert.equal(scoutStep.advanceDelayMs, 2600);
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').spotlight, '#shop');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-start').spotlight, '#done');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r2-spend-ready').spotlight({ gold: 1 }), '#shop');
@@ -419,6 +478,7 @@ test('round 2 teaches movement at the first Tactics Window', () => {
   assert.match(step.text, /each cat can move once/i);
   assert.match(step.text, /up to 2 squares/i);
   assert.match(step.text, /Clawdius moves 1/i);
+  assert.equal(step.text, "there's a pause during every battle to perform tactics like move. Each cat can move once: move up to 2 squares, while Clawdius moves 1. Drag a cat now");
 
   game.cats[0].tacticsMoved = true;
   assert.equal(step.isDone(game), true, 'moving a cat completes the lesson');

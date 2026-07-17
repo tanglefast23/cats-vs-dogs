@@ -28,6 +28,8 @@ import { deathSpecFor, deathTiming } from './death-animation.js';
 import {
   CORE_STEPS, TIPS, confirmTutorialSkip, tutorialMergeTaskForDrop,
   allTutorialCatsMoved, refreshTutorialShop, tutorialShop, tutorialWave,
+  tutorialBlockedCatDragMessage, tutorialBlockedDropMessage,
+  woundTutorialPurrcy,
 } from './tutorial.js';
 import { initSplash } from './splash.js';
 
@@ -807,7 +809,7 @@ function targetFromElement(element) {
 }
 
 function dropAction(source, descriptor) {
-  return getDropAction({
+  const action = getDropAction({
     source,
     target: descriptor,
     catZoneStart: CAT_ZONE_START,
@@ -818,6 +820,11 @@ function dropAction(source, descriptor) {
     fieldCount: game.cats.length,
     fieldCap: MAX_FIELD_CATS,
   });
+  const tutorialItem = tutorialActive ? currentTutorialActionItem() : null;
+  const blockedDropMessage = tutorialBlockedDropMessage(tutorialItem, action);
+  return blockedDropMessage
+    ? { type: 'invalid', reason: 'tutorial', message: blockedDropMessage }
+    : action;
 }
 
 function clearDragHighlights() {
@@ -954,10 +961,20 @@ function bindPetDrag(anchor, type, cat) {
   anchor.classList.add('pet-draggable');
   anchor.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || !phaseAllowsDrag || playing || dragState) return;
+    const source = dragSource(type, cat);
+    const tutorialItem = currentTutorialActionItem();
+    const blockedDragMessage = tutorialActive
+      ? tutorialBlockedCatDragMessage(tutorialItem, source)
+      : null;
+    if (blockedDragMessage) {
+      event.preventDefault();
+      nudgeTutorialDragSource(tutorialItem, blockedDragMessage);
+      return;
+    }
     const rect = anchor.getBoundingClientRect();
     dragState = {
       pointerId: event.pointerId,
-      source: dragSource(type, cat),
+      source,
       cat,
       sourceElement: anchor,
       sourceRect: rect,
@@ -1187,7 +1204,9 @@ async function finishDrag(event, cancelled = false) {
     const fieldCapReached = action.reason === 'field-cap';
     const productionCat = state.source.type === 'shop-worker'
       || state.source.type === 'worker' || state.source.type === 'bench-worker';
-    game.message = fieldCapReached
+    game.message = action.reason === 'tutorial'
+      ? action.message
+      : fieldCapReached
       ? FIELD_CAP_MESSAGE
       : movementMessage
       ? movementMessage
@@ -1197,6 +1216,7 @@ async function finishDrag(event, cancelled = false) {
       ? state.source.sellReason
       : 'That is not a valid drop. Cats can only use the lower yard and merge with the same color + level.';
     render();
+    if (action.reason === 'tutorial') nudgeTutorialDragSource(currentTutorialActionItem(), action.message);
     if (movementMessage) showMoveLimitTooltip(event.clientX, event.clientY, movementMessage);
     return;
   }
@@ -1206,6 +1226,10 @@ async function finishDrag(event, cancelled = false) {
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
+    if (tutorialActive && CORE_STEPS[tutorialStepIndex]?.id === 'r2-move'
+        && action.type === 'tactics-move') {
+      woundTutorialPurrcy(game);
+    }
     const tutorialMergeTask = recordTutorialMergeTask(action, state.source);
     if (tutorialMergeTask && state.tutorialActionId === tutorialStartedActionId) {
       tutorialStartedActionId = null;
@@ -1912,11 +1936,22 @@ function renderBoard() {
               movingCat ? { ...movingCat, type: 'cat' } : null,
               { kind: 'cell', row, col, occupied: occupiedDescriptor },
             );
+            if (attemptedAction.reason === 'tutorial') {
+              selected = null;
+              game.message = attemptedAction.message;
+              render();
+              nudgeTutorialDragSource(currentTutorialActionItem(), attemptedAction.message);
+              return;
+            }
             const before = game;
             game = game.phase === 'tactics'
               ? moveCatInTactics(game, selected.id, row, col)
               : moveCat(game, selected.id, row, col);
             if (game !== before) {
+              if (tutorialActive && CORE_STEPS[tutorialStepIndex]?.id === 'r2-move'
+                  && moveActionType === 'tactics-move') {
+                woundTutorialPurrcy(game);
+              }
               completeTutorialTipForAction(moveActionType);
               selected = null;
               playCatDrop();
@@ -2829,7 +2864,7 @@ async function animateStorm(events) {
   }
 }
 
-/** Small pill over the board that names whose half of the exchange is animating. */
+/** Small pill over the board for Thunderpaws' storm animation. */
 function setTurnTag(side) {
   const tag = $('#turn-tag');
   if (!tag) return;
@@ -2837,8 +2872,8 @@ function setTurnTag(side) {
     tag.hidden = true;
     return;
   }
-  tag.textContent = side === 'cats' ? '▸ CATS ACT' : side === 'storm' ? '⚡ THUNDERPAWS' : '▸ DOGS ACT';
-  tag.className = `turn-tag ${side}`;
+  tag.textContent = '⚡ THUNDERPAWS';
+  tag.className = 'turn-tag storm';
   tag.hidden = false;
 }
 
@@ -2859,7 +2894,6 @@ async function animateEvents(events) {
   const breaches = events.filter((event) => event.type === 'breach');
 
   // --- The cats act. Every dog they kill goes down before the dogs get their turn. ---
-  if (shots.length || catMelee.length || panicMoves.length) setTurnTag('cats');
   await Promise.all([
     ...groupAttacks(shots).map((group, index) => animateAttack(group, index)),
     ...catMelee.map(animateCatScratch),
@@ -2869,7 +2903,6 @@ async function animateEvents(events) {
   for (const event of panicMoves) await animateMove(event);
 
   // --- The dogs act. Every cat they kill goes down at the end of it. ---
-  if (melee.length || dogShots.length || moves.length || jumps.length || howls.length || dogHeals.length || fears.length || freezeSkips.length) setTurnTag('dogs');
   await Promise.all([
     ...groupAttacks(dogShots).map((group, index) => animateAttack(group, index)),
     ...howls.map(animateHowl),
@@ -3502,12 +3535,6 @@ function applyTutorialRound() {
   if (shop) game.shop = shop;
   const wave = tutorialWave(game.round, tutorialCatColumns(game), game.random);
   if (wave) game.nextWave = wave;
-  // Round 3 teaches healing: leave the strongest cat lightly wounded (persisted
-  // "damage" from the advancing pack) so one Whisker treat fully patches it.
-  if (game.round === 3) {
-    const front = [...game.cats].sort((a, b) => b.level - a.level)[0];
-    if (front && front.hp === front.maxHp) front.hp = Math.max(1, front.maxHp - 2);
-  }
 }
 
 function showCurrentTutorialTip() {
@@ -3692,6 +3719,20 @@ function tutorialDragActionId(source) {
   }
   const item = currentTutorialActionItem();
   return item?.dragSources?.some((criteria) => dragSourceMatches(criteria, source)) ? item.id : null;
+}
+
+function nudgeTutorialDragSource(item, message) {
+  tutorialTextEl.textContent = message;
+  const directSelector = typeof item?.dragFrom === 'function' ? item.dragFrom(game) : item?.dragFrom;
+  const hints = typeof item?.dragHints === 'function'
+    ? item.dragHints(game, tutorialCompletedMergeTasks)
+    : [];
+  const selector = directSelector ?? hints[0]?.from;
+  const source = selector ? document.querySelector(selector) : null;
+  if (!source) return;
+  source.classList.remove('tutorial-blocked-drag-nudge');
+  void source.offsetWidth;
+  source.classList.add('tutorial-blocked-drag-nudge');
 }
 
 function dismissTutorialWhenActionStarts(event) {

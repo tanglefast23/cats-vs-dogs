@@ -71,10 +71,6 @@ export function tutorialWave(round, catColumns = [], random = Math.random) {
     const cols = catColumns.length ? catColumns.slice(0, 2) : [2, 3];
     return cols.map((col) => createDog(1, 0, col, DOG_ROLE.SCRUFFY));
   }
-  // R3's heal lesson is staged via a scripted persisted wound (see app.js
-  // applyTutorialRound), not a biter — the strong merged cat would one-shot any
-  // gentle dog before it could land a bite, and a survivor only bites after the
-  // pause. So R3 uses the normal wave.
   if (round >= 8 && round <= 10) return generateWave(round, random, 1);
   return null;
 }
@@ -93,9 +89,9 @@ export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.ro
 export const ownsAdvancedCat = (game) => [...game.cats, ...game.bench]
   .some((cat) => cat.kind !== 'production-cat' && CAT_COAT_INFO[cat.coat]?.unlockRound >= 4);
 
-const purrcyLaneCount = (game) => new Set(game.cats
+const purrcyCopyCount = (game) => game.cats
   .filter((cat) => cat.coat === CAT_COAT.ORANGE)
-  .map((cat) => cat.col)).size;
+  .reduce((total, cat) => total + (cat.copies ?? 1), 0);
 const inventoryHasKind = (game, kind) => game.inventory.some((item) => item?.kind === kind);
 const houseIsFull = (game) => game.workers.every(Boolean);
 
@@ -107,6 +103,37 @@ export function tutorialShopFighterSelector(game, coat) {
     && slot.category === 'fighter'
     && slot.coat === coat);
   return shopIndex < 0 ? null : `#shop .shop-card[data-shop-index="${shopIndex}"]`;
+}
+
+export function tutorialShopWorkerSelector(game, role) {
+  const shopIndex = game.shop.findIndex((slot) => slot
+    && !slot.sold
+    && slot.category === 'worker'
+    && slot.role === role);
+  return shopIndex < 0 ? null : `#shop .shop-card[data-shop-index="${shopIndex}"]`;
+}
+
+const CAT_DRAG_SOURCE_TYPES = new Set([
+  'shop-fighter', 'shop-worker', 'cat', 'bench', 'worker', 'bench-worker',
+]);
+
+function tutorialDragSourceMatches(criteria, source) {
+  if (criteria.types && !criteria.types.includes(source.type)) return false;
+  if (criteria.coat !== undefined && source.coat !== criteria.coat) return false;
+  if (criteria.role !== undefined && source.role !== criteria.role) return false;
+  if (criteria.itemKind !== undefined && source.itemKind !== criteria.itemKind) return false;
+  return true;
+}
+
+export function tutorialBlockedCatDragMessage(item, source) {
+  if (!item?.blockOtherCatDrags || !CAT_DRAG_SOURCE_TYPES.has(source?.type)) return null;
+  const allowed = item.dragSources?.some((criteria) => tutorialDragSourceMatches(criteria, source));
+  return allowed ? null : item.blockedCatDragText;
+}
+
+export function tutorialBlockedDropMessage(item, action) {
+  if (!item?.allowedDropActions || action?.type === 'invalid') return null;
+  return item.allowedDropActions.includes(action.type) ? null : item.blockedDropText;
 }
 
 export function tutorialOpenLaneSelector(game) {
@@ -149,8 +176,16 @@ export const allTutorialCatsMoved = (game) => game.cats.length > 0
   && game.cats.every((cat) => cat.tacticsMoved);
 
 export function tutorialWoundedCatSelector(game) {
-  const wounded = game.cats.find((cat) => cat.hp < cat.maxHp);
-  return wounded ? `${boardCatSelector(wounded)} .unit:not(.dog-unit):not(.decoy-unit)` : null;
+  const purrcy = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE && cat.hp < cat.maxHp);
+  return purrcy ? `${boardCatSelector(purrcy)} .unit:not(.dog-unit):not(.decoy-unit)` : null;
+}
+
+export const tutorialPurrcyIsWounded = (game) => Boolean(tutorialWoundedCatSelector(game));
+
+export function woundTutorialPurrcy(game) {
+  const purrcy = game.cats.find((cat) => cat.coat === CAT_COAT.ORANGE);
+  if (purrcy && purrcy.hp >= purrcy.maxHp) purrcy.hp = Math.max(1, purrcy.maxHp - 2);
+  return purrcy ?? null;
 }
 
 export function tutorialMergeHints(game, completedTasks = new Set()) {
@@ -198,7 +233,7 @@ export const CORE_STEPS = [
   { id: 'r1-scout', round: 1, mode: 'gate', spotlight: '#next-wave-toggle',
     actionStartSelectors: ['#next-wave-toggle'],
     completeOnActions: ['view-next-wave'],
-    advanceDelayMs: 3000,
+    advanceDelayMs: 2600,
     text: "Tap NEXT WAVE to see which dogs are coming." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
@@ -211,8 +246,8 @@ export const CORE_STEPS = [
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,
     dragSources: [{ types: ['shop-fighter'], coat: CAT_COAT.ORANGE }],
-    text: "Purrcy only shoots straight up his own lane. Grab a second Purrcy and cover another lane.",
-    isDone: (g) => purrcyLaneCount(g) >= 2 },
+    text: "Purrcy only shoots straight up his own lane. Grab a second Purrcy — spreading them across lanes gives you better coverage.",
+    isDone: (g) => purrcyCopyCount(g) >= 2 },
   { id: 'r1-cat-info', round: 1, mode: 'gate', spotlight: null,
     focusSelectors: tutorialCatInfoSelectors,
     completeOnActions: ['view-cat-info', 'open-glossary'],
@@ -226,8 +261,10 @@ export const CORE_STEPS = [
     text: "Want different cats? Refresh rerolls the shop for 1 gold. Give it a try.",
     isDone: (g) => producerInShop(g) },
   { id: 'r1-produce', round: 1, mode: 'gate', spotlight: '#production-grid',
-    dragFrom: '#shop .pet-draggable', dragTo: '#production-grid .worker-slot',
+    dragFrom: (g) => tutorialShopWorkerSelector(g, WORKER_ROLE.COOK), dragTo: '#production-grid .worker-slot',
     dragSources: [{ types: ['shop-worker'], role: WORKER_ROLE.COOK }],
+    blockOtherCatDrags: true,
+    blockedCatDragText: 'Drag Whisker Biscuit into the House first — another cat would spend the gold you need for her.',
     text: "Not every cat fights. Whisker Biscuit bakes healing treats — drop her into the House.",
     isDone: (g) => ownsWorkerRole(g, WORKER_ROLE.COOK) },
   { id: 'r1-start', round: 1, mode: 'gate', spotlight: '#done',
@@ -248,6 +285,10 @@ export const CORE_STEPS = [
   { id: 'r2-merge', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     dragHints: tutorialMergeHints,
     dragSources: [{ types: ['cat', 'shop-fighter'], coat: CAT_COAT.ORANGE }],
+    blockOtherCatDrags: true,
+    blockedCatDragText: 'Only Purrcy moves during this lesson. Follow the arrows to combine the three matching Purrcys.',
+    allowedDropActions: ['merge', 'purchase-merge'],
+    blockedDropText: 'Drop Purrcy onto the highlighted matching Purrcy to merge them. Other moves are paused for this lesson.',
     text: (_g, completedTasks) => tutorialMergeText(completedTasks),
     isDone: (_g, completedTasks) => completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD)
       && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
@@ -262,23 +303,15 @@ export const CORE_STEPS = [
     focusSelectors: tutorialMovableCatSelectors,
     actionStartSelectors: ['#done'],
     dragSources: [{ types: ['cat'] }],
-    text: 'This Tactics Window lets you reposition between attacks. Each cat can move once: most move up to 2 squares, while Clawdius moves 1. Drag a cat now, or Continue Fight to keep your formation.',
+    text: "there's a pause during every battle to perform tactics like move. Each cat can move once: move up to 2 squares, while Clawdius moves 1. Drag a cat now",
     isDone: (g) => g.phase !== 'tactics' || g.cats.some((cat) => cat.tacticsMoved) },
-
-  // Round 3 — production payoff (heal). A small wound persists from the advancing
-  // pack (scripted in app.js), so one Whisker treat fully patches it.
-  { id: 'r3-hurt', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
+  { id: 'r2-heal', round: 2, mode: 'gate', spotlight: '#board', showWhen: (g) => g.phase === 'tactics' && tutorialPurrcyIsWounded(g),
     completeOnActions: ['use-food'],
     dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
     dragSources: [{ types: ['item'], itemKind: 'food' }],
-    text: 'Your cat is hurt. Feed it an apple from the Supplies section.',
-    isDone: (g) => !anyWoundedCat(g) },
-  { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'tactics',
-    completeOnActions: ['use-food'],
-    dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
-    dragSources: [{ types: ['item'], itemKind: 'food' }],
-    text: "Drag Whisker's treat from Supplies below the Cat Field onto the hurt cat — heal +2. That's the payoff of production.",
-    isDone: () => false },
+    bubblePlacement: 'target-top',
+    text: "Great move, now heal Purrcy, who's been hurt, with the food from below. That's the payoff of worker cats!",
+    isDone: (g) => !tutorialPurrcyIsWounded(g) },
 ];
 
 // --- just-in-time tips: shown once each, one at a time, when `when` first holds ---

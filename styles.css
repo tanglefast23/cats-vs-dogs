@@ -2813,8 +2813,6 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   font-family: var(--px);
   font-size: 8px;
 }
-.turn-tag.cats { background: #d7edb9; }
-.turn-tag.dogs { background: #f0d2b4; }
 .turn-tag.storm { border-color: #d8fbff; background: #17233f; color: #fff36b; box-shadow: 2px 2px 0 var(--ink), 0 0 11px #76e7ff; }
 .turn-tag[hidden] { display: none; }
 @keyframes banner-drop { 0% { transform: translateX(-50%) translateY(-18px); opacity: 0; } 100% { transform: translateX(-50%) translateY(0); opacity: 1; } }
@@ -3121,6 +3119,7 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
 
 @media (prefers-reduced-motion: reduce) {
   .cell.drag-valid, .worker-slot.drag-valid, .bench-slot.drag-valid, .drag-floor-shadow, .wave-banner, .icon-button.confirming,
+  .tutorial-blocked-drag-nudge,
   .board.board-drop-thump, .board.board-shake, .board.upgrade-board-pulse, .board.storm-recoil,
   .unit.storm-casting canvas, .work-action > i, .worker-slot.is-working > canvas,
   .freeze-shell, .freeze-skip-cue, .unit.shop-match-target::after { animation: none; }
@@ -3261,6 +3260,14 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   border: 5px solid var(--tutorial-accent); pointer-events: none;
 }
 .tutorial-source-highlight[hidden] { display: none; }
+.tutorial-blocked-drag-nudge {
+  animation: tutorial-blocked-drag-nudge .52s steps(4) 2;
+}
+@keyframes tutorial-blocked-drag-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
 @keyframes tutorial-target-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(90, 209, 122, 0.30), inset 0 0 12px rgba(90, 209, 122, 0.50); }
   50%      { box-shadow: 0 0 0 7px rgba(90, 209, 122, 0.50), inset 0 0 22px rgba(90, 209, 122, 0.80); }

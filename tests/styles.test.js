@@ -146,6 +146,11 @@ test('tutorial lessons can pin a bubble inside the top of a battlefield target',
   assert.match(app, /bubblePlacement:\s*step\.bubblePlacement/);
 });
 
+test('the movement lesson wounds Purrcy before rendering the top-of-board heal prompt', () => {
+  assert.match(app, /CORE_STEPS\[tutorialStepIndex\]\?\.id === 'r2-move'[\s\S]*action\.type === 'tactics-move'[\s\S]*woundTutorialPurrcy\(game\);/);
+  assert.match(app, /CORE_STEPS\[tutorialStepIndex\]\?\.id === 'r2-move'[\s\S]*moveActionType === 'tactics-move'[\s\S]*woundTutorialPurrcy\(game\);/);
+});
+
 test('only a matching tutorial drag dismisses the visible action bubble', () => {
   assert.match(app, /const tutorialActionId = tutorialDragActionId\(dragState\.source\);/);
   assert.match(app, /dragState\.tutorialActionId = tutorialActionId;\s*tutorialStartedActionId = tutorialActionId;\s*hideTutorialOverlay\(\);/s);
