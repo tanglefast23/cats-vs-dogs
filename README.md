@@ -36,6 +36,13 @@ under `src/` stays browser-pure (no Electron/Node imports).
 - Settings includes independent sound-effects and music volume sliders
 - Layout stacks below ~880px, so narrow windows and phones stay playable
 
+## Design
+
+[docs/STYLE.md](docs/STYLE.md) is the style guide — the game's colors, type, depth,
+pixel-art rules, motion, sound, and copy voice, with the reasons behind each. Read it
+before adding UI, art, or effects. It also records where the code currently drifts from
+its own rules, so those parts don't get copied forward.
+
 ## Deploy
 
 Static site. Vercel serves `index.html` from the repo root.
