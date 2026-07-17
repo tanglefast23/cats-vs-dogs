@@ -3579,7 +3579,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   font-size: 12px;
   letter-spacing: 1px;
   padding: 16px 12px;
-  box-shadow: 5px 5px 0 rgba(8,23,30,.9);
+  box-shadow: 4px 4px 0 #08151a;
   cursor: pointer;
 }
 .splash-button:hover { background: #fff3b8; }

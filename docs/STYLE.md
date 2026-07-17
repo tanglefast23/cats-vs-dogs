@@ -18,7 +18,8 @@ the places where copying the existing code will copy a mistake.
 Four intentions, and every rule in this document serves one of them:
 
 1. **Retro arcade.** Pixel font, pixel sprites, and motion that ticks in frames instead of
-   gliding. Nothing eases; everything snaps.
+   gliding. In combat nothing eases; everything snaps. (The exceptions are deliberate and
+   short-listed in [§9.2](#92-the-one-sanctioned-curve).)
 2. **Sticker book.** Every object is hard-outlined in one ink color and dropped with a
    blur-free shadow. Square corners, die-cut, no soft edges. (Think vinyl stickers on a
    notebook, not the soft shadows of a modern web app.)
@@ -64,8 +65,12 @@ Break these and the piece stops looking like it belongs.
 
 Plus the page backdrop, which is not a token: `background: #10242e` on `:root`.
 
-**`--orange` is used exactly 5 times and every one is "the one thing to press."** Keep it
-that way. It is never a fill, never decoration.
+**`--orange` is scarce — 7 uses in the whole stylesheet — and it means "action" or "brand."**
+Two are CTA fills: `.done-button` and the splash screen's `CAMPAIGN`. The splash covers the
+game, so only one orange button is ever on screen at a time. The other five are small
+accents: the `VS` in both titles, the result-card kicker, the active glossary tab, and the
+sound-slider fill. It is never a panel fill, never decoration — the moment orange stops
+being scarce it stops meaning "press here."
 
 ### 3.2 The two colors that should be tokens but aren't
 
@@ -312,6 +317,23 @@ box-shadow: inset 0 0 0 4px #ffe56e, 0 0 0 2px var(--ink);
 box-shadow: inset 0 0 18px #8ee7ff, 0 0 18px rgba(92,209,255,.75);
 ```
 
+### 5.5 The overlay stack
+
+`z-index` follows the same discipline as the shadows. From the yard up:
+
+| z | Layer |
+| --- | --- |
+| 20 | floating gains and callouts on the board |
+| 30 | result modal |
+| 32 | splash start screen (covers the game, sits under every modal it can open) |
+| 35 | settings modal — reachable from the splash, so above it |
+| 45 | glossary — reachable from settings, so above *it* |
+| 9000 | tutorial overlay |
+| 10000 | unit tooltip — stats stay readable even mid-tutorial |
+
+New overlays slot into this ladder by asking one question: what must still be able to open
+on top of me?
+
 ---
 
 ## 6. Buttons and feedback
@@ -456,6 +478,21 @@ These are stated as comments in `pixel-art.js` and they are genuinely good:
 So: **silhouette carries role, equipment color carries level, props carry job.** A new unit
 needs a silhouette you can identify in black at 32px before it needs any color.
 
+### 8.4 Composing scenes out of the sprites
+
+Two facts you only discover when arranging sprites outside the board (splash screen,
+result card, future cutscenes):
+
+- **No unit is drawn walking rightward.** The locomotion poses (Fetch Armstrong, Bone Jovi,
+  Barkour Bandit, Bombay Boom) all travel left; everyone else stands front-on, usually with
+  a signature prop extending right. To send a sprite right nose-first, flip the canvas with
+  `transform: scaleX(-1)` — and keep motion on a wrapper element so the flip never fights
+  the animation's transform.
+- **Silhouettes claim different parts of the tile.** Most stand feet-at-bottom with the head
+  in the top half, but Bombay Boom prowls along the bottom edge and Bone Jovi is a low
+  dachshund. Anything that crops sprites at a horizon line (the splash's fence) must audit
+  poses instead of assuming head-at-top — this is why the splash pop pool skips coat 4.
+
 ---
 
 ## 9. Motion
@@ -480,8 +517,10 @@ cubic-bezier(.2, .9, .25, 1.3 – 1.4)     /* "the reward curve" */
 It fires on collecting output, a cat landing, an upgrade revealing, a drag ghost lifting —
 **every one a positive player moment.** That's the rule: *the game snaps; rewards bounce.*
 
-`ease-in-out` appears 6 times and 5 are the tutorial. **The tutorial breathes; the game
-snaps.**
+`ease-in-out` appears 8 times: 5 in the tutorial, 2 on the splash screen's idle sway and
+`VS` pulse, 1 under a lifted drag piece. **The rule generalises: simulation snaps; ambient
+chrome — the tutorial, the title screen, a hovering shadow — may breathe.** Nothing that
+deals damage, moves a unit, or spends gold ever eases.
 
 ### 9.3 The timing tables
 
@@ -588,8 +627,8 @@ streamed via `HTMLAudioElement`, deliberately outside the Web Audio graph. Two p
 
 | Type | Means | Used for |
 | --- | --- | --- |
-| `square` | impact, aggression, mechanical | hits, chomps, bombs, coins, UI clicks |
-| `triangle` | warmth, friendliness, melody | fanfares, collection, merges, heal, cat death |
+| `square` | impact, aggression, mechanical | hits, chomps, bombs, coins, UI clicks, the woof |
+| `triangle` | warmth, friendliness, melody | fanfares, collection, merges, heal, cat death, the meow |
 | `sine` | soft, glinting, ethereal | final sparkle notes, warp blips, victory pad |
 | `sawtooth` | harsh, electric, scraping | **only 3 uses** — claws, laser burn, static zap |
 
@@ -603,12 +642,16 @@ streamed via `HTMLAudioElement`, deliberately outside the Web Audio graph. Two p
 ### 10.3 Two conventions worth keeping
 
 - **`slideTo` is the signature move.** Nearly every effect glides in pitch, and almost
-  everything slides **down** (impact = energy dissipating). The three exceptions are
-  semantically motivated: `frost` rises (crystallizing), `warp` goes up-then-down (a portal),
-  `slice` rises (the whoosh before the cut).
+  everything slides **down** (impact = energy dissipating). The exceptions are semantically
+  motivated: `frost` rises (crystallizing), `warp` goes up-then-down (a portal), `slice`
+  rises (the whoosh before the cut), and the meow rises then falls (a question).
 - **Combat jitters; ceremony does not.** `jitter()` applies ±7% pitch wobble *"so repeated
   hits never sound machine-stamped"* — applied to every combat sound, and never to UI,
-  music cues, or fanfares.
+  music cues, or fanfares. (Animal voices jitter too — no two meows are the same cat.)
+- **Ambient voices are rate-limited; combat is not.** The splash screen's meows and woofs
+  pass through a voice gate (`createVoiceGate`, `src/splash.js`) — a chance roll plus an
+  enforced quiet gap — so idle chatter stays an accent over the music. Combat sounds never
+  gate: if two hits land, you hear two hits.
 
 Volumes: `SOUND_OUTPUT_CAP` 0.8 · `MUSIC_OUTPUT_CAP` 0.4 (music is capped at half of SFX) ·
 `UI_CLICK_VOLUME` 0.024 is the quietest thing in the game. Recipe volumes run 0.015–0.075;
@@ -699,7 +742,7 @@ pulses, cyan `#8ee7ff`.
   The semantic is coherent; the token just isn't wired up.
 - `--green` `#75a64b` — **1 use** (the music slider). Meanwhile green is everywhere as
   literals: lawn `#6ea24c`, HP-full `#6ed25e`.
-- `--paper`'s value `#fff8dc` is written raw **16 times** vs. 8 uses of the token.
+- `--paper`'s value `#fff8dc` is written raw **16 times** vs. 11 uses of the token.
 - **`#ffe56e` and `#8ee7ff` should be tokens** — 40 combined uses, more semantic weight than
   any token but `--ink`.
 
@@ -776,3 +819,4 @@ Before shipping a new piece of UI:
 | Upgrade beats and celebration labels | `src/upgrade-animation.js` |
 | Synthesized SFX, music, volume rules | `src/sound.js` |
 | Placement impact constants | `src/drag-drop.js` |
+| Start-screen peekaboo, pop pools, the ambient voice gate | `src/splash.js` |
