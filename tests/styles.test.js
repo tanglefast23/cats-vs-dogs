@@ -213,7 +213,7 @@ test('the Cat Field has one permanent two-slot interactive Supplies tray', () =>
   assert.match(app, /const visiblePlanningCats = game\.shop\.filter\(Boolean\)\.length \+ game\.workers\.filter\(Boolean\)\.length;\s*fieldLayout\.classList\.toggle\('is-crowded-mobile', visiblePlanningCats >= 7\);/);
   assert.match(app, /hideUnitTooltip\(\);\s*syncFieldSuppliesLayout\(\);\s*renderShop\(\);/);
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\.is-crowded-mobile\s*{\s*margin-top:\s*0;\s*}[\s\S]*\.field-house-layout\.is-crowded-mobile::before\s*{\s*display:\s*none;\s*}/s);
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\.is-crowded-mobile \.house-wing\s*{\s*transform:\s*translateY\(16px\);\s*}/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\s*{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);[^}]*min-height:\s*0;/s);
   assert.match(app, /slot\.className = `planning-inventory-item \$\{item \? 'filled' : 'empty'\}`;/);
   assert.match(app, /bindPetDrag\(slot, 'item', \{ \.\.\.item, inventoryIndex: index \}\);/);
   assert.match(app, /<strong>×\$\{item\.quantity\}<\/strong>/);
@@ -338,10 +338,17 @@ test('wood paneling encloses only the Production House', () => {
   assert.match(css, /\.phase-control-wing\.is-battle \.phase-action\s*{[^}]*margin-bottom:\s*6px;/s);
   assert.match(css, /\.house-wing::after\s*{[^}]*left:\s*-16px;[^}]*top:\s*0;/s);
   assert.match(css, /\.house-wing \.production-grid::after\s*{[^}]*right:\s*0;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*16px;/s);
-  assert.doesNotMatch(css, /\.field-house-layout::after/);
   assert.doesNotMatch(css, /\.board-frame::after/);
   const houseRoof = css.match(/\.house-wing::before\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
+});
+
+test('mobile: the Production House docks under the planning controls, filler below', () => {
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing\s*{\s*height:\s*auto;\s*}/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.house-wing\s*{[^}]*align-self:\s*start;[^}]*aspect-ratio:\s*4 \/ 1;[^}]*transform:\s*none;[^}]*margin-top:\s*16px;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout::after\s*{[^}]*width:\s*calc\(40% \+ 16px\);[^}]*outline:\s*5px solid var\(--ink\);/s);
+  assert.match(css, /\.field-house-layout:has\(\.phase-control-wing\.is-battle\)::after/);
+  assert.doesNotMatch(css, /\.field-house-layout\.is-crowded-mobile \.house-wing/);
 });
 
 test('the glossary opens from Cat Cart and Settings', () => {
