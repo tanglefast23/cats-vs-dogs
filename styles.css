@@ -3519,3 +3519,165 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   .glossary-header h2 { font-size: 20px; }
   .glossary-tabs button { font-size: 10px; }
 }
+
+/* ============================= Splash screen =============================
+   Fence-peekaboo start screen. Sits above the game (z 32) but below the
+   settings modal (35) and glossary (45) so both open on top of it. The
+   .splash-fence height must stay in sync with FENCE_VH in src/splash.js. */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 32;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 8%, #365e6e 0, #173542 42%, #0b1c24 100%);
+  transition: opacity .42s ease;
+}
+.splash-screen[hidden] { display: none; }
+.splash-screen.leaving { opacity: 0; pointer-events: none; }
+
+.splash-title { position: absolute; top: 8vh; left: 0; right: 0; z-index: 30; text-align: center; pointer-events: none; }
+.splash-eyebrow {
+  margin: 0 0 16px;
+  font-family: var(--px);
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: #ffcf5d;
+  text-shadow: 2px 2px 0 rgba(23,43,54,.95);
+}
+.splash-title h1 {
+  margin: 0;
+  font-size: clamp(28px, 5.6vw, 54px);
+  line-height: 1.15;
+  color: var(--paper);
+  text-shadow: 4px 4px 0 var(--ink), 8px 8px 0 rgba(8,23,30,.45);
+}
+.splash-title h1 .vs {
+  display: inline-block;
+  margin: 0 .35ch;
+  font-size: .55em;
+  color: var(--orange);
+  text-shadow: 3px 3px 0 var(--ink);
+  animation: splash-vs-pulse 2.6s ease-in-out infinite;
+}
+@keyframes splash-vs-pulse { 0%, 78%, 100% { scale: 1; } 86% { scale: 1.18; } 92% { scale: .96; } }
+
+.splash-menu {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  translate: -50% 0;
+  z-index: 30;
+  display: grid;
+  gap: 16px;
+  width: min(320px, 78vw);
+}
+.splash-button {
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--px);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 16px 12px;
+  box-shadow: 5px 5px 0 rgba(8,23,30,.9);
+  cursor: pointer;
+}
+.splash-button:hover { background: #fff3b8; }
+.splash-button.primary {
+  background: var(--orange);
+  color: #fff9db;
+  text-shadow: 2px 2px 0 var(--orange-dark);
+  font-size: 15px;
+  padding: 20px 12px;
+}
+.splash-button.primary:hover { background: #f28a45; }
+
+canvas.splash-sprite { display: block; image-rendering: pixelated; filter: drop-shadow(2px 3px 0 rgba(17,38,32,.45)); }
+canvas.splash-sprite.flip { transform: scaleX(-1); }
+
+.splash-star { position: absolute; z-index: 1; background: #ffefc4; animation: splash-twinkle var(--d, 3s) linear var(--del, 0s) infinite; }
+@keyframes splash-twinkle { 0%, 100% { opacity: .12; } 50% { opacity: .85; } }
+
+.splash-fence {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24vh;
+  z-index: 10;
+  border-top: 4px solid var(--ink);
+  background-image:
+    linear-gradient(180deg, rgba(23,43,54,.22), rgba(23,43,54,0) 26%),
+    repeating-linear-gradient(90deg, #c98d58 0 10px, #b97d4e 10px 46px, #8a5a38 46px 50px);
+}
+.splash-fence::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14%;
+  height: 16px;
+  background: #d6ab70;
+  border-top: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+}
+
+.splash-slot { position: absolute; z-index: 5; }
+.splash-pop { translate: 0 135%; }
+.splash-slot.up .splash-pop {
+  animation:
+    splash-pop-up .5s cubic-bezier(.2, 1.5, .4, 1) forwards,
+    splash-pop-sway 1.7s ease-in-out .5s infinite;
+}
+@keyframes splash-pop-up { from { translate: 0 135%; } to { translate: 0 0; } }
+@keyframes splash-pop-sway { 0%, 100% { rotate: -3deg; } 50% { rotate: 3deg; } }
+.splash-slot.down .splash-pop { animation: splash-pop-down .3s cubic-bezier(.5, 0, .8, .4) forwards; }
+@keyframes splash-pop-down { from { translate: 0 0; } to { translate: 0 135%; } }
+
+.splash-peek {
+  position: absolute;
+  z-index: 12;
+  translate: var(--hx, -110%) 0;
+  rotate: 0deg;
+  transition: translate .45s cubic-bezier(.2, 1.3, .4, 1), rotate .45s ease;
+}
+.splash-peek.in { translate: 0 0; rotate: var(--tilt, 8deg); }
+
+.splash-shout {
+  position: absolute;
+  top: -18px;
+  right: -8px;
+  z-index: 14;
+  font-family: var(--px);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 5px 7px;
+  box-shadow: 3px 3px 0 rgba(8,23,30,.85);
+  animation: splash-shout-rise .95s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes splash-shout-rise {
+  0% { opacity: 0; translate: 0 10px; }
+  15% { opacity: 1; }
+  78% { opacity: 1; translate: 0 -14px; }
+  100% { opacity: 0; translate: 0 -22px; }
+}
+
+@media (max-height: 560px) {
+  .splash-title { top: 5vh; }
+  .splash-menu { top: 36%; gap: 10px; }
+  .splash-button { padding: 12px 10px; font-size: 11px; }
+  .splash-button.primary { padding: 15px 10px; font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-screen { transition-duration: 0ms; }
+  .splash-star, .splash-title h1 .vs, .splash-slot.up .splash-pop,
+  .splash-slot.down .splash-pop, .splash-shout {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+  }
+  .splash-peek { transition-duration: 0ms; }
+}

@@ -29,6 +29,7 @@ import {
   CORE_STEPS, TIPS, confirmTutorialSkip, tutorialMergeTaskForDrop,
   allTutorialCatsMoved, refreshTutorialShop, tutorialShop, tutorialWave,
 } from './tutorial.js';
+import { initSplash } from './splash.js';
 
 let game = createGame();
 let selected = null;
@@ -3886,6 +3887,11 @@ loadVolumeSettings();
 syncSettingsUi();
 drawBackyard($('#yard-art'));
 render();
+initSplash({
+  root: $('#splash-screen'),
+  onTutorial: startTutorial,
+  onSettings: () => { unlockAudio(); openSettings(); },
+});
 
 // Dev-only QA hook. Vite strips this from production builds. Combat effects are hard to
 // reach by clicking — Bombay Boom's bomb needs round 4 and a useful dog formation — so
