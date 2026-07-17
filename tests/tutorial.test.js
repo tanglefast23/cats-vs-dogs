@@ -11,7 +11,7 @@ import {
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole, ownsFighterCoat,
   tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, confirmTutorialSkip,
   tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors, tutorialOwnedCatSelector,
-  tutorialCatInfoSelectors,
+  tutorialCatInfoSelectors, allTutorialCatsMoved,
   TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
@@ -138,12 +138,12 @@ test('tutorial purchase hints choose a lane the player has not used', () => {
     '#board .cell[data-row="13"][data-col="2"]');
 });
 
-test('round 1 teaches tap-for-info after the first cat is placed', () => {
+test('round 1 places both cats before teaching tap-for-info', () => {
   const buyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-buy1');
   const infoIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-cat-info');
   const secondBuyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r1-buy2');
-  assert.equal(infoIndex, buyIndex + 1);
-  assert.equal(secondBuyIndex, infoIndex + 1);
+  assert.equal(secondBuyIndex, buyIndex + 1);
+  assert.equal(infoIndex, secondBuyIndex + 1);
 
   const step = CORE_STEPS[infoIndex];
   assert.deepEqual(step.completeOnActions, ['view-cat-info', 'open-glossary']);
@@ -269,6 +269,8 @@ test('round 2 teaches the Adoption Box hover gesture in text and action', () => 
   assert.equal(adoptStep.dragFrom(game),
     '#board .cell[data-row="13"][data-col="4"]');
   assert.equal(adoptStep.dragTo, '#next-wave-zone');
+  assert.equal(adoptStep.mode, 'tap');
+  assert.equal(adoptStep.bubblePlacement, 'target-top');
   assert.deepEqual(adoptStep.completeOnActions, ['sell']);
   assert.match(adoptStep.text, /Adoption Box appears just above cat territory/i);
   assert.match(adoptStep.text, /border glows/i);
@@ -328,11 +330,32 @@ test('core lessons only complete from actions that prove the taught behavior', (
   assert.equal(collectFood.isDone(game), true);
 });
 
-test('tap lessons can declare the successful action that replaces Continue', () => {
+test('actionable lessons can declare the successful action that completes them', () => {
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r1-scout').completeOnActions,
     ['view-next-wave', 'purchase-place', 'purchase-bench', 'purchase-merge']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
+});
+
+test('round 3 immediately teaches feeding an apple during planning', () => {
+  const step = CORE_STEPS.find((entry) => entry.id === 'r3-hurt');
+  const game = createGame();
+  const woundedCat = { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 };
+  woundedCat.hp -= 2;
+  game.round = 3;
+  game.cats.push(woundedCat);
+  game.inventory[0] = { kind: 'food', tier: 1, quantity: 1 };
+
+  assert.equal(step.mode, 'gate', 'the planning screen stays undimmed for the drag');
+  assert.equal(step.showWhen(game), true);
+  assert.equal(step.spotlight, '#inventory');
+  assert.equal(step.dragFrom, '#inventory .pet-draggable');
+  assert.equal(step.dragTo(game), tutorialWoundedCatSelector(game));
+  assert.equal(step.text, 'Your cat is hurt. Feed it an apple from the Supplies section.');
+  assert.equal(step.isDone(game), false);
+
+  game.cats[0].hp = game.cats[0].maxHp;
+  assert.equal(step.isDone(game), true);
 });
 
 test('every core step is well-formed', () => {
@@ -347,6 +370,7 @@ test('every core step is well-formed', () => {
     if (step.dragTo) assert.ok(['string', 'function'].includes(typeof step.dragTo));
     if (step.dragHints) assert.equal(typeof step.dragHints, 'function');
     if (step.mutedRegion) assert.equal(typeof step.mutedRegion, 'string');
+    if (step.bubblePlacement) assert.ok(['target-top'].includes(step.bubblePlacement));
   }
   assert.equal(new Set(CORE_STEPS.map((s) => s.id)).size, CORE_STEPS.length);
 });
@@ -407,6 +431,21 @@ test('round 2 teaches movement at the first Tactics Window', () => {
   game.phase = 'combat';
   assert.equal(step.isDone(game), true, 'continuing without moving keeps the lesson optional');
   assert.equal(TIPS.some((entry) => entry.id === 'tip-move'), false, 'the lesson is not repeated later');
+});
+
+test('the post-movement Ready cue waits until every tutorial cat has moved', () => {
+  const game = createGame();
+  game.phase = 'tactics';
+  game.cats.push(
+    { ...createCat(1, CAT_COAT.ORANGE), tacticsMoved: true },
+    { ...createCat(1, CAT_COAT.GREY), tacticsMoved: false },
+  );
+
+  assert.equal(allTutorialCatsMoved(game), false);
+  game.cats[1].tacticsMoved = true;
+  assert.equal(allTutorialCatsMoved(game), true);
+  game.cats.length = 0;
+  assert.equal(allTutorialCatsMoved(game), false, 'an empty field never prompts Ready');
 });
 
 test('the ability tip waits until the Tactics Window opens', () => {

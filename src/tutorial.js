@@ -154,6 +154,9 @@ export function tutorialMovableCatSelectors(game) {
     .map(boardCatCanvasSelector);
 }
 
+export const allTutorialCatsMoved = (game) => game.cats.length > 0
+  && game.cats.every((cat) => cat.tacticsMoved);
+
 export function tutorialWoundedCatSelector(game) {
   const wounded = game.cats.find((cat) => cat.hp < cat.maxHp);
   return wounded ? `${boardCatSelector(wounded)} .unit:not(.dog-unit):not(.decoy-unit)` : null;
@@ -192,9 +195,10 @@ export function tutorialMergeText(completedTasks = new Set()) {
   return 'Complete both merges: drag one battlefield Purrcy onto the other, and drag the matching Purrcy from the Cat Cart onto the stack.';
 }
 
-// --- coach steps: linear, rounds 1-3. mode 'tap' shows a Continue button;
-// mode 'gate' advances when isDone(game) is true. showWhen (optional) delays
-// the bubble until the game is in the right phase. ---
+// --- coach steps: linear, rounds 1-3. Every step offers Continue; mode 'tap'
+// advances with it, while mode 'gate' closes the text without claiming the
+// highlighted action happened. showWhen (optional) delays the bubble until the
+// right phase. ---
 export const CORE_STEPS = [
   // Round 1 — the core loop
   { id: 'r1-stakes', round: 1, mode: 'tap', spotlight: '#board',
@@ -208,16 +212,16 @@ export const CORE_STEPS = [
     mutedRegion: '.dog-lawn-preview',
     text: "You have 10 gold and cats cost 3. Drag Purrcy Pew-Pew from the shop onto the battlefield.",
     isDone: (g) => catOnBoard(g, CAT_COAT.ORANGE) },
-  { id: 'r1-cat-info', round: 1, mode: 'gate', spotlight: null,
-    focusSelectors: tutorialCatInfoSelectors,
-    completeOnActions: ['view-cat-info', 'open-glossary'],
-    text: 'Want to know what a cat does? Tap the cat you just placed for quick stats and ability details. Or tap the yellow “i” in the Cat Cart for the full cat and dog guide. Try either one now.',
-    isDone: () => false },
   { id: 'r1-buy2', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
     dragTo: tutorialOpenLaneSelector,
     text: "Purrcy only shoots straight up his own lane. Grab a second Purrcy and cover another lane.",
     isDone: (g) => purrcyLaneCount(g) >= 2 },
+  { id: 'r1-cat-info', round: 1, mode: 'gate', spotlight: null,
+    focusSelectors: tutorialCatInfoSelectors,
+    completeOnActions: ['view-cat-info', 'open-glossary'],
+    text: 'Want to know what a cat does? Tap the cat you just placed for quick stats and ability details. Or tap the yellow “i” in the Cat Cart for the full cat and dog guide. Try either one now.',
+    isDone: () => false },
   { id: 'r1-refresh', round: 1, mode: 'gate', spotlight: '#refresh',
     completeOnActions: ['refresh'],
     text: "Want different cats? Refresh rerolls the shop for 1 gold. Give it a try.",
@@ -250,12 +254,13 @@ export const CORE_STEPS = [
     dragTo: tutorialOpenLaneSelector,
     text: 'Now learn how to make room. Drag Hissiletoe from the Cat Cart onto an open battlefield lane.',
     isDone: (g) => ownsFighterCoat(g, CAT_COAT.WHITE) },
-  { id: 'r2-adopt', round: 2, mode: 'gate', spotlight: '#next-wave-zone', showWhen: (g) => g.phase === 'prep',
+  { id: 'r2-adopt', round: 2, mode: 'tap', spotlight: '#next-wave-zone', showWhen: (g) => g.phase === 'prep',
     completeOnActions: ['sell'],
     dragFrom: (g) => tutorialOwnedCatSelector(g, CAT_COAT.WHITE),
     dragTo: '#next-wave-zone',
+    bubblePlacement: 'target-top',
     text: 'Pick Hissiletoe up and the Adoption Box appears just above cat territory. Hover over the box until its border glows, then drop Hissiletoe there to sell the cat for gold and free the squad slot.',
-    isDone: () => false },
+  },
   { id: 'r2-spend', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
     text: (g) => `You still have ${g.gold} gold. Buy cats or refresh the Cat Cart until it's gone — every unspent coin is lost when battle begins.`,
     isDone: (g) => g.gold === 0 },
@@ -268,9 +273,11 @@ export const CORE_STEPS = [
 
   // Round 3 — production payoff (heal). A small wound persists from the advancing
   // pack (scripted in app.js), so one Whisker treat fully patches it.
-  { id: 'r3-hurt', round: 3, mode: 'tap', spotlight: '#board', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
+  { id: 'r3-hurt', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'prep' && anyWoundedCat(g),
     completeOnActions: ['use-food'],
-    text: "One of your cats is still hurt — wounds carry over between rounds. Start the round; then feed it from Supplies when Tactics opens." },
+    dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,
+    text: 'Your cat is hurt. Feed it an apple from the Supplies section.',
+    isDone: (g) => !anyWoundedCat(g) },
   { id: 'r3-heal', round: 3, mode: 'gate', spotlight: '#inventory', showWhen: (g) => g.phase === 'tactics',
     completeOnActions: ['use-food'],
     dragFrom: '#inventory .pet-draggable', dragTo: tutorialWoundedCatSelector,

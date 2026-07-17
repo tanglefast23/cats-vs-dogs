@@ -3225,10 +3225,13 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   animation: tutorial-start-ring-pulse 1.05s ease-in-out infinite;
 }
 .tutorial-spotlight.tutorial-start-cue::after { display: none; }
-.done-button.tutorial-start-cue {
+.done-button.tutorial-start-cue,
+.done-button.tutorial-ready-cue {
   box-shadow: 4px 4px 0 var(--ink), 0 0 0 4px rgba(104, 231, 255, .72), 0 0 18px rgba(104, 231, 255, .62);
   animation: tutorial-start-wiggle 2.4s ease-in-out infinite;
 }
+/* The idle delay already supplied the quiet beat, so enter this shared animation at its wiggle. */
+.done-button.tutorial-ready-cue { animation-delay: -1.65s; }
 @keyframes tutorial-start-ring-pulse {
   0%, 100% { box-shadow: 0 0 0 4px #68e7ff, 0 0 12px rgba(104, 231, 255, .72); }
   50% { box-shadow: 0 0 0 8px #68e7ff, 0 0 28px rgba(104, 231, 255, 1); }
@@ -3304,7 +3307,7 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
     box-shadow: 0 0 14px rgba(var(--tutorial-accent-rgb), .72);
   }
   .tutorial-spotlight.tutorial-start-cue { animation: none; }
-  .done-button.tutorial-start-cue { animation: none; }
+  .done-button.tutorial-start-cue, .done-button.tutorial-ready-cue { animation: none; }
   .tutorial-focus-highlight { animation: none; opacity: .82; }
 }
 
@@ -3461,6 +3464,10 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
   /* Battlefield pets must read from their silhouette, clothing and armor. The
      large yellow level tiles obscure most of a 32px sprite on phone layouts. */
   .board .unit-badge { display: none; }
+  /* Keep the mobile Next Wave control and incoming dogs in separate rows. */
+  .preview-sign { top: 12px; padding: 9px 10px; }
+  .dog-preview-grid { transform: translateY(calc(10% + 8px)); }
+  .dog-preview-cell { padding: 3px; }
   /* The command wing is intentionally the first side to become dense. */
   .phase-control-wing { padding: 8px; }
   .phase-control-wing .shop-panel,

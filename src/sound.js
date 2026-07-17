@@ -5,10 +5,10 @@ export const SOUND_SETTING_KEY = 'cvd-sound-enabled';
 export const SOUND_VOLUME_SETTING_KEY = 'cvd-sound-volume';
 export const MUSIC_VOLUME_SETTING_KEY = 'cvd-music-volume';
 export const MUSIC_OWNER_KEY = 'cvd-music-owner';
-// Ship only the compressed 30-second loop. HTMLAudio streams it instead of
+// Ship only the compressed 27-second loop. HTMLAudio streams it instead of
 // decoding a multi-megabyte PCM master into the Web Audio heap.
 export const LEVEL_MUSIC_URL = new URL('./assets/audio/backyard-bounce-loop.mp3', import.meta.url).href;
-export const LEVEL_MUSIC_DURATION_SECONDS = 30;
+export const LEVEL_MUSIC_DURATION_SECONDS = 27.14;
 export const DEFAULT_VOLUME = 50;
 export const SOUND_OUTPUT_CAP = 0.8;
 export const MUSIC_OUTPUT_CAP = 0.4;

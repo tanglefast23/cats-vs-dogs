@@ -112,13 +112,13 @@ test('eating an apple layers a sharp crack over two crunchy chew beats', async (
   assert.equal(events.filter((event) => event === 'oscillator').length, 3);
 });
 
-test('the browser ships the compact 30-second Backyard Bounce variation', () => {
+test('the browser ships the compact 27-second Backyard Bounce seamless loop', () => {
   const mp3 = readFileSync(new URL('../src/assets/audio/backyard-bounce-loop.mp3', import.meta.url));
   const hasId3Header = mp3.toString('ascii', 0, 3) === 'ID3';
   const hasMpegFrameSync = mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0;
 
   assert.match(LEVEL_MUSIC_URL, /backyard-bounce-loop\.mp3$/);
-  assert.equal(LEVEL_MUSIC_DURATION_SECONDS, 30);
+  assert.equal(LEVEL_MUSIC_DURATION_SECONDS, 27.14);
   assert.ok(hasId3Header || hasMpegFrameSync, 'compressed music is not a valid MP3 stream');
   assert.ok(mp3.length < 300_000, `Backyard Bounce loop is not web-optimized (${mp3.length} bytes)`);
 });

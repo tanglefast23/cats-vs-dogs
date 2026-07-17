@@ -101,8 +101,32 @@ test('repositionable cats use a separate faint tutorial glow', () => {
   assert.match(css, /@keyframes tutorial-focus-glow\s*{[\s\S]*0 0 18px/s);
 });
 
+test('Ready wiggles after 1.5 idle seconds once every tutorial cat has moved', () => {
+  assert.match(app, /const TUTORIAL_READY_CUE_DELAY_MS = 1500;/);
+  assert.match(app, /tutorialActive\s*&& game\.round === 2\s*&& game\.phase === 'tactics'\s*&& allTutorialCatsMoved\(game\)/s);
+  assert.match(app, /window\.setTimeout\([\s\S]*classList\.add\('tutorial-ready-cue'\)[\s\S]*TUTORIAL_READY_CUE_DELAY_MS/s);
+  assert.match(app, /window\.addEventListener\('pointerdown', resetTutorialReadyCueDelay\);/);
+  assert.match(app, /window\.addEventListener\('keydown', resetTutorialReadyCueDelay\);/);
+  assert.match(css, /\.done-button\.tutorial-start-cue,\s*\.done-button\.tutorial-ready-cue\s*{[^}]*animation:\s*tutorial-start-wiggle 2\.4s/s);
+  assert.match(css, /\.done-button\.tutorial-ready-cue\s*{\s*animation-delay:\s*-1\.65s;/);
+});
+
 test('tutorial buttons cannot intercept a cat drop through the nearby bubble', () => {
   assert.match(css, /body\.pet-dragging \.tutorial-next,\s*body\.pet-dragging \.tutorial-skip\s*{\s*pointer-events:\s*none;/s);
+});
+
+test('every tutorial text bubble offers Continue without requiring its highlighted action', () => {
+  assert.match(app, /function positionTutorialOverlay\(selector, opts = \{\}\)/);
+  assert.match(app, /tutorialNextEl\.hidden = false;/);
+  assert.match(app, /if \(step\?\.mode === 'gate'\) \{\s*tutorialDismissedSteps\.add\(step\.id\);\s*hideTutorialOverlay\(\);/s);
+  assert.match(app, /if \(tutorialDismissedSteps\.has\(step\.id\)\) \{\s*hideTutorialOverlay\(\);\s*return;/s);
+  assert.match(app, /if \(tutorialStepIsDone\(step\)\) \{\s*tutorialDismissedSteps\.delete\(step\.id\);/s);
+});
+
+test('tutorial lessons can pin a bubble inside the top of a battlefield target', () => {
+  assert.match(app, /bubblePlacement === 'target-top'/);
+  assert.match(app, /top:\s*Math\.min\([\s\S]*r\.top \+ TUTORIAL_BUBBLE_CLEARANCE/s);
+  assert.match(app, /bubblePlacement:\s*step\.bubblePlacement/);
 });
 
 test('starting any cat drag dismisses the visible tutorial overlay', () => {
@@ -132,8 +156,10 @@ test('the Next Wave button toggles the incoming dogs over the current battlefiel
   assert.match(app, /nextWaveVisible = !nextWaveVisible;\s*if \(nextWaveVisible\) completeTutorialTipForAction\('view-next-wave'\);\s*renderDogPreview\(\);\s*renderBoard\(\);/);
   assert.match(app, /toggle\?\.setAttribute\('aria-pressed', String\(nextWaveVisible\)\);/);
   assert.match(app, /label\.textContent = nextWaveVisible \? 'HIDE NEXT WAVE' : 'NEXT WAVE';/);
+  assert.match(app, /if \(grouped\) cell\.insertAdjacentHTML\('beforeend', `<b>×\$\{count\}<\/b>`\);/);
   assert.match(css, /\.board\.showing-next-wave \.grid \.dog-unit\s*{\s*visibility:\s*hidden;\s*}/);
   assert.match(css, /\.preview-sign\.is-active \.tiny-label\s*{\s*display:\s*none;\s*}/);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.preview-sign\s*{\s*top:\s*12px;\s*padding:\s*9px 10px;\s*}[\s\S]*\.dog-preview-grid\s*{\s*transform:\s*translateY\(calc\(10% \+ 8px\)\);\s*}[\s\S]*\.dog-preview-cell\s*{\s*padding:\s*3px;\s*}/s);
 });
 
 test('the left wing swaps planning controls for persistent battle tactics', () => {
@@ -270,7 +296,7 @@ test('the command wing and supporting UI use the large readable type scale', () 
   assert.match(css, /\.glossary-entry\s*{\s*height:\s*max-content;\s*min-height:\s*224px;/);
   assert.match(html, /id="done-label">READY<\/span><\/button>/);
   assert.doesNotMatch(html, /START ROUND|Spend every coin · Clear every dog to win/);
-  assert.match(app, /\$\('#done-label'\)\.textContent = 'READY';/);
+  assert.match(app, /\$\('#done-label'\)\.textContent = canContinueTactics \? 'CONTINUE' : 'READY';/);
 });
 
 test('the Cat Cart wing and fence align with the left wood rail', () => {
