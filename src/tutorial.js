@@ -11,6 +11,17 @@ const nextId = (prefix) => `${prefix}-${(seq += 1)}`;
 
 export const TUTORIAL_SKIP_CONFIRMATION = 'Are you sure you want to skip the tutorial?';
 
+export const TUTORIAL_FAREWELL = Object.freeze({
+  id: 'tutorial-farewell',
+  mode: 'tap',
+  spotlight: null,
+  text: 'I think you can take it from here. Go purrtect your home!',
+});
+
+export function tutorialFollowUpForAction(tipId, actionType) {
+  return tipId === 'squad-full' && actionType === 'sell' ? TUTORIAL_FAREWELL : null;
+}
+
 export function confirmTutorialSkip(confirm) {
   return confirm(TUTORIAL_SKIP_CONFIRMATION);
 }
@@ -88,6 +99,14 @@ export const inventoryHasItem = (game) => game.inventory.some(Boolean);
 export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.role === role);
 export const ownsAdvancedCat = (game) => [...game.cats, ...game.bench]
   .some((cat) => cat.kind !== 'production-cat' && CAT_COAT_INFO[cat.coat]?.unlockRound >= 4);
+export const ownsTierTwoFieldCat = (game) => game.cats
+  .some((cat) => CAT_COAT_INFO[cat.coat]?.shopTier === 2);
+export const tutorialSellingUnlocked = (game, completedTipIds = new Set()) => (
+  game.cats.length >= MAX_FIELD_CATS || completedTipIds.has('squad-full')
+);
+export const tutorialWaitsForSquadFull = (game, completedTipIds = new Set()) => (
+  completedTipIds.has('tip-new-cats') && !tutorialSellingUnlocked(game, completedTipIds)
+);
 
 const purrcyCopyCount = (game) => game.cats
   .filter((cat) => cat.coat === CAT_COAT.ORANGE)
@@ -113,6 +132,14 @@ export function tutorialShopWorkerSelector(game, role) {
   return shopIndex < 0 ? null : `#shop .shop-card[data-shop-index="${shopIndex}"]`;
 }
 
+export function tutorialShopTierSelector(game, shopTier) {
+  const shopIndex = game.shop.findIndex((slot) => slot
+    && !slot.sold
+    && slot.category === 'fighter'
+    && CAT_COAT_INFO[slot.coat]?.shopTier === shopTier);
+  return shopIndex < 0 ? null : `#shop .shop-card[data-shop-index="${shopIndex}"]`;
+}
+
 const CAT_DRAG_SOURCE_TYPES = new Set([
   'shop-fighter', 'shop-worker', 'cat', 'bench', 'worker', 'bench-worker',
 ]);
@@ -120,6 +147,7 @@ const CAT_DRAG_SOURCE_TYPES = new Set([
 function tutorialDragSourceMatches(criteria, source) {
   if (criteria.types && !criteria.types.includes(source.type)) return false;
   if (criteria.coat !== undefined && source.coat !== criteria.coat) return false;
+  if (criteria.shopTier !== undefined && source.shopTier !== criteria.shopTier) return false;
   if (criteria.role !== undefined && source.role !== criteria.role) return false;
   if (criteria.itemKind !== undefined && source.itemKind !== criteria.itemKind) return false;
   return true;
@@ -131,8 +159,12 @@ export function tutorialBlockedCatDragMessage(item, source) {
   return allowed ? null : item.blockedCatDragText;
 }
 
-export function tutorialBlockedDropMessage(item, action) {
+export function tutorialBlockedDropMessage(item, action, source = null) {
   if (!item?.allowedDropActions || action?.type === 'invalid') return null;
+  if (item.bounceOtherCatDrags && CAT_DRAG_SOURCE_TYPES.has(source?.type)) {
+    const allowedSource = item.dragSources?.some((criteria) => tutorialDragSourceMatches(criteria, source));
+    if (!allowedSource) return item.blockedCatDragText;
+  }
   return item.allowedDropActions.includes(action.type) ? null : item.blockedDropText;
 }
 
@@ -312,15 +344,23 @@ export const CORE_STEPS = [
     bubblePlacement: 'target-top',
     text: "Great move, now heal Purrcy, who's been hurt, with the food from below. That's the payoff of worker cats!",
     isDone: (g) => !tutorialPurrcyIsWounded(g) },
+  { id: 'r2-healed', round: 2, mode: 'tap', spotlight: '#done',
+    text: 'Purrfect! Full HP. Now finish up your moves and continue the battle.' },
 ];
 
 // --- just-in-time tips: shown once each, one at a time, when `when` first holds ---
 // Note: the squad-full coaching (5/5 max → sell / combine / bench) fires
 // proactively from app.js the moment you hit the cap, not as a queued tip.
 export const TIPS = [
-  { id: 'tip-new-cats', mode: 'tap', spotlight: '#shop',
-    completeOnActions: ['purchase-advanced-cat'], isDone: ownsAdvancedCat,
-    text: "New round, new arrivals — stronger cats just unlocked in the shop. Some have a special move you can fire during the pause.",
+  { id: 'tip-new-cats', mode: 'gate', spotlight: '#shop',
+    completeOnActions: ['purchase-tier-two-cat'], isDone: ownsTierTwoFieldCat,
+    dragFrom: (g) => tutorialShopTierSelector(g, 2), dragTo: tutorialOpenLaneSelector,
+    dragSources: [{ types: ['shop-fighter'], shopTier: 2 }],
+    bounceOtherCatDrags: true,
+    blockedCatDragText: 'Buy a T2 cat for this lesson — T1 cats can wait.',
+    allowedDropActions: ['purchase-place'],
+    blockedDropText: 'Place the T2 cat on an open battlefield square.',
+    text: 'Round 4 introduces stronger cats with abilities you can use during the pause. Buy one now.',
     when: (g) => g.round >= 4 },
   { id: 'tip-coins', mode: 'tap', spotlight: '#production-grid',
     completeOnActions: ['collect-coins'],

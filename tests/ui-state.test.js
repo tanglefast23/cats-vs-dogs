@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { selectionAfterPurchase, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
+import { selectionAfterPurchase, adoptionBoxAvailableForDrag, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewQueue, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from '../src/ui-state.js';
 import { WORKER_INFO } from '../src/production-rules.js';
 import {
   CAT_EQUIPMENT, CAT_LEVEL_STYLES, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_TIER_STYLES, DOG_ROLE_MARKERS,
@@ -32,6 +32,15 @@ test('the Adoption Box grows from 75% to 100% as the cat crosses the dog yard an
   assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 850 }, zone, box), 0.875);
   assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 700 }, zone, box), 1);
   assert.equal(adoptionBoxScaleForPointer({ x: 150, y: 650 }, zone, box), 1);
+});
+
+test('the Adoption Box is available only while dragging an owned cat during planning', () => {
+  assert.equal(adoptionBoxAvailableForDrag('prep', 'cat'), true);
+  assert.equal(adoptionBoxAvailableForDrag('prep', 'bench'), true);
+  assert.equal(adoptionBoxAvailableForDrag('prep', 'shop-fighter'), false);
+  assert.equal(adoptionBoxAvailableForDrag('prep', 'cat', false), false);
+  assert.equal(adoptionBoxAvailableForDrag('tactics', 'cat'), false);
+  assert.equal(adoptionBoxAvailableForDrag('combat', 'cat'), false);
 });
 
 test('veteran melee cat advice explains movement beyond cat territory', () => {
@@ -217,19 +226,6 @@ test('every multi-battle production cat exposes the same completion countdown', 
       status: { completed: 1, total: 2, remaining: 1, percent: 50, label: '1 BATTLE' },
     },
   ]);
-});
-
-test('cat equipment plates expose actual attack, block, and remaining-hit values', () => {
-  assert.deepEqual(equippedItemMarkers({
-    equipment: {
-      weapon: { tier: 1, attack: 1 },
-      armour: { tier: 3, block: 4, uses: 2, maxUses: 3 },
-    },
-  }), [
-    { kind: 'weapon', tier: 1, value: 1, uses: null, maxUses: null },
-    { kind: 'armour', tier: 3, value: 4, uses: 2, maxUses: 3 },
-  ]);
-  assert.deepEqual(equippedItemMarkers({ equipment: { weapon: null, armour: null } }), []);
 });
 
 test('temporary cat and dog statuses provide large-marker values and plain-language labels', () => {

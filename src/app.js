@@ -13,7 +13,7 @@ import {
   catSaleQuote, sellCat,
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
-import { selectionAfterPurchase, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, equippedItemMarkers, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
+import { selectionAfterPurchase, adoptionBoxAvailableForDrag, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
 import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
 import { unlockAudio, playUiClick, playRefreshClick, playCoinSpend, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
@@ -26,10 +26,11 @@ import {
 } from './battle-fx.js';
 import { deathSpecFor, deathTiming } from './death-animation.js';
 import {
-  CORE_STEPS, TIPS, confirmTutorialSkip, tutorialMergeTaskForDrop,
+  CORE_STEPS, TIPS, confirmTutorialSkip, tutorialFollowUpForAction,
+  tutorialMergeTaskForDrop,
   allTutorialCatsMoved, refreshTutorialShop, tutorialShop, tutorialWave,
   tutorialBlockedCatDragMessage, tutorialBlockedDropMessage,
-  woundTutorialPurrcy,
+  tutorialSellingUnlocked, tutorialWaitsForSquadFull, woundTutorialPurrcy,
 } from './tutorial.js';
 import { initSplash } from './splash.js';
 
@@ -37,6 +38,7 @@ let game = createGame();
 let selected = null;
 let playing = false;
 let dragState = null;
+let abilityDragState = null;
 let suppressNextPetClick = false;
 let dragHoverElement = null;
 let pendingUpgrade = null;
@@ -510,29 +512,6 @@ function catMarkup(cat) {
   unit.className = 'unit';
   unit.dataset.unitId = cat.id;
   unit.append(unitCanvas('cat', cat));
-  const equipment = equippedItemMarkers(cat);
-  if (equipment.length) {
-    unit.classList.add('has-equipment');
-    const markers = document.createElement('span');
-    markers.className = 'equipment-markers';
-    markers.setAttribute('aria-hidden', 'true');
-    equipment.forEach((item) => {
-      const marker = document.createElement('span');
-      marker.className = `equipment-marker equipment-${item.kind}`;
-      marker.append(unitCanvas('item', item));
-      const value = document.createElement('b');
-      value.textContent = item.kind === 'weapon' ? `+${item.value}` : String(item.value);
-      marker.append(value);
-      if (item.kind === 'armour') {
-        const uses = document.createElement('span');
-        uses.className = 'equipment-uses';
-        uses.textContent = `×${item.uses}`;
-        marker.append(uses);
-      }
-      markers.append(marker);
-    });
-    unit.append(markers);
-  }
   appendUnitStatusOverlays(unit, catStatusMarkers(cat));
   const copies = cat.copies ?? 1;
   unit.insertAdjacentHTML('beforeend', `
@@ -727,7 +706,11 @@ function selectCat(type, cat) {
 
 function dragSource(type, cat) {
   if (type === 'shop-worker') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, role: cat.role };
-  if (type === 'shop-fighter') return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1, coat: normalizeCoat(cat.coat) };
+  if (type === 'shop-fighter') {
+    const coat = normalizeCoat(cat.coat);
+    return { type, id: cat.id, shopIndex: cat.shopIndex, level: cat.level ?? 1,
+      coat, shopTier: cat.shopTier ?? CAT_COAT_INFO[coat].shopTier };
+  }
   if (type === 'worker') return { type, id: cat.id, workerIndex: cat.workerIndex, level: cat.level, role: cat.role };
   if (type === 'bench-worker') return { type, id: cat.id, benchIndex: cat.benchIndex, level: cat.level, role: cat.role };
   if (type === 'item') return { type, inventoryIndex: cat.inventoryIndex, itemKind: cat.kind, tier: cat.tier ?? 1 };
@@ -753,7 +736,13 @@ function dragSource(type, cat) {
 
 function targetFromElement(element) {
   const adoptionBox = element?.closest?.('.next-wave-adoption');
-  if (adoptionBox) return { element: adoptionBox, descriptor: { kind: 'sell' } };
+  if (adoptionBox) {
+    const sourceType = dragState?.source.type;
+    return {
+      element: adoptionBox,
+      descriptor: adoptionBoxAvailableForDrag(game.phase, sourceType) ? { kind: 'sell' } : null,
+    };
+  }
   const workerSlot = element?.closest?.('.worker-slot');
   if (workerSlot) {
     const index = Number(workerSlot.dataset.workerIndex);
@@ -821,7 +810,7 @@ function dropAction(source, descriptor) {
     fieldCap: MAX_FIELD_CATS,
   });
   const tutorialItem = tutorialActive ? currentTutorialActionItem() : null;
-  const blockedDropMessage = tutorialBlockedDropMessage(tutorialItem, action);
+  const blockedDropMessage = tutorialBlockedDropMessage(tutorialItem, action, source);
   return blockedDropMessage
     ? { type: 'invalid', reason: 'tutorial', message: blockedDropMessage }
     : action;
@@ -914,7 +903,8 @@ function startDragVisual(event) {
   dragState.ghost = visuals.ghost;
   dragState.shadow = visuals.shadow;
   document.body.classList.add('pet-dragging');
-  if (game.phase === 'prep' && (dragState.source.type === 'cat' || dragState.source.type === 'bench')) {
+  const sellingUnlocked = !tutorialActive || tutorialSellingUnlocked(game, tutorialSeenTips);
+  if (adoptionBoxAvailableForDrag(game.phase, dragState.source.type, sellingUnlocked)) {
     document.body.classList.add('cat-sell-dragging');
     const adoptionPanel = $('#next-wave-adoption');
     if (adoptionPanel) adoptionPanel.hidden = false;
@@ -1236,9 +1226,9 @@ async function finishDrag(event, cancelled = false) {
     }
     completeTutorialTipForAction(action.type);
     if (state.source.type === 'shop-fighter'
-        && CAT_COAT_INFO[state.source.coat]?.unlockRound >= 4
-        && action.type.startsWith('purchase-')) {
-      completeTutorialTipForAction('purchase-advanced-cat');
+        && state.source.shopTier === 2
+        && action.type === 'purchase-place') {
+      completeTutorialTipForAction('purchase-tier-two-cat');
     }
     if (game.workers.every(Boolean)) completeTutorialTipForAction('fill-house');
     if (fieldWasFull && game.cats.length < MAX_FIELD_CATS) completeTutorialTipForAction('made-squad-room');
@@ -1540,6 +1530,11 @@ function renderDogPreview() {
   const isPlanning = game.phase === 'prep';
   if (!isPlanning) nextWaveVisible = false;
   zone.hidden = !isPlanning;
+  if (!isPlanning) {
+    document.body.classList.remove('cat-sell-dragging');
+    const adoptionPanel = $('#next-wave-adoption');
+    if (adoptionPanel) adoptionPanel.hidden = true;
+  }
   dogPreviewEl.innerHTML = '';
   dogPreviewEl.hidden = !nextWaveVisible;
   zone.classList.toggle('showing-next-wave', nextWaveVisible);
@@ -1571,6 +1566,22 @@ const ACTIVE_COPY = {
   storm: ['STORM', 'Choose a dog column. The strike deals 2/4/6 damage by level.'],
   duel: ['DOG DUEL', 'Choose two nearby dogs. They deal 1×/1.5×/3× their own attack damage by Meowstro\'s level, rounded up.'],
 };
+
+const ACTIVE_ICON_CLASS = {
+  'bomb-cross': 'bomb', freeze: 'freeze', teleport: 'portal',
+  decoy: 'decoy', storm: 'storm', duel: 'duel',
+};
+
+function abilityTooltipInfo(cat, copy) {
+  const portalStep = cat.activeAbility === 'teleport'
+    ? 'Drag once onto the cat or dog to move, then drag this icon again to its destination.'
+    : 'Drag this icon over the battlefield to preview the affected area, then release to cast.';
+  return {
+    kind: 'cat', category: 'TACTIC', title: copy[0],
+    stats: `${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}`,
+    detailLabel: 'Ability', attack: copy[1], note: portalStep,
+  };
+}
 
 function activeTargetingInstruction(targeting) {
   const casterLevel = game.cats.find((cat) => cat.id === targeting?.casterId)?.level ?? 1;
@@ -1620,6 +1631,8 @@ function showStormTargetPreview(col) {
 function clearAbilityTargetPreview() {
   clearBombTargetPreview();
   clearStormTargetPreview();
+  gridEl.querySelectorAll('.ability-drag-valid, .ability-drag-invalid, .ability-preview-area')
+    .forEach((cell) => cell.classList.remove('ability-drag-valid', 'ability-drag-invalid', 'ability-preview-area'));
 }
 
 gridEl.addEventListener('pointerleave', clearAbilityTargetPreview);
@@ -1649,18 +1662,166 @@ function renderTacticsPanel() {
     const button = document.createElement('button');
     button.className = `active-ability ${cat.activeUsed ? 'used' : ''} ${activeTargeting?.casterId === cat.id ? 'targeting' : ''}`;
     button.disabled = !tacticsOpen || cat.activeUsed || playing;
-    button.innerHTML = `<b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
-    button.title = copy[1];
-    button.addEventListener('click', () => {
-      activeTargeting = {
-        casterId: cat.id, mode: cat.activeAbility, targetCatId: null, targetDogId: null,
+    button.innerHTML = `<span class="ability-icon ability-icon-${ACTIVE_ICON_CLASS[cat.activeAbility] ?? 'bomb'}" aria-hidden="true"></span><b>${copy[0]}</b><span>${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName} · L${cat.level}</span>`;
+    button.title = `${copy[1]} Drag to use.`;
+    button.setAttribute('aria-label', `${copy[0]}, ${CAT_COAT_INFO[normalizeCoat(cat.coat)].shortName}, level ${cat.level}. Tap for details; drag to use.`);
+    bindTooltip(button, () => abilityTooltipInfo(cat, copy));
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || button.disabled || dragState || abilityDragState) return;
+      const rect = button.getBoundingClientRect();
+      abilityDragState = {
+        pointerId: event.pointerId, cat, copy, mode: cat.activeAbility,
+        sourceRect: rect, startX: event.clientX, startY: event.clientY,
+        started: false, ghost: null,
       };
-      game.message = copy[1];
-      render();
     });
     host.append(button);
   });
   if (!activeCats.length) host.innerHTML = '<p class="no-active-cats">No active-ability cats deployed.</p>';
+}
+
+function abilityTargetAt(targeting, row, col) {
+  const cat = game.cats.find((unit) => unit.hp > 0 && unit.row === row && unit.col === col) ?? null;
+  const dogs = game.dogs.filter((unit) => unit.hp > 0 && unit.row === row && unit.col === col);
+  const dog = dogs.at(-1) ?? null;
+  const decoy = game.decoys.find((unit) => unit.blocks > 0 && unit.row === row && unit.col === col) ?? null;
+  if (targeting.mode === 'bomb-cross') {
+    const valid = plusCells(row, col).some((cell) => game.dogs.some((unit) => (
+      unit.hp > 0 && unit.row === cell.row && unit.col === cell.col
+    )));
+    return { valid, cat, dog };
+  }
+  if (targeting.mode === 'freeze') return { valid: Boolean(dog && !dog.frozenActions), cat, dog };
+  if (targeting.mode === 'storm') return { valid: stormTargetDogIds(game.dogs, col).length > 0, cat, dog };
+  if (targeting.mode === 'decoy') return { valid: row >= CAT_ZONE_START && !cat, cat, dog };
+  if (targeting.mode === 'duel') {
+    const valid = dogs.length >= 2 || (dogs.length === 1 && game.dogs.some((unit) => (
+      unit.hp > 0 && Math.abs(unit.row - row) + Math.abs(unit.col - col) === 1
+    )));
+    return { valid, cat, dog };
+  }
+  if (targeting.mode === 'teleport') {
+    if (!targeting.targetCatId && !targeting.targetDogId) return { valid: Boolean(cat || dog), cat, dog };
+    if (targeting.targetCatId) return {
+      valid: row >= CAT_ZONE_START && !cat && !dog && !decoy, cat, dog,
+    };
+    const casterLevel = game.cats.find((unit) => unit.id === targeting.casterId)?.level ?? 1;
+    return {
+      valid: canTeleportDogTo(
+        game, targeting.targetDogId, row, col, portalEffectForLevel(casterLevel).enemyRange,
+      ),
+      cat, dog,
+    };
+  }
+  return { valid: false, cat, dog };
+}
+
+function makeAbilityDragGhost(state) {
+  const ghost = document.createElement('div');
+  ghost.className = 'ability-drag-ghost';
+  ghost.innerHTML = `<span class="ability-icon ability-icon-${ACTIVE_ICON_CLASS[state.mode] ?? 'bomb'}" aria-hidden="true"></span><b>${state.copy[0]}</b>`;
+  document.body.append(ghost);
+  return ghost;
+}
+
+function positionAbilityDragGhost(state, x, y) {
+  if (!state.ghost) return;
+  state.ghost.style.left = `${x}px`;
+  state.ghost.style.top = `${y}px`;
+}
+
+function startAbilityDrag(event) {
+  const state = abilityDragState;
+  if (!state || state.started) return;
+  state.started = true;
+  suppressNextPetClick = true;
+  hideUnitTooltip();
+  const continuesPortal = state.mode === 'teleport'
+    && activeTargeting?.casterId === state.cat.id
+    && (activeTargeting.targetCatId || activeTargeting.targetDogId);
+  activeTargeting = continuesPortal ? activeTargeting : {
+    casterId: state.cat.id, mode: state.mode, targetCatId: null, targetDogId: null,
+  };
+  game.message = activeTargetingInstruction(activeTargeting);
+  state.ghost = makeAbilityDragGhost(state);
+  document.body.classList.add('ability-dragging');
+  renderBoard();
+  renderTacticsPanel();
+  positionAbilityDragGhost(state, event.clientX, event.clientY);
+  requestAnimationFrame(() => state.ghost?.classList.add('is-lifted'));
+}
+
+function showAbilityDragPreview(row, col, valid) {
+  clearAbilityTargetPreview();
+  if (activeTargeting?.mode === 'bomb-cross') showBombTargetPreview(row, col);
+  else if (activeTargeting?.mode === 'storm') showStormTargetPreview(col);
+  const cell = gridEl.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+  cell?.classList.add(valid ? 'ability-drag-valid' : 'ability-drag-invalid');
+  if (valid && activeTargeting?.mode === 'duel') {
+    gridEl.querySelectorAll('.cell').forEach((candidate) => {
+      const candidateRow = Number(candidate.dataset.row);
+      const candidateCol = Number(candidate.dataset.col);
+      if (Math.abs(candidateRow - row) + Math.abs(candidateCol - col) > 1) return;
+      if (game.dogs.some((dog) => dog.hp > 0 && dog.row === candidateRow && dog.col === candidateCol)) {
+        candidate.classList.add('ability-preview-area');
+      }
+    });
+  }
+}
+
+function onAbilityDragMove(event) {
+  const state = abilityDragState;
+  if (!state || event.pointerId !== state.pointerId) return;
+  const distance = Math.hypot(event.clientX - state.startX, event.clientY - state.startY);
+  if (!state.started && distance >= DRAG_FEEDBACK.thresholdPx) startAbilityDrag(event);
+  if (!state.started) return;
+  event.preventDefault();
+  positionAbilityDragGhost(state, event.clientX, event.clientY);
+  const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.cell');
+  if (!cell) {
+    clearAbilityTargetPreview();
+    state.ghost.classList.remove('can-drop');
+    state.ghost.classList.add('cannot-drop');
+    return;
+  }
+  const row = Number(cell.dataset.row);
+  const col = Number(cell.dataset.col);
+  const { valid } = abilityTargetAt(activeTargeting, row, col);
+  showAbilityDragPreview(row, col, valid);
+  state.ghost.classList.toggle('can-drop', valid);
+  state.ghost.classList.toggle('cannot-drop', !valid);
+}
+
+async function finishAbilityDrag(event, cancelled = false) {
+  const state = abilityDragState;
+  if (!state || event.pointerId !== state.pointerId) return;
+  if (!state.started) {
+    abilityDragState = null;
+    return;
+  }
+  event.preventDefault();
+  const cell = cancelled ? null : document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.cell');
+  const row = Number(cell?.dataset.row);
+  const col = Number(cell?.dataset.col);
+  const target = cell ? abilityTargetAt(activeTargeting, row, col) : { valid: false };
+  const destination = target.valid ? cell.getBoundingClientRect() : state.sourceRect;
+  const animation = state.ghost?.animate([
+    { left: state.ghost.style.left, top: state.ghost.style.top, opacity: 1 },
+    { left: `${destination.left + destination.width / 2}px`, top: `${destination.top + destination.height / 2}px`, opacity: target.valid ? 1 : .3 },
+  ], { duration: target.valid ? 140 : 190, easing: 'steps(4)', fill: 'forwards' });
+  await animation?.finished.catch(() => {});
+  state.ghost?.remove();
+  document.body.classList.remove('ability-dragging');
+  clearAbilityTargetPreview();
+  abilityDragState = null;
+  window.setTimeout(() => { suppressNextPetClick = false; }, 0);
+  if (!target.valid) {
+    activeTargeting = null;
+    game.message = 'Drag the tactic onto a glowing valid target.';
+    render();
+    return;
+  }
+  tryActiveTarget(row, col, target.cat, target.dog);
 }
 
 function tryActiveTarget(row, col, cat, dog) {
@@ -1823,6 +1984,8 @@ function renderBoard() {
             ? `Faux Paw phantom, ${decoy.blocks} attack block${decoy.blocks === 1 ? '' : 's'} remaining, row ${row + 1} column ${col + 1}`
             : `Empty ${zone}, row ${row + 1} column ${col + 1}`);
       if (cat) {
+        if (cat.equipment?.weapon) cell.classList.add('equipment-weapon');
+        if (cat.equipment?.armour) cell.classList.add('equipment-armour');
         cell.append(catMarkup(cat));
         if (selectedMatches('cat', cat.id)) cell.classList.add('selected');
         cell.classList.add('has-unit');
@@ -1855,24 +2018,7 @@ function renderBoard() {
       if (activeTargeting) {
         const bombAiming = activeTargeting.mode === 'bomb-cross';
         const stormAiming = activeTargeting.mode === 'storm';
-        const dogsOnSquare = game.dogs.filter((unit) => unit.hp > 0 && unit.row === row && unit.col === col);
-        const dogHasDuelOpponent = dogsOnSquare.length >= 2 || (
-          dogsOnSquare.length === 1
-          && game.dogs.some((unit) => unit.hp > 0 && Math.abs(unit.row - row) + Math.abs(unit.col - col) === 1)
-        );
-        const validActiveTarget = (activeTargeting.mode === 'freeze' && dog)
-          || (activeTargeting.mode === 'decoy' && row >= CAT_ZONE_START && !cat)
-          || (activeTargeting.mode === 'duel' && dogHasDuelOpponent)
-          || (activeTargeting.mode === 'teleport' && !activeTargeting.targetCatId && !activeTargeting.targetDogId && (cat || dog))
-          || (activeTargeting.mode === 'teleport' && activeTargeting.targetCatId && row >= CAT_ZONE_START && !cat && !dog && !decoy)
-          || (activeTargeting.mode === 'teleport' && activeTargeting.targetDogId
-            && canTeleportDogTo(
-              game,
-              activeTargeting.targetDogId,
-              row,
-              col,
-              portalEffectForLevel(game.cats.find((unit) => unit.id === activeTargeting.casterId)?.level ?? 1).enemyRange,
-            ));
+        const validActiveTarget = abilityTargetAt(activeTargeting, row, col).valid;
         if (bombAiming) {
           cell.classList.add('bomb-aim');
           cell.addEventListener('pointerenter', () => showBombTargetPreview(row, col));
@@ -1903,7 +2049,11 @@ function renderBoard() {
           suppressNextPetClick = false;
           return;
         }
-        if (tryActiveTarget(row, col, cat, dog)) return;
+        if (activeTargeting) {
+          game.message = activeTargetingInstruction(activeTargeting);
+          renderHud();
+          return;
+        }
         if ((game.phase !== 'prep' && game.phase !== 'tactics') || playing) return;
         if (cat) {
           if (game.phase === 'tactics' || !tryMerge('cat', cat.id)) {
@@ -3336,15 +3486,17 @@ function completeTutorialTipForAction(actionType) {
   const step = CORE_STEPS[tutorialStepIndex];
   const stepResponds = step?.completeOnActions?.includes(actionType)
     || step?.completeOnAllActions?.includes(actionType);
-  const tipCompletes = tutorialCurrentTip?.completeOnActions?.includes(actionType);
+  const completedTip = tutorialCurrentTip;
+  const followUpTip = tutorialFollowUpForAction(completedTip?.id, actionType);
+  const tipCompletes = completedTip?.completeOnActions?.includes(actionType) || Boolean(followUpTip);
   if (!stepResponds && !tipCompletes) return;
   if (stepResponds && tutorialStepIsDone(step) && tutorialStartedActionId === step.id) {
     tutorialStartedActionId = null;
   }
   if (tipCompletes) {
-    if (tutorialStartedActionId === tutorialCurrentTip.id) tutorialStartedActionId = null;
-    tutorialSeenTips.add(tutorialCurrentTip.id);
-    tutorialCurrentTip = null;
+    if (tutorialStartedActionId === completedTip.id) tutorialStartedActionId = null;
+    tutorialSeenTips.add(completedTip.id);
+    tutorialCurrentTip = followUpTip;
     tutorialMoveFocusCleared = true;
   }
   hideTutorialOverlay();
@@ -3548,6 +3700,7 @@ function showCurrentTutorialTip() {
     dim: false,
     showSpotlight: focusSelectors.length === 0,
     anchorSelectors: focusSelectors,
+    bubblePlacement: tutorialCurrentTip.bubblePlacement,
     showContinue: tutorialCurrentTip.mode !== 'gate',
   });
 }
@@ -3576,7 +3729,7 @@ function syncTutorial() {
   if (tutorialStartNudged && !tutorialStartNudgeDismissed && game.phase === 'prep' && game.gold > 0) {
     hideDragHint();
     if (tutorialStartedActionId === 'gold-nudge') { hideTutorialOverlay(); return; }
-    showTutorialBubble(`Hold on — you've still got ${game.gold} gold. Buy a cat or use Cat Cart refreshes until it's gone; unspent gold is lost.`,
+    showTutorialBubble(`Hold on — you've still got ${game.gold} gold. Buy a cat or use Cat Cart refreshes until it's gone; unspent gold is lost. If your battlefield is full, sell a cat or use the Cat Workbench for more room.`,
       '#shop', { dim: false, showContinue: false });
     return;
   }
@@ -3586,6 +3739,7 @@ function syncTutorial() {
       && tutorialStepIndex >= CORE_STEPS.length
       && !tutorialCurrentTip && !tutorialSeenTips.has('squad-full')) {
     tutorialCurrentTip = { id: 'squad-full', mode: 'gate', spotlight: '#next-wave-zone',
+      bubblePlacement: 'target-top',
       completeOnActions: ['made-squad-room'],
       dragSources: [{ types: ['cat', 'bench'] }],
       isDone: (state) => state.cats.length < MAX_FIELD_CATS,
@@ -3656,6 +3810,12 @@ function syncTutorial() {
     showCurrentTutorialTip();
     return;
   }
+  // After buying the first T2 cat, leave the board clear until the squad fills.
+  // The five-cat lesson is what introduces and permanently unlocks selling.
+  if (tutorialWaitsForSquadFull(game, tutorialSeenTips)) {
+    hideTutorialOverlay();
+    return;
+  }
   for (const tip of TIPS) {
     if (tutorialSeenTips.has(tip.id) || !tip.when(game)) continue;
     if (tutorialTipIsDone(tip)) {
@@ -3707,6 +3867,7 @@ function currentTutorialActionItem() {
 function dragSourceMatches(criteria, source) {
   if (criteria.types && !criteria.types.includes(source.type)) return false;
   if (criteria.coat !== undefined && source.coat !== criteria.coat) return false;
+  if (criteria.shopTier !== undefined && source.shopTier !== criteria.shopTier) return false;
   if (criteria.role !== undefined && source.role !== criteria.role) return false;
   if (criteria.itemKind !== undefined && source.itemKind !== criteria.itemKind) return false;
   return true;
@@ -3926,8 +4087,15 @@ window.addEventListener('keydown', armAudioOnce);
 window.addEventListener('pointerdown', resetTutorialReadyCueDelay);
 window.addEventListener('keydown', resetTutorialReadyCueDelay);
 window.addEventListener('pointermove', onDragMove, { passive: false });
-window.addEventListener('pointerup', (event) => { void finishDrag(event); });
-window.addEventListener('pointercancel', (event) => { void finishDrag(event, true); });
+window.addEventListener('pointermove', onAbilityDragMove, { passive: false });
+window.addEventListener('pointerup', (event) => {
+  void finishDrag(event);
+  void finishAbilityDrag(event);
+});
+window.addEventListener('pointercancel', (event) => {
+  void finishDrag(event, true);
+  void finishAbilityDrag(event, true);
+});
 window.addEventListener('resize', () => {
   if (tutorialActive) { hideDragHint(); hideTutorialFocus(); syncTutorial(); }
 });

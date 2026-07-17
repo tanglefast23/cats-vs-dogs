@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CAT_COAT, DOG_CELL_CAPACITY, WORKER_ROLE, createGame, createCat, waveCountForRound,
+  CAT_COAT, DOG_CELL_CAPACITY, MAX_FIELD_CATS, WORKER_ROLE, createGame, createCat, waveCountForRound,
 } from '../src/game-engine.js';
 import {
   fighterSlot, workerSlot, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
@@ -10,10 +10,12 @@ import {
   catOnBoard, boardCatCount, producerInHouse, producerInShop, catAtLevel,
   squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole,
   tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, tutorialPurrcyIsWounded, confirmTutorialSkip,
-  tutorialShopWorkerSelector, tutorialBlockedCatDragMessage, tutorialBlockedDropMessage,
+  tutorialShopWorkerSelector, tutorialShopTierSelector, tutorialBlockedCatDragMessage, tutorialBlockedDropMessage,
   tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors,
-  tutorialCatInfoSelectors, allTutorialCatsMoved, woundTutorialPurrcy,
-  TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
+  tutorialCatInfoSelectors, allTutorialCatsMoved, ownsTierTwoFieldCat, tutorialSellingUnlocked,
+  tutorialWaitsForSquadFull, woundTutorialPurrcy,
+  tutorialFollowUpForAction,
+  TUTORIAL_FAREWELL, TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
 test('skipping the tutorial requires explicit confirmation', () => {
@@ -21,6 +23,15 @@ test('skipping the tutorial requires explicit confirmation', () => {
   assert.equal(confirmTutorialSkip((message) => { prompts.push(message); return false; }), false);
   assert.equal(confirmTutorialSkip((message) => { prompts.push(message); return true; }), true);
   assert.deepEqual(prompts, [TUTORIAL_SKIP_CONFIRMATION, TUTORIAL_SKIP_CONFIRMATION]);
+});
+
+test('selling during the squad-full lesson shows the tutorial farewell', () => {
+  assert.equal(tutorialFollowUpForAction('squad-full', 'sell'), TUTORIAL_FAREWELL);
+  assert.equal(tutorialFollowUpForAction('squad-full', 'made-squad-room'), null);
+  assert.equal(tutorialFollowUpForAction('tip-new-cats', 'sell'), null);
+  assert.equal(TUTORIAL_FAREWELL.mode, 'tap');
+  assert.equal(TUTORIAL_FAREWELL.text,
+    'I think you can take it from here. Go purrtect your home!');
 });
 
 test('fighterSlot builds a shop-shaped fighter for the coat', () => {
@@ -153,6 +164,53 @@ test('tutorial purchase hints choose a lane the player has not used', () => {
   game.cats[0] = { ...game.cats[0], row: 11, col: 3 };
   assert.equal(tutorialOpenLaneSelector(game),
     '#board .cell[data-row="13"][data-col="2"]');
+});
+
+test('the Round 4 lesson requires placing a T2 shop cat on the field', () => {
+  const game = createGame();
+  game.round = 4;
+  game.shop = tutorialShop(4);
+  const tip = TIPS.find((entry) => entry.id === 'tip-new-cats');
+  const tierOneSource = { type: 'shop-fighter', coat: CAT_COAT.ORANGE, shopTier: 1 };
+  const tierTwoSource = { type: 'shop-fighter', coat: CAT_COAT.BLACK, shopTier: 2 };
+
+  assert.equal(tip.mode, 'gate');
+  assert.equal(tip.text, 'Round 4 introduces stronger cats with abilities you can use during the pause. Buy one now.');
+  assert.deepEqual(tip.completeOnActions, ['purchase-tier-two-cat']);
+  assert.equal(tip.dragFrom(game), '#shop .shop-card[data-shop-index="0"]');
+  assert.equal(tutorialShopTierSelector(game, 2), '#shop .shop-card[data-shop-index="0"]');
+  assert.equal(tutorialBlockedCatDragMessage(tip, tierOneSource), null,
+    'the T1 drag starts so the card can visibly bounce back');
+  assert.match(tutorialBlockedDropMessage(tip, { type: 'purchase-place' }, tierOneSource), /T2 cat/i);
+  assert.equal(tutorialBlockedDropMessage(tip, { type: 'purchase-place' }, tierTwoSource), null);
+  assert.match(tutorialBlockedDropMessage(tip, { type: 'purchase-bench' }, tierTwoSource), /battlefield/i);
+
+  assert.equal(ownsTierTwoFieldCat(game), false);
+  game.cats.push({ ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 });
+  assert.equal(tip.isDone(game), false, 'placing another T1 cat does not dismiss the lesson');
+  game.cats.push({ ...createCat(1, CAT_COAT.BLACK), row: 13, col: 3 });
+  assert.equal(tip.isDone(game), true, 'a deployed T2 cat completes the lesson');
+});
+
+test('tutorial selling unlocks only at the five-cat lesson and stays unlocked afterward', () => {
+  const game = createGame();
+  while (game.cats.length < MAX_FIELD_CATS - 1) {
+    game.cats.push({ ...createCat(1, CAT_COAT.ORANGE), row: 13, col: game.cats.length });
+  }
+
+  const completedTips = new Set(['tip-new-cats']);
+  assert.equal(tutorialSellingUnlocked(game), false);
+  assert.equal(tutorialWaitsForSquadFull(game, completedTips), true,
+    'no other tutorial lesson appears between the T2 purchase and five cats');
+  game.cats.push({ ...createCat(1, CAT_COAT.GREY), row: 12, col: 5 });
+  assert.equal(tutorialSellingUnlocked(game), true, 'five field cats unlock the Adoption Box lesson');
+  assert.equal(tutorialWaitsForSquadFull(game, completedTips), false);
+
+  game.cats.pop();
+  completedTips.add('squad-full');
+  assert.equal(tutorialSellingUnlocked(game, completedTips), true,
+    'selling remains available after the five-cat lesson is completed');
+  assert.equal(tutorialWaitsForSquadFull(game, completedTips), false);
 });
 
 test('round 1 places both cats before teaching tap-for-info', () => {
@@ -366,6 +424,7 @@ test('actionable lessons can declare the successful action that completes them',
 test('moving a cat immediately leads into healing the wounded Purrcy', () => {
   const moveIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-move');
   const step = CORE_STEPS[moveIndex + 1];
+  const healedStep = CORE_STEPS[moveIndex + 2];
   const game = createGame();
   const woundedCat = { ...createCat(1, CAT_COAT.ORANGE), row: 13, col: 2 };
   woundedCat.hp -= 2;
@@ -386,6 +445,11 @@ test('moving a cat immediately leads into healing the wounded Purrcy', () => {
 
   game.cats[0].hp = game.cats[0].maxHp;
   assert.equal(step.isDone(game), true);
+
+  assert.equal(healedStep.id, 'r2-healed');
+  assert.equal(healedStep.mode, 'tap');
+  assert.equal(healedStep.spotlight, '#done');
+  assert.equal(healedStep.text, 'Purrfect! Full HP. Now finish up your moves and continue the battle.');
 });
 
 test('every core step is well-formed', () => {
@@ -442,15 +506,15 @@ test('every tip is well-formed with a trigger', () => {
 test('only information lessons use Continue; action lessons wait for the game action', () => {
   assert.deepEqual(
     CORE_STEPS.filter((step) => step.mode === 'tap').map((step) => step.id),
-    ['r1-stakes', 'r2-admire'],
+    ['r1-stakes', 'r2-admire', 'r2-healed'],
   );
   assert.deepEqual(
     TIPS.filter((tip) => tip.mode === 'gate').map((tip) => tip.id),
-    ['tip-ability'],
+    ['tip-new-cats', 'tip-ability'],
   );
   assert.deepEqual(
     TIPS.filter((tip) => tip.mode === 'tap').map((tip) => tip.id),
-    ['tip-new-cats', 'tip-coins', 'tip-fill-house'],
+    ['tip-coins', 'tip-fill-house'],
   );
 });
 
@@ -524,10 +588,10 @@ test('each actionable just-in-time tip recognizes proof of completion', () => {
   const ability = TIPS.find((entry) => entry.id === 'tip-ability');
   const fillHouse = TIPS.find((entry) => entry.id === 'tip-fill-house');
 
-  assert.deepEqual(newCats.completeOnActions, ['purchase-advanced-cat']);
+  assert.deepEqual(newCats.completeOnActions, ['purchase-tier-two-cat']);
   assert.equal(newCats.isDone(game), false);
   game.cats.push({ ...createCat(1, CAT_COAT.BLACK), row: 13, col: 3 });
-  assert.equal(newCats.isDone(game), true, 'owning Bombay proves a tier-3 cat was grabbed');
+  assert.equal(newCats.isDone(game), true, 'owning Bombay proves a T2 cat was placed');
 
   assert.deepEqual(coins.completeOnActions, ['collect-coins']);
   assert.deepEqual(ability.completeOnActions, ['use-ability']);

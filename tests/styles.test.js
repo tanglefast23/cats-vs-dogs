@@ -49,8 +49,23 @@ test('Cat Workbench omits the redundant capacity counter', () => {
   assert.doesNotMatch(app, /bench-count/);
 });
 
+test('Cat Workbench hides yellow level badges without hiding them elsewhere', () => {
+  assert.match(css, /\.workbench-grid \.unit-badge,\s*\.workbench-grid \.reserve-level\s*{\s*display:\s*none;\s*}/);
+  assert.doesNotMatch(css, /(?:^|})\s*\.unit-badge\s*{[^}]*display:\s*none;/m);
+});
+
 test('worker cat offers use a pastel violet background', () => {
   assert.match(css, /\.shop-slot\.worker-offer \.shop-card\s*{[^}]*background:\s*#e6d7f5/);
+});
+
+test('equipped cats tint their grass tile instead of showing equipment stat plates', () => {
+  assert.match(app, /if \(cat\.equipment\?\.weapon\) cell\.classList\.add\('equipment-weapon'\);/);
+  assert.match(app, /if \(cat\.equipment\?\.armour\) cell\.classList\.add\('equipment-armour'\);/);
+  assert.doesNotMatch(app, /equippedItemMarkers|equipment-markers|equipment-marker/);
+  assert.match(css, /\.cell\.cat-zone\.equipment-weapon\s*{[^}]*#fff3a6[^}]*#ffd968/s);
+  assert.match(css, /\.cell\.cat-zone\.equipment-armour\s*{[^}]*#eadcf7[^}]*#cdb7e8/s);
+  assert.match(css, /\.cell\.cat-zone\.equipment-weapon\.equipment-armour\s*{[^}]*#fff3a6[^}]*#eadcf7[^}]*#ffd968[^}]*#cdb7e8/s);
+  assert.doesNotMatch(css, /\.equipment-marker/);
 });
 
 test('production-cat level-ups use a local production reveal instead of pulsing the battlefield', () => {
@@ -168,6 +183,8 @@ test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and s
   assert.doesNotMatch(css, /^\.adoption-box\s*\{/m);
   assert.match(css, /\.next-wave-adoption\s*{[^}]*bottom:\s*calc\(10px \+ 15%\);[^}]*opacity:\s*\.75;[^}]*transform:\s*scale\(var\(--adoption-scale, \.75\)\);/s);
   assert.match(app, /function updateAdoptionBoxProximity\(clientX, clientY\)[\s\S]*adoptionBoxScaleForPointer\([\s\S]*panel\.style\.setProperty\('--adoption-scale', scale\.toFixed\(3\)\);/s);
+  assert.match(app, /adoptionBoxAvailableForDrag\(game\.phase, dragState\.source\.type, sellingUnlocked\)/);
+  assert.match(app, /descriptor: adoptionBoxAvailableForDrag\(game\.phase, sourceType\) \? \{ kind: 'sell' \} : null/);
   assert.match(app, /positionDragVisual\(event\.clientX, event\.clientY\);\s*updateAdoptionBoxProximity\(event\.clientX, event\.clientY\);\s*updateDragHover/);
   assert.doesNotMatch(css, /body\.cat-sell-dragging \.next-wave-zone \.next-wave-adoption\s*{[^}]*opacity:\s*\.34/s);
   assert.match(css, /body\.cat-sell-dragging \.next-wave-adoption\.drag-over\s*{[^}]*box-shadow:[^}]*0 0 24px 10px[^}]*transform:\s*scale\(1\);/s);
@@ -175,6 +192,11 @@ test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and s
 
 test('the tutorial defers its selling lesson until the squad reaches the five-cat cap', () => {
   assert.match(app, /game\.cats\.length >= MAX_FIELD_CATS[\s\S]*id: 'squad-full'[\s\S]*Squad's full at 5![\s\S]*Adoption Box appears just above cat territory/s);
+});
+
+test('the squad-full tutorial bubble stays at the top of the dog area', () => {
+  assert.match(app, /id: 'squad-full'[\s\S]*spotlight: '#next-wave-zone',[\s\S]*bubblePlacement: 'target-top'/s);
+  assert.match(app, /showTutorialBubble\(tutorialCurrentTip\.text, tutorialCurrentTip\.spotlight,[\s\S]*bubblePlacement: tutorialCurrentTip\.bubblePlacement/s);
 });
 
 test('the Next Wave button toggles the incoming dogs over the current battlefield dogs', () => {
@@ -387,6 +409,17 @@ test('tutorial text bubble keeps ten clear pixels beyond the spotlight ring', ()
 test('five or more tactics use compact three-column buttons', () => {
   assert.match(app, /host\.classList\.toggle\('compact', activeCats\.length >= 5\)/);
   assert.match(css, /\.active-abilities\.compact\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
+});
+
+test('tactic icons tap for details and drag onto live board previews', () => {
+  assert.match(app, /button\.innerHTML = `<span class="ability-icon ability-icon-/);
+  assert.match(app, /bindTooltip\(button, \(\) => abilityTooltipInfo\(cat, copy\)\)/);
+  assert.match(app, /button\.addEventListener\('pointerdown',[\s\S]*abilityDragState =/s);
+  assert.match(app, /function onAbilityDragMove\(event\)[\s\S]*abilityTargetAt\(activeTargeting, row, col\)[\s\S]*showAbilityDragPreview/s);
+  assert.match(app, /function finishAbilityDrag\(event, cancelled = false\)[\s\S]*tryActiveTarget\(row, col, target\.cat, target\.dog\)/s);
+  assert.match(app, /continuesPortal[\s\S]*targetCatId \|\| activeTargeting\.targetDogId/s);
+  assert.match(css, /\.ability-icon\s*{[^}]*ability-icons\.png[^}]*image-rendering:\s*pixelated/s);
+  assert.match(css, /\.cell\.ability-drag-valid,[\s\S]*#8ee7ff/s);
 });
 
 test('stacked dogs show two individual tooltip cards with pixel art', () => {

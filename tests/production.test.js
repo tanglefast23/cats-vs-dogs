@@ -279,6 +279,24 @@ test('weapons replace permanently', () => {
   assert.equal(game.bench[0].equipment.weapon.tier, 3);
 });
 
+test('weapon and armour occupy separate slots and same-kind equipment replaces only its own slot', () => {
+  let game = createGame(() => 0.5);
+  game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });
+  game = addInventoryStack(game, { kind: 'weapon', tier: 1, quantity: 1 });
+  game = addInventoryStack(game, { kind: 'armour', tier: 2, quantity: 1 });
+
+  const catId = game.bench[0].id;
+  game = equipInventoryItem(game, game.inventory.findIndex((item) => item?.kind === 'weapon'), 'bench', catId);
+  game = equipInventoryItem(game, game.inventory.findIndex((item) => item?.kind === 'armour'), 'bench', catId);
+  assert.equal(game.bench[0].equipment.weapon.tier, 1);
+  assert.equal(game.bench[0].equipment.armour.tier, 2);
+
+  game = addInventoryStack(game, { kind: 'weapon', tier: 3, quantity: 1 });
+  game = equipInventoryItem(game, game.inventory.findIndex((item) => item?.kind === 'weapon'), 'bench', catId);
+  assert.equal(game.bench[0].equipment.weapon.tier, 3);
+  assert.equal(game.bench[0].equipment.armour.tier, 2);
+});
+
 test('armour blocks damage for finite hits, always allows one damage, then breaks', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.GREY });

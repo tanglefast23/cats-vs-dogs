@@ -5,6 +5,11 @@ export function selectionAfterPurchase(previousSelection, purchaseSucceeded) {
   return purchaseSucceeded ? null : previousSelection;
 }
 
+/** The Adoption Box is a planning-only target for owned battle cats. */
+export function adoptionBoxAvailableForDrag(phase, sourceType, sellingUnlocked = true) {
+  return sellingUnlocked && phase === 'prep' && (sourceType === 'cat' || sourceType === 'bench');
+}
+
 /** Scale the Adoption Box from 75% at the dog-yard edge to 100% on contact. */
 export function adoptionBoxScaleForPointer(pointer, zoneRect, boxRect) {
   const minimumScale = 0.75;
@@ -73,21 +78,6 @@ export function hpTone(hp, maxHp) {
   if (pct > 0.5) return 'full';
   if (pct > 0.25) return 'mid';
   return 'low';
-}
-
-/** Large equipment plates shown on a cat, ordered weapon then armour. */
-export function equippedItemMarkers(cat = {}) {
-  return ['weapon', 'armour'].flatMap((kind) => {
-    const item = cat.equipment?.[kind];
-    if (!item) return [];
-    return [{
-      kind,
-      tier: item.tier ?? 1,
-      value: kind === 'weapon' ? item.attack ?? 0 : item.block ?? 0,
-      uses: kind === 'armour' ? item.uses ?? 0 : null,
-      maxUses: kind === 'armour' ? item.maxUses ?? item.uses ?? 0 : null,
-    }];
-  });
 }
 
 /** Temporary cat effects that need to remain readable after their cast animation ends. */
