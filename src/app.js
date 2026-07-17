@@ -684,9 +684,10 @@ function playPendingUpgrade() {
 }
 
 function recordTutorialMergeTask(action, source) {
-  if (!tutorialActive || game.round !== 2 || game.phase !== 'prep') return;
+  if (!tutorialActive || game.round !== 2 || game.phase !== 'prep') return null;
   const task = tutorialMergeTaskForDrop(action, source);
   if (task) tutorialCompletedMergeTasks.add(task);
+  return task;
 }
 
 function tryMerge(targetType, targetId) {
@@ -1204,7 +1205,10 @@ async function finishDrag(event, cancelled = false) {
   const changed = applyDropAction(action, state.source);
   selected = null;
   if (changed) {
-    recordTutorialMergeTask(action, state.source);
+    const tutorialMergeTask = recordTutorialMergeTask(action, state.source);
+    if (tutorialMergeTask && state.tutorialActionId === tutorialStartedActionId) {
+      tutorialStartedActionId = null;
+    }
     completeTutorialTipForAction(action.type);
     if (state.source.type === 'shop-fighter'
         && CAT_COAT_INFO[state.source.coat]?.unlockRound >= 4

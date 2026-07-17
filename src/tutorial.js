@@ -90,8 +90,6 @@ export const anyWoundedCat = (game) => game.cats.some((cat) => cat.hp < cat.maxH
 export const ownsAbilityCat = (game) => game.cats.some((cat) => Boolean(cat.activeAbility));
 export const inventoryHasItem = (game) => game.inventory.some(Boolean);
 export const ownsWorkerRole = (game, role) => game.workers.some((w) => w && w.role === role);
-export const ownsFighterCoat = (game, coat) => [...game.cats, ...game.bench]
-  .some((cat) => cat.kind !== 'production-cat' && cat.coat === coat);
 export const ownsAdvancedCat = (game) => [...game.cats, ...game.bench]
   .some((cat) => cat.kind !== 'production-cat' && CAT_COAT_INFO[cat.coat]?.unlockRound >= 4);
 
@@ -132,13 +130,6 @@ export function tutorialMergeTaskForDrop(action, source) {
 
 const boardCatSelector = (cat) => `#board .cell[data-row="${cat.row}"][data-col="${cat.col}"]`;
 const boardCatCanvasSelector = (cat) => `${boardCatSelector(cat)} .unit:not(.dog-unit):not(.decoy-unit) > canvas`;
-
-export function tutorialOwnedCatSelector(game, coat) {
-  const fieldCat = game.cats.find((cat) => cat.coat === coat);
-  if (fieldCat) return boardCatSelector(fieldCat);
-  const benchCat = game.bench.find((cat) => cat?.kind !== 'production-cat' && cat.coat === coat);
-  return benchCat ? `#workbench .bench-slot[data-unit-id="${benchCat.id}"]` : null;
-}
 
 export function tutorialCatInfoSelectors(game) {
   const fieldCat = game.cats[0];
@@ -187,7 +178,7 @@ export function tutorialMergeText(completedTasks = new Set()) {
   const battlefieldDone = completedTasks.has(TUTORIAL_MERGE_TASK.BATTLEFIELD);
   const cartDone = completedTasks.has(TUTORIAL_MERGE_TASK.CART);
   if (battlefieldDone && !cartDone) {
-    return 'Battlefield cats stacked! Now drag the matching Purrcy from the Cat Cart onto that stack.';
+    return 'Battlefield cats stacked! Now merge the shop cat: drag the matching Purrcy from the Cat Cart onto that stack.';
   }
   if (cartDone && !battlefieldDone) {
     return 'Cat Cart cat stacked! Now drag one battlefield Purrcy onto the other.';
@@ -207,7 +198,7 @@ export const CORE_STEPS = [
   { id: 'r1-scout', round: 1, mode: 'gate', spotlight: '#next-wave-toggle',
     actionStartSelectors: ['#next-wave-toggle'],
     completeOnActions: ['view-next-wave'],
-    advanceDelayMs: 1500,
+    advanceDelayMs: 3000,
     text: "Tap NEXT WAVE to see which dogs are coming." },
   { id: 'r1-buy1', round: 1, mode: 'gate', spotlight: '#shop',
     dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.ORANGE),
@@ -262,28 +253,11 @@ export const CORE_STEPS = [
       && completedTasks.has(TUTORIAL_MERGE_TASK.CART) },
   { id: 'r2-admire', round: 2, mode: 'tap', spotlight: '#board',
     text: 'Power spike! Level 2 cats hit harder and survive longer than Level 1 cats. Combining three into one also clears two spaces for your squad.' },
-  { id: 'r2-adopt-buy', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
-    dragFrom: (g) => tutorialShopFighterSelector(g, CAT_COAT.WHITE),
-    dragTo: tutorialOpenLaneSelector,
-    dragSources: [{ types: ['shop-fighter'], coat: CAT_COAT.WHITE }],
-    text: 'Now learn how to make room. Drag Hissiletoe from the Cat Cart onto an open battlefield lane.',
-    isDone: (g) => ownsFighterCoat(g, CAT_COAT.WHITE) },
-  { id: 'r2-adopt', round: 2, mode: 'gate', spotlight: '#next-wave-zone', showWhen: (g) => g.phase === 'prep',
-    completeOnActions: ['sell'],
-    dragFrom: (g) => tutorialOwnedCatSelector(g, CAT_COAT.WHITE),
-    dragTo: '#next-wave-zone',
-    dragSources: [{ types: ['cat', 'bench'], coat: CAT_COAT.WHITE }],
-    bubblePlacement: 'target-top',
-    text: 'Pick Hissiletoe up and the Adoption Box appears just above cat territory. Hover over the box until its border glows, then drop Hissiletoe there to sell the cat for gold and free the squad slot.',
-  },
-  { id: 'r2-spend', round: 2, mode: 'gate', spotlight: '#shop', showWhen: (g) => g.phase === 'prep',
-    actionStartSelectors: ['#refresh'],
-    dragSources: [{ types: ['shop-fighter', 'shop-worker'] }],
-    text: (g) => `You still have ${g.gold} gold. Buy cats or refresh the Cat Cart until it's gone — every unspent coin is lost when battle begins.`,
-    isDone: (g) => g.gold === 0 },
-  { id: 'r2-start', round: 2, mode: 'gate', spotlight: '#done', showWhen: (g) => g.phase === 'prep' && g.gold === 0,
+  { id: 'r2-spend-ready', round: 2, mode: 'gate',
+    spotlight: (g) => g.gold > 0 ? '#shop' : '#done', showWhen: (g) => g.phase === 'prep',
     actionStartSelectors: ['#done'],
-    text: "Start the round — the dogs are getting closer.", isDone: (g) => g.phase !== 'prep' },
+    text: 'Spend the rest of the gold, then tap READY.',
+    isDone: (g) => g.phase !== 'prep' },
   { id: 'r2-move', round: 2, mode: 'gate', spotlight: null, showWhen: (g) => g.phase === 'tactics',
     focusSelectors: tutorialMovableCatSelectors,
     actionStartSelectors: ['#done'],

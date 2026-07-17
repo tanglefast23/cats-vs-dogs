@@ -152,6 +152,7 @@ test('only a matching tutorial drag dismisses the visible action bubble', () => 
   assert.match(app, /criteria\.types && !criteria\.types\.includes\(source\.type\)/);
   assert.match(app, /criteria\.coat !== undefined && source\.coat !== criteria\.coat/);
   assert.match(app, /if \(state\.tutorialActionId === tutorialStartedActionId\) tutorialStartedActionId = null;/);
+  assert.match(app, /const tutorialMergeTask = recordTutorialMergeTask\(action, state\.source\);\s*if \(tutorialMergeTask && state\.tutorialActionId === tutorialStartedActionId\) \{\s*tutorialStartedActionId = null;\s*\}/s);
 });
 
 test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and scales up as the cat approaches', () => {
@@ -165,6 +166,10 @@ test('the Adoption Box appears 1.5 battlefield cells higher at 75% opacity and s
   assert.match(app, /positionDragVisual\(event\.clientX, event\.clientY\);\s*updateAdoptionBoxProximity\(event\.clientX, event\.clientY\);\s*updateDragHover/);
   assert.doesNotMatch(css, /body\.cat-sell-dragging \.next-wave-zone \.next-wave-adoption\s*{[^}]*opacity:\s*\.34/s);
   assert.match(css, /body\.cat-sell-dragging \.next-wave-adoption\.drag-over\s*{[^}]*box-shadow:[^}]*0 0 24px 10px[^}]*transform:\s*scale\(1\);/s);
+});
+
+test('the tutorial defers its selling lesson until the squad reaches the five-cat cap', () => {
+  assert.match(app, /game\.cats\.length >= MAX_FIELD_CATS[\s\S]*id: 'squad-full'[\s\S]*Squad's full at 5![\s\S]*Adoption Box appears just above cat territory/s);
 });
 
 test('the Next Wave button toggles the incoming dogs over the current battlefield dogs', () => {

@@ -8,9 +8,9 @@ import {
   fighterSlot, workerSlot, tutorialShop, tutorialShopAfterRefresh, tutorialWave,
   refreshTutorialShop,
   catOnBoard, boardCatCount, producerInHouse, producerInShop, catAtLevel,
-  squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole, ownsFighterCoat,
+  squadFull, anyWoundedCat, ownsAbilityCat, inventoryHasItem, ownsWorkerRole,
   tutorialShopFighterSelector, tutorialOpenLaneSelector, tutorialWoundedCatSelector, confirmTutorialSkip,
-  tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors, tutorialOwnedCatSelector,
+  tutorialMergeHints, tutorialMergeTaskForDrop, tutorialMergeText, tutorialMovableCatSelectors,
   tutorialCatInfoSelectors, allTutorialCatsMoved,
   TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
@@ -226,6 +226,7 @@ test('the merge lesson keeps only unfinished drag demonstrations visible', () =>
   const battlefieldDone = new Set([TUTORIAL_MERGE_TASK.BATTLEFIELD]);
   assert.deepEqual(tutorialMergeHints(game, battlefieldDone).map((hint) => hint.id),
     [TUTORIAL_MERGE_TASK.CART]);
+  assert.match(tutorialMergeText(battlefieldDone), /Now merge the shop cat/);
   assert.match(tutorialMergeText(battlefieldDone), /Cat Cart/);
   assert.equal(step.isDone(game, battlefieldDone), false);
 
@@ -248,63 +249,28 @@ test('the merge payoff explains stronger cats and freed squad space', () => {
   assert.doesNotMatch(step.text, /beats three/i);
 });
 
-test('round 2 teaches the Adoption Box hover gesture in text and action', () => {
+test('round 2 skips selling and moves directly from the Purrcy merge to spending and Ready', () => {
   const admireIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-admire');
-  const buyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-adopt-buy');
-  const adoptIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-adopt');
-  const spendIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-spend');
-  const buyStep = CORE_STEPS[buyIndex];
-  const adoptStep = CORE_STEPS[adoptIndex];
-  const game = createGame();
-  game.round = 2;
-  game.shop = tutorialShop(2);
-
-  assert.equal(buyIndex, admireIndex + 1);
-  assert.equal(adoptIndex, buyIndex + 1);
-  assert.equal(spendIndex, adoptIndex + 1);
-  assert.match(buyStep.text, /Hissiletoe/);
-  assert.equal(buyStep.isDone(game), false);
-
-  const practiceCat = { ...createCat(1, CAT_COAT.WHITE), row: 13, col: 4 };
-  game.cats.push(practiceCat);
-  assert.equal(ownsFighterCoat(game, CAT_COAT.WHITE), true);
-  assert.equal(buyStep.isDone(game), true);
-  assert.equal(adoptStep.dragFrom(game),
-    '#board .cell[data-row="13"][data-col="4"]');
-  assert.equal(adoptStep.dragTo, '#next-wave-zone');
-  assert.equal(adoptStep.mode, 'gate');
-  assert.equal(adoptStep.bubblePlacement, 'target-top');
-  assert.deepEqual(adoptStep.completeOnActions, ['sell']);
-  assert.deepEqual(adoptStep.dragSources, [{ types: ['cat', 'bench'], coat: CAT_COAT.WHITE }]);
-  assert.match(adoptStep.text, /Adoption Box appears just above cat territory/i);
-  assert.match(adoptStep.text, /border glows/i);
-  assert.match(adoptStep.text, /drop Hissiletoe there to sell/i);
-
-  game.cats = [];
-  game.bench.push(practiceCat);
-  assert.equal(tutorialOwnedCatSelector(game, CAT_COAT.WHITE),
-    `#workbench .bench-slot[data-unit-id="${practiceCat.id}"]`);
-});
-
-test('round 2 teaches spending every coin before showing the start-round lesson', () => {
-  const spendStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-spend');
-  const startStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-start');
-  const spendStep = CORE_STEPS[spendStepIndex];
-  const startStep = CORE_STEPS[startStepIndex];
+  const spendReadyIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-spend-ready');
+  const spendReadyStep = CORE_STEPS[spendReadyIndex];
   const game = createGame();
   game.round = 2;
   game.gold = 7;
 
-  assert.ok(spendStepIndex > 0);
-  assert.equal(startStepIndex, spendStepIndex + 1);
-  assert.equal(spendStep.isDone(game), false);
-  assert.match(spendStep.text(game), /7 gold/i);
-  assert.doesNotMatch(spendStep.text(game), /start (the )?round/i);
-  assert.equal(startStep.showWhen(game), false);
+  assert.equal(spendReadyIndex, admireIndex + 1);
+  assert.equal(CORE_STEPS.some((entry) => entry.id === 'r2-adopt-buy'), false);
+  assert.equal(CORE_STEPS.some((entry) => entry.id === 'r2-adopt'), false);
+  assert.equal(CORE_STEPS.some((entry) => entry.id === 'r2-spend'), false);
+  assert.equal(spendReadyStep.text, 'Spend the rest of the gold, then tap READY.');
+  assert.equal(spendReadyStep.spotlight(game), '#shop');
+  assert.equal(spendReadyStep.isDone(game), false);
 
   game.gold = 0;
-  assert.equal(spendStep.isDone(game), true);
-  assert.equal(startStep.showWhen(game), true);
+  assert.equal(spendReadyStep.spotlight(game), '#done');
+  assert.equal(spendReadyStep.isDone(game), false, 'spending alone does not skip the Ready instruction');
+
+  game.phase = 'combat';
+  assert.equal(spendReadyStep.isDone(game), true);
 });
 
 test('core lessons only complete from actions that prove the taught behavior', () => {
@@ -337,7 +303,7 @@ test('core lessons only complete from actions that prove the taught behavior', (
 test('actionable lessons can declare the successful action that completes them', () => {
   const scout = CORE_STEPS.find((entry) => entry.id === 'r1-scout');
   assert.deepEqual(scout.completeOnActions, ['view-next-wave']);
-  assert.equal(scout.advanceDelayMs, 1500);
+  assert.equal(scout.advanceDelayMs, 3000);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-hurt').completeOnActions, ['use-food']);
   assert.deepEqual(CORE_STEPS.find((entry) => entry.id === 'r3-heal').completeOnActions, ['use-food']);
 });
@@ -392,15 +358,15 @@ test('the first placement lesson mutes the unrelated dog preview lane', () => {
     '.dog-lawn-preview');
 });
 
-test('tutorial targets follow the relocated planning, scout, adoption, and tactics UI', () => {
+test('tutorial targets follow the relocated planning, scout, spending, and tactics UI', () => {
   const scoutStep = CORE_STEPS.find((step) => step.id === 'r1-scout');
   assert.equal(scoutStep.spotlight, '#next-wave-toggle');
   assert.deepEqual(scoutStep.completeOnActions, ['view-next-wave']);
-  assert.equal(scoutStep.advanceDelayMs, 1500);
+  assert.equal(scoutStep.advanceDelayMs, 3000);
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-buy1').spotlight, '#shop');
   assert.equal(CORE_STEPS.find((step) => step.id === 'r1-start').spotlight, '#done');
-  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').spotlight, '#next-wave-zone');
-  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-adopt').dragTo, '#next-wave-zone');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-spend-ready').spotlight({ gold: 1 }), '#shop');
+  assert.equal(CORE_STEPS.find((step) => step.id === 'r2-spend-ready').spotlight({ gold: 0 }), '#done');
   assert.equal(TIPS.find((tip) => tip.id === 'tip-ability').spotlight, '#tactics-panel');
 });
 
@@ -430,7 +396,7 @@ test('only information lessons use Continue; action lessons wait for the game ac
 });
 
 test('round 2 teaches movement at the first Tactics Window', () => {
-  const startStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-start');
+  const startStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-spend-ready');
   const moveStepIndex = CORE_STEPS.findIndex((entry) => entry.id === 'r2-move');
   const step = CORE_STEPS[moveStepIndex];
   const game = createGame();
