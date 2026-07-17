@@ -18,6 +18,22 @@ import {
   TUTORIAL_FAREWELL, TUTORIAL_MERGE_TASK, TUTORIAL_SKIP_CONFIRMATION, CORE_STEPS, TIPS,
 } from '../src/tutorial.js';
 
+test('the tutorial opens on the welcome title card', () => {
+  const [welcome, stakes] = CORE_STEPS;
+  assert.equal(welcome.id, 'r1-welcome');
+  assert.equal(welcome.intro, true);
+  // A centred tap step with no gates: it waits for Continue and nothing else.
+  assert.equal(welcome.mode, 'tap');
+  assert.equal(welcome.spotlight, null);
+  assert.equal(welcome.isDone, undefined);
+  assert.equal(welcome.completeOnActions, undefined);
+  assert.ok(welcome.text.includes('Who let the dogs in? Not these cats!'));
+  // Continue lands on the original first lesson, untouched.
+  assert.equal(stakes.id, 'r1-stakes');
+  // Only the welcome card ever gets the title treatment.
+  assert.deepEqual(CORE_STEPS.filter((step) => step.intro).map((step) => step.id), ['r1-welcome']);
+});
+
 test('skipping the tutorial requires explicit confirmation', () => {
   const prompts = [];
   assert.equal(confirmTutorialSkip((message) => { prompts.push(message); return false; }), false);
@@ -448,7 +464,8 @@ test('moving a cat immediately leads into healing the wounded Purrcy', () => {
 
   assert.equal(healedStep.id, 'r2-healed');
   assert.equal(healedStep.mode, 'tap');
-  assert.equal(healedStep.spotlight, '#done');
+  assert.equal(healedStep.spotlight, null, 'the battle Continue button stays dimmed');
+  assert.equal(healedStep.blockBackground, true, 'only the tutorial dialog accepts input');
   assert.equal(healedStep.text, 'Purrfect! Full HP. Now finish up your moves and continue the battle.');
 });
 
@@ -506,7 +523,7 @@ test('every tip is well-formed with a trigger', () => {
 test('only information lessons use Continue; action lessons wait for the game action', () => {
   assert.deepEqual(
     CORE_STEPS.filter((step) => step.mode === 'tap').map((step) => step.id),
-    ['r1-stakes', 'r2-admire', 'r2-healed'],
+    ['r1-welcome', 'r1-stakes', 'r2-admire', 'r2-healed'],
   );
   assert.deepEqual(
     TIPS.filter((tip) => tip.mode === 'gate').map((tip) => tip.id),

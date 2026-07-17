@@ -112,15 +112,15 @@ test('eating an apple layers a sharp crack over two crunchy chew beats', async (
   assert.equal(events.filter((event) => event === 'oscillator').length, 3);
 });
 
-test('the browser ships the compact 27-second Backyard Bounce seamless loop', () => {
+test('the browser ships the full three-minute Backyard Bounce arrangement', () => {
   const mp3 = readFileSync(new URL('../src/assets/audio/backyard-bounce-loop.mp3', import.meta.url));
   const hasId3Header = mp3.toString('ascii', 0, 3) === 'ID3';
   const hasMpegFrameSync = mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0;
 
   assert.match(LEVEL_MUSIC_URL, /backyard-bounce-loop\.mp3$/);
-  assert.equal(LEVEL_MUSIC_DURATION_SECONDS, 27.14);
+  assert.equal(LEVEL_MUSIC_DURATION_SECONDS, 180);
   assert.ok(hasId3Header || hasMpegFrameSync, 'compressed music is not a valid MP3 stream');
-  assert.ok(mp3.length < 300_000, `Backyard Bounce loop is not web-optimized (${mp3.length} bytes)`);
+  assert.ok(mp3.length < 2_000_000, `Backyard Bounce loop is not web-optimized (${mp3.length} bytes)`);
 });
 
 test('level music streams and loops the Backyard Bounce variation', async () => {
@@ -154,6 +154,44 @@ test('level music streams and loops the Backyard Bounce variation', async () => 
     assert.match(player.src, /backyard-bounce-loop\.mp3$/);
     assert.equal(player.loop, true);
     assert.equal(player.preload, 'metadata');
+    freshSound.stopLevelMusic();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test('repeated level-music starts preserve the current playback position', async () => {
+  let player = null;
+  class FakeAudio {
+    constructor() {
+      this.currentTime = 0;
+      player = this;
+    }
+
+    play() { return Promise.resolve(); }
+    pause() {}
+  }
+
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    Audio: FakeAudio,
+    navigator: { webdriver: false },
+    addEventListener() {},
+    removeEventListener() {},
+    document: {
+      hidden: false,
+      visibilityState: 'visible',
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+  try {
+    const freshSound = await import(`../src/sound.js?level-music-continuity=${Date.now()}`);
+    assert.equal(freshSound.startLevelMusic(), true);
+    player.currentTime = 42;
+    assert.equal(freshSound.startLevelMusic(), true);
+    assert.equal(player.currentTime, 42);
     freshSound.stopLevelMusic();
   } finally {
     if (previousWindow === undefined) delete globalThis.window;

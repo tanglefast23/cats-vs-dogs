@@ -14,8 +14,8 @@ import {
 } from './game-engine.js';
 import { drawBackyard, drawCat, drawDog, drawWorker, drawStation, drawItem, headAnchor } from './pixel-art.js';
 import { selectionAfterPurchase, adoptionBoxAvailableForDrag, adoptionBoxScaleForPointer, catSelectionAdvice, shopOfferHasFieldCatType, shopOfferHasOwnedMatch, shopOfferMatchingFieldCatIds, shopPetAvailability, hpTone, catStatusMarkers, dogStatusMarkers, productionLegendRows, glossaryTabs, glossaryEntriesByUnlockRound, dogPreviewPlacements, stormTargetDogIds, productionCollectionDestination, productionProgressStatus, productionWorkVisual, shopCardSummary, workerTooltipInfo } from './ui-state.js';
-import { TANGLE_BIND_TIMING, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
-import { unlockAudio, playUiClick, playRefreshClick, playCoinSpend, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
+import { TANGLE_BIND_TIMING, burstProjectileDelay, combatTiming, cellCenter, homingShotKeyframes, lobShotKeyframes, stormColumnPosition, yarnThrowKeyframes } from './combat-animation.js';
+import { unlockAudio, playUiClick, playRefreshClick, playCoinSpend, playCatDrop, playImpact, playArmourBlock, playCollection, playItemUse, playCelebration, playMerge, playCatDeath, playDogDeath, playWaveStart, playRoundComplete, playVictory, playDefeat, playHeal, playHowl, playMeow, playWoof, getSoundVolume, getMusicVolume, setSoundVolume, setMusicVolume, loadVolumeSettings, startLevelMusic, stopLevelMusic } from './sound.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from './drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catCanCrossTerritoryBoundary, catMovementPath, catMoveLimitMessage } from './movement-rules.js';
 import { UPGRADE_TIMING, describeProductionUpgrade, describeUpgrade } from './upgrade-animation.js';
@@ -61,6 +61,7 @@ const tutorialDismissedSteps = new Set();
 const dragHintAnimations = new Map();
 let tutorialStartNudged = false;
 let tutorialStartNudgeDismissed = false;
+let tutorialIntroShown = false;
 let tutorialMoveFocusCleared = false;
 let tutorialStartedActionId = null;
 let tutorialScoutPreviewTimer = null;
@@ -129,6 +130,7 @@ const tutorialOverlayEl = $('#tutorial-overlay');
 const tutorialSpotlightEl = $('#tutorial-spotlight');
 const tutorialMutedRegionEl = $('#tutorial-muted-region');
 const tutorialBubbleEl = $('#tutorial-bubble');
+const tutorialIntroLogoEl = $('#tutorial-intro-logo');
 const tutorialTextEl = $('#tutorial-text');
 const tutorialNextEl = $('#tutorial-next');
 const tutorialFocusHighlightsEl = $('#tutorial-focus-highlights');
@@ -2452,7 +2454,12 @@ async function flyProjectile(event, signature, fx, { durationMs, arc = false }) 
 async function animateProjectileVolley(group, signature, fx, index) {
   await Promise.all(group.events.map(async (event, pellet) => {
     const stagger = event.burst
-      ? (event.pelletIndex ?? pellet) * timing.burstStaggerMs + index * 8
+      ? burstProjectileDelay(
+        event,
+        group.events,
+        timing.burstProjectileMs,
+        timing.burstStaggerMs,
+      ) + index * 8
       : index * timing.shotStaggerMs;
     await wait(stagger);
     showAttackRecoil(event, signature);
@@ -3403,7 +3410,42 @@ function positionTutorialOverlay(selector, opts = {}) {
   tutorialNextEl.hidden = !showContinue;
 }
 
-function showTutorialBubble(text, selector, opts) {
+function buildTutorialIntroLogo() {
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'intro-eyebrow';
+  eyebrow.textContent = 'WELCOME TO';
+  const words = document.createElement('div');
+  words.className = 'intro-words';
+  for (const word of ['CATS', 'VS', 'DOGS']) {
+    const span = document.createElement('span');
+    span.className = `intro-word intro-${word.toLowerCase()}`;
+    span.textContent = word;
+    words.append(span);
+  }
+  tutorialIntroLogoEl.replaceChildren(eyebrow, words);
+}
+
+// Title-card treatment for the welcome step: full-screen dim + centred card.
+// The logo is rebuilt once per tutorial run so its slam-in replays on every
+// fresh start but never restarts on routine re-renders. Voices are timed to
+// the CSS: meow as CATS lands (~800ms), woof as DOGS lands (~1440ms).
+function setTutorialIntroMode(active) {
+  tutorialOverlayEl.classList.toggle('tutorial-intro-active', active);
+  tutorialBubbleEl.classList.toggle('tutorial-intro', active);
+  tutorialIntroLogoEl.hidden = !active;
+  if (!active || tutorialIntroShown) return;
+  tutorialIntroShown = true;
+  buildTutorialIntroLogo();
+  const voice = (play) => () => { if (tutorialActive && !tutorialIntroLogoEl.hidden) play(); };
+  window.setTimeout(voice(playMeow), 750);
+  window.setTimeout(voice(playWoof), 1400);
+}
+
+function showTutorialBubble(text, selector, opts = {}) {
+  const blocking = Boolean(opts.blockBackground);
+  tutorialOverlayEl.classList.toggle('tutorial-blocking-active', blocking);
+  tutorialBubbleEl.setAttribute('aria-modal', String(blocking));
+  setTutorialIntroMode(Boolean(opts.intro));
   tutorialTextEl.textContent = text;
   tutorialOverlayEl.hidden = false;
   positionTutorialOverlay(selector, opts);
@@ -3448,6 +3490,9 @@ function resetTutorialReadyCueDelay() {
 
 function hideTutorialOverlay() {
   setTutorialStartCue(false);
+  setTutorialIntroMode(false);
+  tutorialOverlayEl.classList.remove('tutorial-blocking-active');
+  tutorialBubbleEl.setAttribute('aria-modal', 'false');
   tutorialOverlayEl.hidden = true;
   hideTutorialFocus();
   hideDragHint();
@@ -3648,6 +3693,7 @@ function startTutorial() {
   tutorialDismissedSteps.clear();
   tutorialStartNudged = false;
   tutorialStartNudgeDismissed = false;
+  tutorialIntroShown = false;
   tutorialMoveFocusCleared = false;
   tutorialStartedActionId = null;
   nextWaveVisible = false;
@@ -3782,10 +3828,12 @@ function syncTutorial() {
       const isDrag = dragHints.length > 0;
       showTutorialBubble(text, spotlight, {
           dim: step.mode === 'tap',
+          intro: Boolean(step.intro),
           showSpotlight: !isDrag && focusSelectors.length === 0,
           mutedRegion: step.mutedRegion,
           anchorSelectors: focusSelectors,
           bubblePlacement: step.bubblePlacement,
+          blockBackground: Boolean(step.blockBackground),
           showContinue: step.mode !== 'gate',
         });
       if (focusSelectors.length && !tutorialMoveFocusCleared) showTutorialFocus(focusSelectors);

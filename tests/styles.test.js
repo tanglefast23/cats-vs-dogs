@@ -130,6 +130,13 @@ test('tutorial buttons cannot intercept a cat drop through the nearby bubble', (
   assert.match(css, /body\.pet-dragging \.tutorial-next,\s*body\.pet-dragging \.tutorial-skip\s*{\s*pointer-events:\s*none;/s);
 });
 
+test('a blocking tutorial dialog dims and intercepts the game until Continue is pressed', () => {
+  assert.match(app, /const blocking = Boolean\(opts\.blockBackground\);/);
+  assert.match(app, /classList\.toggle\('tutorial-blocking-active', blocking\);/);
+  assert.match(app, /blockBackground:\s*Boolean\(step\.blockBackground\)/);
+  assert.match(css, /\.tutorial-overlay\.tutorial-blocking-active\s*{[^}]*background:\s*rgba\(6,\s*10,\s*20,\s*\.72\);[^}]*pointer-events:\s*auto;/s);
+});
+
 test('Production House cats suppress their info card while any output is ready to collect', () => {
   assert.match(app, /if \(!worker\.pendingOutput\) bindTooltip\(slot, \(\) => workerTooltipInfo\(worker, info\)\);/);
 });

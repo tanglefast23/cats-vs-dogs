@@ -7,7 +7,7 @@ import {
   CAT_EQUIPMENT, CAT_LEVEL_STYLES, CAT_ARCHETYPE_MARKERS, DOG_TIER_MARKERS, DOG_TIER_STYLES, DOG_ROLE_MARKERS,
   WORKER_ART_MARKERS, ITEM_ART_MARKERS, CAT_BODY_BUILDS, DOG_BODY_BUILDS, drawCat, drawDog,
 } from '../src/pixel-art.js';
-import { COMBAT_TIMING, TANGLE_BIND_TIMING, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
+import { COMBAT_TIMING, TANGLE_BIND_TIMING, burstProjectileDelay, combatTiming, homingShotKeyframes, lobShotKeyframes, stormColumnPosition } from '../src/combat-animation.js';
 import { FIELD_CAP_MESSAGE, DRAG_FEEDBACK, DROP_IMPACT, getDropAction, isBattlefieldDropAction } from '../src/drag-drop.js';
 import { CAT_PLANNING_MOVE_SPENT_MESSAGE, catMovementPath, catMoveLimitMessage } from '../src/movement-rules.js';
 import { UPGRADE_TIMING, describeProductionUpgrade, describeUpgrade } from '../src/upgrade-animation.js';
@@ -914,6 +914,40 @@ test('a bomb thrown within one lane follows a visibly curved path', () => {
 
 test('orange burst bullets use exactly double their prior travel time', () => {
   assert.equal(COMBAT_TIMING.burstProjectileMs, 1040);
+});
+
+test('leftover Purrcy pellets pass a defeated target only after the killing hit lands', () => {
+  const volley = [
+    { burst: true, miss: false, to: 'dog', fromRow: 12, fromCol: 2, toRow: 3, col: 2, pelletIndex: 0 },
+    { burst: true, miss: false, to: 'dog', fromRow: 12, fromCol: 2, toRow: 3, col: 2, pelletIndex: 1 },
+    { burst: true, miss: true, to: null, fromRow: 12, fromCol: 2, toRow: 0, col: 2, pelletIndex: 2 },
+  ];
+  const hitDelay = burstProjectileDelay(
+    volley[1], volley, COMBAT_TIMING.burstProjectileMs, COMBAT_TIMING.burstStaggerMs,
+  );
+  const missDelay = burstProjectileDelay(
+    volley[2], volley, COMBAT_TIMING.burstProjectileMs, COMBAT_TIMING.burstStaggerMs,
+  );
+  const killingImpactAt = hitDelay + COMBAT_TIMING.burstProjectileMs;
+  const missCrossesTargetAt = missDelay
+    + COMBAT_TIMING.burstProjectileMs * ((12 - 3) / (12 - 0));
+
+  assert.equal(hitDelay, COMBAT_TIMING.burstStaggerMs);
+  assert.ok(missCrossesTargetAt >= killingImpactAt + COMBAT_TIMING.burstStaggerMs);
+});
+
+test('an adjacent Purrcy kill does not turn a leftover pellet into a long pause', () => {
+  const volley = [
+    { burst: true, miss: false, to: 'dog', fromRow: 12, fromCol: 2, toRow: 11, col: 2, pelletIndex: 0 },
+    { burst: true, miss: true, to: null, fromRow: 12, fromCol: 2, toRow: 0, col: 2, pelletIndex: 1 },
+    { burst: true, miss: true, to: null, fromRow: 12, fromCol: 2, toRow: 0, col: 2, pelletIndex: 2 },
+  ];
+  const lastMissDelay = burstProjectileDelay(
+    volley[2], volley, COMBAT_TIMING.burstProjectileMs, COMBAT_TIMING.burstStaggerMs,
+  );
+
+  assert.ok(lastMissDelay < COMBAT_TIMING.burstProjectileMs * 1.25);
+  assert.ok(lastMissDelay + COMBAT_TIMING.burstProjectileMs < COMBAT_TIMING.burstProjectileMs * 2.25);
 });
 
 test('white homing shots are modestly slower without doubling their travel time', () => {

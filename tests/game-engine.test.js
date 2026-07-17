@@ -311,6 +311,28 @@ test('orange cat splits one attack into rapid burst pellets', () => {
   assert.equal(game.dogs[0].hp, 5);
 });
 
+test('Purrcy hits a dying dog before leftover pellets sail through', () => {
+  let game = createGame(() => 0.5);
+  const purrcy = createCat(1, CAT_COAT.ORANGE);
+  purrcy.row = 12;
+  purrcy.col = 2;
+  const dog = createDog(1, 3, 2);
+  dog.hp = 2;
+  game.cats = [purrcy];
+  game.dogs = [dog];
+
+  game = resolveSection(game);
+
+  const shots = game.events.filter((event) => event.type === 'shot');
+  assert.deepEqual(shots.map((shot) => shot.miss), [false, false, true]);
+  assert.deepEqual(shots.map((shot) => shot.pelletIndex), [0, 1, 2]);
+  assert.deepEqual(
+    shots.slice(0, 2).map((shot) => [shot.hpBefore, shot.hpAfter]),
+    [[2, 1], [1, 0]],
+  );
+  assert.equal(game.dogs.length, 0);
+});
+
 test('orange cat burst keeps hitting the nearest dog in its column', () => {
   let game = createGame(() => 0.5);
   game = addCatToBench(game, { level: 1, coat: CAT_COAT.ORANGE });

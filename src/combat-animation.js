@@ -51,6 +51,52 @@ export function cellCenter(row, col) {
   };
 }
 
+function projectileDistance(event) {
+  const fromCol = event.fromCol ?? event.col;
+  return Math.hypot(
+    (event.toRow - event.fromRow) / ROWS,
+    (event.col - fromCol) / COLS,
+  );
+}
+
+/**
+ * Launch timing that keeps leftover burst pellets from overtaking pellets that hit.
+ *
+ * A miss sails to the far edge of the board. Giving that longer path the same duration
+ * as a shorter hit makes it move faster and cross the victim before the killing pellet
+ * arrives. Delay only the leftover misses by the minimum needed for every earlier hit to
+ * land first; their normal flight duration and rapid spacing stay unchanged.
+ */
+export function burstProjectileDelay(event, volley, baseDurationMs, staggerMs) {
+  const eventIndex = volley.indexOf(event);
+  const naturalDelay = (event?.pelletIndex ?? Math.max(0, eventIndex)) * staggerMs;
+  if (!event?.burst || !event.miss || eventIndex <= 0) return naturalDelay;
+
+  const priorHits = volley
+    .slice(0, eventIndex)
+    .map((candidate, index) => ({ candidate, index, distance: projectileDistance(candidate) }))
+    .filter(({ candidate, distance }) => candidate.burst && !candidate.miss && candidate.to && distance > 0);
+  if (!priorHits.length) return naturalDelay;
+
+  const missDistance = projectileDistance(event);
+  if (missDistance <= 0) return naturalDelay;
+
+  const firstMissIndex = volley.findIndex((candidate) => candidate.burst && candidate.miss);
+  const firstMissNaturalDelay = (volley[firstMissIndex]?.pelletIndex ?? firstMissIndex) * staggerMs;
+  const firstMissDelay = priorHits.reduce((delay, { candidate, index, distance }) => {
+    const hitDelay = (candidate.pelletIndex ?? index) * staggerMs;
+    const missTimeToHitRow = baseDurationMs * Math.min(1, distance / missDistance);
+    // One full pellet beat leaves visible clearance for the impact frame itself; a
+    // one-millisecond mathematical lead can still render in the previous browser frame.
+    return Math.max(delay, hitDelay + baseDurationMs - missTimeToHitRow + staggerMs);
+  }, firstMissNaturalDelay);
+  const earlierMisses = volley
+    .slice(firstMissIndex, eventIndex)
+    .filter((candidate) => candidate.burst && candidate.miss)
+    .length;
+  return Math.ceil(Math.max(naturalDelay, firstMissDelay + earlierMisses * staggerMs));
+}
+
 /** Percentage geometry for an effect that must cover exactly one battlefield column. */
 export function stormColumnPosition(col, cols = COLS) {
   const widthPercent = 100 / cols;

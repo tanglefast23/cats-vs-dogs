@@ -260,6 +260,10 @@ export function tutorialMergeText(completedTasks = new Set()) {
 // until the right phase. ---
 export const CORE_STEPS = [
   // Round 1 — the core loop
+  // `intro` asks the glue layer for the title-card treatment (dimmed backdrop,
+  // animated CATS VS DOGS logo) instead of the standard coach bubble.
+  { id: 'r1-welcome', round: 1, mode: 'tap', spotlight: null, intro: true,
+    text: 'The cats are comfy, and they are NOT taking new guests. Cats get what cats want.\n\nWho let the dogs in? Not these cats!' },
   { id: 'r1-stakes', round: 1, mode: 'tap', spotlight: '#board',
     text: "Dogs charge down these 6 lanes. If one reaches your house you lose a life — lose all 3 and it's game over." },
   { id: 'r1-scout', round: 1, mode: 'gate', spotlight: '#next-wave-toggle',
@@ -344,7 +348,7 @@ export const CORE_STEPS = [
     bubblePlacement: 'target-top',
     text: "Great move, now heal Purrcy, who's been hurt, with the food from below. That's the payoff of worker cats!",
     isDone: (g) => !tutorialPurrcyIsWounded(g) },
-  { id: 'r2-healed', round: 2, mode: 'tap', spotlight: '#done',
+  { id: 'r2-healed', round: 2, mode: 'tap', spotlight: null, blockBackground: true,
     text: 'Purrfect! Full HP. Now finish up your moves and continue the battle.' },
 ];
 

@@ -3177,6 +3177,10 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
   position: fixed; inset: 0; z-index: 9000; pointer-events: none;
 }
 .tutorial-overlay[hidden] { display: none; }
+.tutorial-overlay.tutorial-blocking-active {
+  background: rgba(6, 10, 20, .72);
+  pointer-events: auto;
+}
 /* Dim everything except the spotlight, using a huge ring shadow as the mask. */
 .tutorial-spotlight {
   position: absolute; border-radius: 12px;
@@ -3245,6 +3249,89 @@ body.pet-dragging .tutorial-skip { pointer-events: none; }
 }
 .tutorial-skip:hover, .tutorial-skip:focus-visible {
   background: var(--red); color: #fff8dc; box-shadow: 0 0 0 2px rgba(216, 74, 69, .35);
+}
+
+/* --- Tutorial intro: the CATS VS DOGS title card. app.js rebuilds the logo
+   spans once per tutorial run, so every entrance animation below replays on a
+   fresh start. Choreography: dim + card pop, eyebrow, CATS slams in from the
+   left (meow), VS pops, DOGS slams in from the right (woof), copy + buttons
+   fade up, then VS settles into the splash screen's breathing pulse. --- */
+.tutorial-overlay.tutorial-intro-active {
+  pointer-events: auto;
+  background: rgba(6, 10, 20, .78);
+  animation: intro-dim-in 320ms ease-out;
+}
+@keyframes intro-dim-in { from { background: rgba(6, 10, 20, 0); } }
+.tutorial-bubble.tutorial-intro {
+  width: min(400px, calc(100vw - 32px));
+  max-width: none;
+  padding: 26px 22px 22px;
+  text-align: center;
+  border-color: #3d5a8f;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .6);
+  animation: intro-card-pop 360ms cubic-bezier(.2, 1.25, .4, 1) backwards;
+}
+@keyframes intro-card-pop { from { opacity: 0; scale: .88; } }
+.tutorial-intro-logo { margin: 0 0 18px; }
+.tutorial-intro-logo[hidden] { display: none; }
+.intro-eyebrow {
+  margin: 0 0 14px;
+  font-family: var(--px);
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: #ffcf5d;
+  animation: intro-fade-up 360ms ease-out 200ms backwards;
+}
+.intro-words { display: flex; align-items: baseline; justify-content: center; gap: 12px; }
+.intro-word {
+  font-family: var(--px);
+  font-size: clamp(24px, 7.6vw, 33px);
+  color: var(--paper);
+  text-shadow: 3px 3px 0 var(--ink), 6px 6px 0 rgba(8, 23, 30, .45);
+}
+.intro-cats { animation: intro-slam-left 420ms cubic-bezier(.2, 1.3, .4, 1) 380ms backwards; }
+.intro-vs {
+  font-size: clamp(13px, 4.2vw, 18px);
+  color: var(--orange);
+  text-shadow: 2px 2px 0 var(--ink);
+  animation: intro-vs-pop 340ms cubic-bezier(.3, 1.6, .45, 1) 800ms backwards,
+    splash-vs-pulse 2.6s ease-in-out 2.4s infinite;
+}
+.intro-dogs { animation: intro-slam-right 420ms cubic-bezier(.2, 1.3, .4, 1) 1020ms backwards; }
+@keyframes intro-slam-left { from { opacity: 0; translate: -52px 0; } 55% { opacity: 1; } }
+@keyframes intro-slam-right { from { opacity: 0; translate: 52px 0; } 55% { opacity: 1; } }
+@keyframes intro-vs-pop { from { opacity: 0; scale: 0; } }
+.tutorial-bubble.tutorial-intro p {
+  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-line;
+  animation: intro-fade-up 400ms ease-out 1500ms backwards;
+}
+.tutorial-bubble.tutorial-intro .tutorial-next {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  font-family: var(--px);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: intro-fade-up 400ms ease-out 1650ms backwards;
+}
+.tutorial-bubble.tutorial-intro .tutorial-skip {
+  margin: 8px 0 0;
+  animation: intro-fade-up 400ms ease-out 1750ms backwards;
+}
+@keyframes intro-fade-up { from { opacity: 0; translate: 0 10px; } }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-overlay.tutorial-intro-active, .tutorial-bubble.tutorial-intro,
+  .intro-eyebrow, .intro-word, .tutorial-bubble.tutorial-intro p,
+  .tutorial-bubble.tutorial-intro .tutorial-next,
+  .tutorial-bubble.tutorial-intro .tutorial-skip {
+    animation-duration: .001s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 /* Make the first Start Round prompt read as the next action, not another generic panel edge. */
