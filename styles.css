@@ -741,22 +741,22 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .cell.cat-zone { border-color: rgba(255,248,220,.5); background: rgba(255,229,110,.13); cursor: pointer; }
 .cell.cat-zone:hover { background: rgba(255,244,154,.32); }
 /* Equipment colors the grass beneath the cat instead of covering the sprite with a stat plate. */
-.cell.cat-zone.equipment-weapon {
+.cell.equipment-weapon {
   background: repeating-linear-gradient(135deg, #fff3a6b8 0 9px, #ffd968b8 9px 18px);
 }
-.cell.cat-zone.equipment-armour {
+.cell.equipment-armour {
   background: repeating-linear-gradient(135deg, #eadcf7c9 0 9px, #cdb7e8c9 9px 18px);
 }
-.cell.cat-zone.equipment-weapon.equipment-armour {
+.cell.equipment-weapon.equipment-armour {
   background: conic-gradient(from 90deg, #fff3a6c9 0 25%, #eadcf7c9 0 50%, #ffd968c9 0 75%, #cdb7e8c9 0 100%);
 }
-.cell.cat-zone.equipment-weapon:hover {
+.cell.equipment-weapon:hover {
   background: repeating-linear-gradient(135deg, #fff3a6e8 0 9px, #ffd968e8 9px 18px);
 }
-.cell.cat-zone.equipment-armour:hover {
+.cell.equipment-armour:hover {
   background: repeating-linear-gradient(135deg, #eadcf7ed 0 9px, #cdb7e8ed 9px 18px);
 }
-.cell.cat-zone.equipment-weapon.equipment-armour:hover {
+.cell.equipment-weapon.equipment-armour:hover {
   background: conic-gradient(from 90deg, #fff3a6e8 0 25%, #eadcf7ed 0 50%, #ffd968e8 0 75%, #cdb7e8ed 0 100%);
 }
 .cell.middle { border-top: 3px dashed rgba(255,248,220,.85); }

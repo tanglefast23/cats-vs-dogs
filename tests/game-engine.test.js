@@ -1158,8 +1158,8 @@ test('cat tooltips fully explain equipment, temporary buffs, and active ability 
     activeUsed: false,
   });
 
-  assert.match(tooltip.effects.find((effect) => effect.kind === 'weapon').detail, /every attack/i);
-  assert.match(tooltip.effects.find((effect) => effect.kind === 'armour').detail, /2\/3 protected hits.*at least 1 damage/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'weapon').detail, /every attack.*replaces and destroys/i);
+  assert.match(tooltip.effects.find((effect) => effect.kind === 'armour').detail, /2\/3 protected hits.*at least 1 damage.*replaces and destroys/i);
   assert.match(tooltip.effects.find((effect) => effect.kind === 'guard').detail, /20%.*next hit.*minimum 2/i);
   assert.match(tooltip.effects.find((effect) => effect.kind === 'attack-up').detail, /20%.*next attack.*minimum 2/i);
   assert.deepEqual(tooltip.effects.find((effect) => effect.kind === 'ability'), {

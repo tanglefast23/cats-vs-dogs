@@ -62,9 +62,9 @@ test('equipped cats tint their grass tile instead of showing equipment stat plat
   assert.match(app, /if \(cat\.equipment\?\.weapon\) cell\.classList\.add\('equipment-weapon'\);/);
   assert.match(app, /if \(cat\.equipment\?\.armour\) cell\.classList\.add\('equipment-armour'\);/);
   assert.doesNotMatch(app, /equippedItemMarkers|equipment-markers|equipment-marker/);
-  assert.match(css, /\.cell\.cat-zone\.equipment-weapon\s*{[^}]*#fff3a6[^}]*#ffd968/s);
-  assert.match(css, /\.cell\.cat-zone\.equipment-armour\s*{[^}]*#eadcf7[^}]*#cdb7e8/s);
-  assert.match(css, /\.cell\.cat-zone\.equipment-weapon\.equipment-armour\s*{[^}]*#fff3a6[^}]*#eadcf7[^}]*#ffd968[^}]*#cdb7e8/s);
+  assert.match(css, /\.cell\.equipment-weapon\s*{[^}]*#fff3a6[^}]*#ffd968/s);
+  assert.match(css, /\.cell\.equipment-armour\s*{[^}]*#eadcf7[^}]*#cdb7e8/s);
+  assert.match(css, /\.cell\.equipment-weapon\.equipment-armour\s*{[^}]*#fff3a6[^}]*#eadcf7[^}]*#ffd968[^}]*#cdb7e8/s);
   assert.doesNotMatch(css, /\.equipment-marker/);
 });
 

@@ -361,7 +361,7 @@ function catTooltipEffects(cat, info) {
     const attack = weapon.attack ?? WEAPON_INFO[weapon.tier]?.attack ?? 0;
     effects.push({
       kind: 'weapon', label: `T${weapon.tier ?? 1} HOUSE WEAPON`, value: `+${attack} ATK`,
-      detail: 'Permanently adds to every attack while equipped; replacing the weapon returns the old one to House Storage.',
+      detail: 'Permanently adds to every attack while equipped; equipping another weapon replaces and destroys this one.',
     });
   }
   if (armour) {
@@ -370,7 +370,7 @@ function catTooltipEffects(cat, info) {
     const maxUses = armour.maxUses ?? ARMOUR_INFO[armour.tier]?.uses ?? uses;
     effects.push({
       kind: 'armour', label: `T${armour.tier ?? 1} HOUSE ARMOUR`, value: `${block} BLOCK`,
-      detail: `${uses}/${maxUses} protected hits remain. It reduces each hit by ${block}, but at least 1 damage always gets through.`,
+      detail: `${uses}/${maxUses} protected hits remain. It reduces each hit by ${block}, but at least 1 damage always gets through. Equipping other armour replaces and destroys this one.`,
     });
   }
   if ((cat.portalGuardLevel ?? 0) > 0) {
