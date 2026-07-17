@@ -682,6 +682,8 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
 .preview-sign .tiny-label { font-size: 6px; }
 .preview-sign strong { margin-top: 3px; font-family: var(--px); font-size: 9px; }
 .preview-sign small { float: right; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 8px; color: #52635d; }
+/* The house row shares the layout's 1/14 slice with the battlefield's last row,
+   so with no vertical offset its box lines up exactly with that bottom row. */
 .house-wing {
   position: relative;
   z-index: 5;
@@ -696,7 +698,6 @@ button:not(.cell):not(:disabled):not([aria-disabled="true"]):active {
     linear-gradient(90deg, rgba(255,255,255,.08) 50%, transparent 50%) 0 0 / 20px 20px,
     #8b5a3c;
   box-shadow: none;
-  transform: translateY(-16px);
 }
 .house-wing .production-cell { border: 1px solid rgba(255,248,220,.5); box-shadow: none; }
 .house-wing .production-grid { position: relative; }
@@ -2960,53 +2961,14 @@ body.cat-sell-dragging .next-wave-adoption.sale-blocked > b { background: #d77a7
      utility wing gives up one share first, changing 5:6 into 4:6. */
   .field-house-layout {
     grid-template-columns: 4fr 6fr;
-    /* Content-sized rows: the wing takes only what its controls need, so the
-       Production House docks right under READY on the first screen instead of
-       being pinned to the bottom of the column. min-height: 0 stops the flexbox
-       automatic-minimum path some iOS Safari versions use to balloon fr rows. */
-    grid-template-rows: auto minmax(0, 1fr);
+    /* min-height: 0 stops the flexbox automatic-minimum path some iOS Safari
+       versions use to balloon the 13fr:1fr rows to many times the house row,
+       which shoved the anchored house screens below the fold. The wing absorbs
+       any overflow instead: its planning panel scrolls internally. */
     min-height: 0;
-    /* Local stacking context so the ::after filler's z-index: -1 sits just under
-       the wing/house instead of being hoisted below ancestor backgrounds. */
-    isolation: isolate;
     width: min(100%, 820px, calc((100vh - 200px) * 10 / 14));
     aspect-ratio: 10 / 14;
     margin-bottom: 84px;
-  }
-  .phase-control-wing { height: auto; }
-  .house-wing {
-    align-self: start;
-    height: auto;
-    /* Same footprint the old bottom row gave it: 1/14 of a 10/14-tall layout,
-       4/10 wide, is exactly 4:1. */
-    aspect-ratio: 4 / 1;
-    /* No 16px rise here — that overlap would cover READY. The roofline rail
-       (::before) fills this 16px gap instead, butting against the wing panel. */
-    transform: none;
-    margin-top: 16px;
-  }
-  /* Column space left under the house is plain filler dressed as the wing panel. */
-  .field-house-layout::after {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    left: -16px;
-    top: 0;
-    bottom: 0;
-    width: calc(40% + 16px);
-    pointer-events: none;
-    outline: 5px solid var(--ink);
-    outline-offset: -5px;
-    background:
-      linear-gradient(90deg, rgba(255,255,255,.09) 50%, transparent 50%) 0 0 / 16px 16px,
-      linear-gradient(180deg, #dbe9bd, #a8c982);
-    box-shadow: inset 0 0 0 2px #75905e;
-  }
-  .field-house-layout:has(.phase-control-wing.is-battle)::after {
-    background:
-      repeating-linear-gradient(135deg, rgba(120,210,255,.06) 0 8px, transparent 8px 18px),
-      linear-gradient(180deg, #193746, #102732);
-    box-shadow: inset 0 0 0 2px #54849c, inset 0 0 34px rgba(68,183,231,.14);
   }
   .field-house-layout.is-crowded-mobile { margin-top: 0; }
   .field-house-layout.is-crowded-mobile::before { display: none; }

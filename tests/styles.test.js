@@ -218,7 +218,7 @@ test('the Cat Field has one permanent two-slot interactive Supplies tray', () =>
   assert.match(app, /const visiblePlanningCats = game\.shop\.filter\(Boolean\)\.length \+ game\.workers\.filter\(Boolean\)\.length;\s*fieldLayout\.classList\.toggle\('is-crowded-mobile', visiblePlanningCats >= 7\);/);
   assert.match(app, /hideUnitTooltip\(\);\s*syncFieldSuppliesLayout\(\);\s*renderShop\(\);/);
   assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\.is-crowded-mobile\s*{\s*margin-top:\s*0;\s*}[\s\S]*\.field-house-layout\.is-crowded-mobile::before\s*{\s*display:\s*none;\s*}/s);
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\s*{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);[^}]*min-height:\s*0;/s);
+  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout\s*{[^}]*min-height:\s*0;/s);
   assert.match(app, /slot\.className = `planning-inventory-item \$\{item \? 'filled' : 'empty'\}`;/);
   assert.match(app, /bindPetDrag\(slot, 'item', \{ \.\.\.item, inventoryIndex: index \}\);/);
   assert.match(app, /<strong>×\$\{item\.quantity\}<\/strong>/);
@@ -339,7 +339,6 @@ test('the Cat Cart wing and fence align with the left wood rail', () => {
 
 test('wood paneling encloses only the Production House', () => {
   assert.match(css, /\.house-wing \.production-grid::before\s*{[^}]*left:\s*-16px;[^}]*right:\s*0;[^}]*bottom:\s*-16px;[^}]*height:\s*16px;/s);
-  assert.match(css, /\.house-wing\s*{[^}]*transform:\s*translateY\(-16px\);/s);
   assert.match(css, /\.phase-control-wing\.is-battle \.phase-action\s*{[^}]*margin-bottom:\s*6px;/s);
   assert.match(css, /\.house-wing::after\s*{[^}]*left:\s*-16px;[^}]*top:\s*0;/s);
   assert.match(css, /\.house-wing \.production-grid::after\s*{[^}]*right:\s*0;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*16px;/s);
@@ -348,12 +347,16 @@ test('wood paneling encloses only the Production House', () => {
   assert.doesNotMatch(houseRoof, /repeating-linear-gradient\(180deg/);
 });
 
-test('mobile: the Production House docks under the planning controls, filler below', () => {
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.phase-control-wing\s*{\s*height:\s*auto;\s*}/s);
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.house-wing\s*{[^}]*align-self:\s*start;[^}]*aspect-ratio:\s*4 \/ 1;[^}]*transform:\s*none;[^}]*margin-top:\s*16px;/s);
-  assert.match(css, /@media \(max-width: 880px\)[\s\S]*\.field-house-layout::after\s*{[^}]*width:\s*calc\(40% \+ 16px\);[^}]*outline:\s*5px solid var\(--ink\);/s);
-  assert.match(css, /\.field-house-layout:has\(\.phase-control-wing\.is-battle\)::after/);
+test('the Production House stays anchored flush with the battlefield bottom row', () => {
+  // Rows share the layout's 1/14 slice with the board's last row; any vertical
+  // offset on the house breaks that alignment.
+  assert.match(css, /\.field-house-layout\s*{[^}]*grid-template-rows:\s*minmax\(0, 13fr\) minmax\(0, 1fr\);/s);
+  assert.doesNotMatch(css, /\.house-wing\s*{[^}]*transform:/s);
   assert.doesNotMatch(css, /\.field-house-layout\.is-crowded-mobile \.house-wing/);
+  assert.doesNotMatch(css, /\.field-house-layout::after/);
+  // A crowded Cat Cart scrolls inside the wing instead of pushing the house down.
+  assert.match(css, /\.field-house-layout\s*{[^}]*min-height:\s*0;/s);
+  assert.match(css, /\.planning-panel\s*{[^}]*overflow-y:\s*auto;/s);
 });
 
 test('the glossary opens from Cat Cart and Settings', () => {
