@@ -755,6 +755,27 @@ export function playHowl() {
   });
 }
 
+/** A bright, curious "me-ow" — pitch climbs, then curls back down. */
+export function playMeow() {
+  if (!soundEnabled) return;
+  tone({ frequency: jitter(520), slideTo: 920, duration: 0.12, type: 'triangle', volume: 0.045, attack: 0.015, decay: 0.05 });
+  later(105, () => {
+    if (!soundEnabled) return;
+    tone({ frequency: jitter(880), slideTo: 430, duration: 0.2, type: 'triangle', volume: 0.05, attack: 0.008, decay: 0.12 });
+  });
+}
+
+/** A friendly double woof: two short low barks with a breathy edge. */
+export function playWoof() {
+  if (!soundEnabled) return;
+  const bark = (frequency) => {
+    tone({ frequency: jitter(frequency), slideTo: frequency * 0.45, duration: 0.09, type: 'square', volume: 0.05, attack: 0.004, decay: 0.05 });
+    noiseBurst({ duration: 0.05, volume: 0.028, filterFreq: 1100 });
+  };
+  bark(300);
+  later(145, () => { if (soundEnabled) bark(255); });
+}
+
 export function isAudioUnlocked() {
   return unlocked && Boolean(audioCtx) && audioCtx.state === 'running';
 }
