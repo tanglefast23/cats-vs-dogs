@@ -278,7 +278,8 @@ test('mobile scoreboard centers each icon and value together', () => {
 test('mobile scoreboard omits labels and Tutorial omits the question mark', () => {
   assert.match(css, /\.mobile-hud-stat small\s*{\s*display:\s*none;\s*}/);
   assert.match(html, /id="mobile-tutorial"[^>]*>TUTORIAL<\/button>/);
-  assert.doesNotMatch(html, /id="mobile-tutorial"[^>]*>[\s\S]*?\?[\s\S]*?<\/button>/);
+  // Scoped to the button's own text: later modals may legitimately ask questions.
+  assert.doesNotMatch(html, /id="mobile-tutorial"[^>]*>[^<]*\?[^<]*<\/button>/);
   assert.match(css, /\.mobile-tutorial-button\s*{[^}]*font-family:\s*var\(--px\);[^}]*font-size:\s*6px;/s);
 });
 
@@ -435,4 +436,27 @@ test('stacked dogs show two individual tooltip cards with pixel art', () => {
   assert.match(app, /preview\.append\(unitCanvas\('dog', tooltipInfo\.preview\)\)/);
   assert.match(css, /\.unit-tooltip\.is-grouped\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s);
   assert.match(css, /\.tooltip-unit-art canvas\s*{[^}]*image-rendering:\s*pixelated/s);
+});
+
+test('the campaign story card shows once, above the splash, and animates in and out', () => {
+  assert.ok(zIndexFor('.campaign-intro') > zIndexFor('.splash-screen'));
+  assert.match(html, /id="campaign-intro"[\s\S]*THE DOGS[\s\S]*ARE COMING![\s\S]*rightfully theirs[\s\S]*id="campaign-intro-start"/);
+  assert.match(css, /\.campaign-intro\.leaving \.campaign-intro-card\s*{[^}]*campaign-intro-card-out/s);
+  assert.match(app, /CAMPAIGN_INTRO_SEEN_KEY = 'cvd-campaign-intro-seen-v1'/);
+  assert.match(app, /onCampaign: showCampaignIntro/);
+  assert.match(app, /\$\('#campaign-intro-start'\)\?\.addEventListener\('click', dismissCampaignIntro\)/);
+});
+
+test('every victory celebrates with confetti, a card pop, and the victory jingle', () => {
+  assert.match(html, /id="result-confetti"/);
+  assert.match(css, /@keyframes confetti-fall/);
+  assert.match(css, /\.result-modal:not\(\[hidden\]\) \.result-card\s*{\s*animation: intro-card-pop/);
+  assert.match(app, /if \(won\) \{ playVictory\(\); launchResultConfetti\(\); \}/);
+});
+
+test('winning the tutorial funnels players into Campaign', () => {
+  assert.match(html, /id="result-campaign"[^>]*hidden/);
+  assert.match(app, /TUTORIAL COMPLETE/);
+  assert.match(app, /campaignButton\.hidden = !tutorialWin/);
+  assert.match(app, /\$\('#result-campaign'\)\?\.addEventListener\('click'[\s\S]*?endTutorial\(\);[\s\S]*?resetGame\(\);[\s\S]*?showCampaignIntro\(\);/);
 });

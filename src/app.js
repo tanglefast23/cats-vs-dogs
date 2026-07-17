@@ -73,6 +73,7 @@ let nextWaveVisible = false;
 /** Combat speed: 1× or 2×, persisted; reduced-motion users default to the shorter show. */
 const SPEED_SETTING_KEY = 'cvd-combat-speed';
 const GAME_SAVE_KEY = 'cvd-game-save-v1';
+const CAMPAIGN_INTRO_SEEN_KEY = 'cvd-campaign-intro-seen-v1';
 const TUTORIAL_READY_CUE_DELAY_MS = 1500;
 const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 let combatSpeed = loadCombatSpeed();
@@ -120,6 +121,7 @@ const workbenchEl = $('#workbench');
 const gridEl = $('#grid');
 const effectsEl = $('#effects');
 const modalEl = $('#result-modal');
+const campaignIntroEl = $('#campaign-intro');
 const settingsModalEl = $('#settings-modal');
 const glossaryModalEl = $('#glossary-modal');
 const soundVolumeEl = $('#setting-sound-volume');
@@ -3078,14 +3080,67 @@ async function animateEvents(events) {
   effectsEl.innerHTML = '';
 }
 
+function campaignIntroAlreadySeen() {
+  try { return window.localStorage?.getItem(CAMPAIGN_INTRO_SEEN_KEY) === '1'; }
+  catch { return true; }
+}
+
+// First-run story card for Campaign. Shows once per browser; the howl is
+// timed to "ARE COMING!" landing (~1140ms into the CSS choreography).
+function showCampaignIntro() {
+  if (!campaignIntroEl || campaignIntroAlreadySeen()) return;
+  try { window.localStorage?.setItem(CAMPAIGN_INTRO_SEEN_KEY, '1'); } catch { /* private mode */ }
+  campaignIntroEl.hidden = false;
+  window.setTimeout(() => { if (!campaignIntroEl.hidden) playHowl(); }, 1100);
+}
+
+function dismissCampaignIntro() {
+  if (campaignIntroEl.hidden || campaignIntroEl.classList.contains('leaving')) return;
+  campaignIntroEl.classList.add('leaving');
+  window.setTimeout(() => {
+    campaignIntroEl.hidden = true;
+    campaignIntroEl.classList.remove('leaving');
+  }, 320);
+}
+
+const CONFETTI_COLORS = ['#e87832', '#e4a928', '#75a64b', '#fff8dc', '#d84a45', '#63e6ff'];
+
+// One celebratory burst of pixel confetti over the result modal.
+function launchResultConfetti(count = 60) {
+  const host = $('#result-confetti');
+  if (!host) return;
+  host.replaceChildren();
+  for (let i = 0; i < count; i += 1) {
+    const piece = document.createElement('i');
+    piece.className = 'confetti-piece';
+    const size = Math.random() < 0.5 ? 6 : 9;
+    Object.assign(piece.style, {
+      left: `${(Math.random() * 100).toFixed(1)}%`,
+      width: `${size}px`,
+      height: `${size}px`,
+      background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      animationDelay: `${Math.round(Math.random() * 900)}ms`,
+      animationDuration: `${Math.round(1400 + Math.random() * 1200)}ms`,
+    });
+    piece.style.setProperty('--drift', `${Math.round((Math.random() * 2 - 1) * 70)}px`);
+    host.append(piece);
+  }
+}
+
 function showResult() {
   const won = game.phase === 'victory';
-  $('#result-kicker').textContent = won ? 'LEVEL 1 COMPLETE' : 'OUT OF LIVES';
-  $('#result-title').textContent = won ? 'Backyard Defended!' : 'The Dogs Broke Through';
-  $('#result-copy').textContent = won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
+  const tutorialWin = won && tutorialActive;
+  $('#result-kicker').textContent = tutorialWin ? 'TUTORIAL COMPLETE' : won ? 'LEVEL 1 COMPLETE' : 'OUT OF LIVES';
+  $('#result-title').textContent = tutorialWin ? 'You Are Ready!' : won ? 'Backyard Defended!' : 'The Dogs Broke Through';
+  $('#result-copy').textContent = tutorialWin
+    ? 'The practice dogs went home. The cats are impressed — they will deny it. Now defend the backyard for real.'
+    : won ? 'The porch is safe—for now.' : 'Rebuild your cat squad and try again.';
   drawCat($('#result-cat'), won ? 3 : 1, won ? 0 : 1, won);
+  $('#play-again').hidden = tutorialWin;
+  const campaignButton = $('#result-campaign');
+  if (campaignButton) campaignButton.hidden = !tutorialWin;
   stopLevelMusic();
-  if (won) playVictory();
+  if (won) { playVictory(); launchResultConfetti(); }
   else playDefeat();
   modalEl.hidden = false;
 }
@@ -4222,6 +4277,14 @@ restartButton?.addEventListener('click', () => {
   resetGame();
 });
 $('#play-again').addEventListener('click', resetGame);
+// Tutorial graduates roll straight into a fresh campaign run (with the
+// first-run story card if they have never seen it).
+$('#result-campaign')?.addEventListener('click', () => {
+  endTutorial();
+  resetGame();
+  showCampaignIntro();
+});
+$('#campaign-intro-start')?.addEventListener('click', dismissCampaignIntro);
 $('#cart-info')?.addEventListener('click', () => {
   completeTutorialTipForAction('open-glossary');
   openGlossary($('#cart-info'));
@@ -4273,6 +4336,7 @@ drawBackyard($('#yard-art'));
 render();
 initSplash({
   root: $('#splash-screen'),
+  onCampaign: showCampaignIntro,
   onTutorial: startTutorial,
   onSettings: () => { unlockAudio(); openSettings(); },
 });
@@ -4286,5 +4350,6 @@ if (import.meta.env?.DEV) {
     apply(mutate) { mutate(game); render(); },
     runSection: runCombatSection,
     render,
+    showResult,
   };
 }

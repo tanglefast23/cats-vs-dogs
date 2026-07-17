@@ -163,12 +163,28 @@
   </div>
 
   <div id="result-modal" class="result-modal" hidden>
+    <div id="result-confetti" aria-hidden="true"></div>
     <div class="result-card">
       <canvas id="result-cat" width="64" height="64"></canvas>
       <p id="result-kicker">LEVEL COMPLETE</p>
       <h2 id="result-title">Backyard Defended!</h2>
       <p id="result-copy">The porch is safe—for now.</p>
       <button id="play-again" class="done-button">PLAY AGAIN</button>
+      <button id="result-campaign" class="done-button result-campaign-button" type="button" hidden>START CAMPAIGN</button>
+    </div>
+  </div>
+
+  <div id="campaign-intro" class="campaign-intro" hidden>
+    <div class="campaign-intro-card" role="dialog" aria-label="Campaign briefing">
+      <p class="intro-eyebrow">CAMPAIGN</p>
+      <div class="campaign-intro-headline">
+        <span class="headline-line line-the-dogs">THE DOGS</span>
+        <span class="headline-line line-are-coming">ARE COMING!</span>
+      </div>
+      <p class="campaign-intro-copy">They want the comfy sofas. They want the free food.
+
+Will the cats defend what's rightfully theirs? (The cats checked. Everything is rightfully theirs.)</p>
+      <button id="campaign-intro-start" class="campaign-intro-start" type="button">DEFEND THE YARD</button>
     </div>
   </div>
 
